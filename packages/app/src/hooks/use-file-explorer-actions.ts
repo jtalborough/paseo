@@ -243,6 +243,34 @@ export function useFileExplorerActions(params: { serverId: string } & FileExplor
     [client, normalizedWorkspaceRoot],
   );
 
+  const createFile = useCallback(
+    async (relativePath: string): Promise<string> => {
+      if (!normalizedWorkspaceRoot) {
+        throw new Error("Workspace is unavailable");
+      }
+      if (!client) {
+        throw new Error("Host is not connected");
+      }
+      const normalizedPath = relativePath.trim().replace(/^\/+/, "");
+      if (!normalizedPath) {
+        throw new Error("File name is required");
+      }
+      const result = await client.writeFile(normalizedWorkspaceRoot, normalizedPath, "", {
+        createIfMissing: true,
+      });
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      // Refresh the directory the new file landed in so it appears in the listing.
+      const parent = normalizedPath.includes("/")
+        ? normalizedPath.slice(0, normalizedPath.lastIndexOf("/"))
+        : ".";
+      await requestDirectoryListing(parent, { setCurrentPath: false });
+      return result.path;
+    },
+    [client, normalizedWorkspaceRoot, requestDirectoryListing],
+  );
+
   const selectExplorerEntry = useCallback(
     (path: string | null) => {
       updateExplorerState((state) => ({
@@ -258,6 +286,7 @@ export function useFileExplorerActions(params: { serverId: string } & FileExplor
     requestDirectoryListing,
     requestFilePreview,
     requestFileDownloadToken,
+    createFile,
     selectExplorerEntry,
   };
 }

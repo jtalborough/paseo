@@ -23,6 +23,7 @@ import type {
   CreatePaseoWorktreeRequest,
   FileDownloadTokenResponse,
   FileExplorerResponse,
+  FsFileWriteResponse,
   FetchAgentTimelineResponseMessage,
   GitSetupOptions,
   CheckoutStatusResponse,
@@ -3321,6 +3322,33 @@ export class DaemonClient {
       this.pendingBinaryFileReads.delete(resolvedRequestId);
       this.activeBinaryFileTransfers.delete(resolvedRequestId);
     }
+  }
+
+  /**
+   * Write (or create) a text file within a workspace. Pass `expectedModifiedAt`
+   * (the mtime from the last read/write) to guard against clobbering a change
+   * made on disk — the response carries `outcome: "conflict"` when it is stale.
+   * Requires the daemon to advertise the `fs-write` feature.
+   */
+  async writeFile(
+    cwd: string,
+    path: string,
+    content: string,
+    options?: { expectedModifiedAt?: string; createIfMissing?: boolean; requestId?: string },
+  ): Promise<FsFileWriteResponse["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "fs.file.write.request",
+        cwd,
+        path,
+        content,
+        ...(options?.expectedModifiedAt ? { expectedModifiedAt: options.expectedModifiedAt } : {}),
+        ...(options?.createIfMissing ? { createIfMissing: true } : {}),
+      },
+      responseType: "fs.file.write.response",
+      timeout: 30000,
+    });
   }
 
   async requestDownloadToken(

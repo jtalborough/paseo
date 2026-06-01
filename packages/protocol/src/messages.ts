@@ -1688,6 +1688,24 @@ export const FileExplorerRequestSchema = z.object({
   acceptBinary: z.boolean().optional(),
 });
 
+// COMPAT(fsWrite): added in v0.1.88, drop the gate when floor >= v0.1.88.
+export const FsFileWriteRequestSchema = z.object({
+  type: z.literal("fs.file.write.request"),
+  cwd: z.string(),
+  path: z.string(),
+  /** Full UTF-8 file contents to write. */
+  content: z.string(),
+  /**
+   * ISO mtime the client last observed. When present and it no longer matches
+   * the file on disk, the write is rejected as a conflict instead of clobbering
+   * a change made by an agent or another editor.
+   */
+  expectedModifiedAt: z.string().optional(),
+  /** When true, create the file (and missing parent dirs) if it does not exist. */
+  createIfMissing: z.boolean().optional(),
+  requestId: z.string(),
+});
+
 export const ProjectIconRequestSchema = z.object({
   type: z.literal("project_icon_request"),
   cwd: z.string(),
@@ -1929,6 +1947,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   OpenProjectRequestSchema,
   ArchiveWorkspaceRequestSchema,
   FileExplorerRequestSchema,
+  FsFileWriteRequestSchema,
   ProjectIconRequestSchema,
   FileDownloadTokenRequestSchema,
   ClearAgentAttentionMessageSchema,
@@ -2142,6 +2161,8 @@ export const ServerInfoStatusPayloadSchema = z
         rewind: z.boolean().optional(),
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
         checkoutRefresh: z.boolean().optional(),
+        // COMPAT(fsWrite): added in v0.1.88, remove gate after 2026-12-01.
+        "fs-write": z.boolean().optional(),
       })
       .optional(),
   })
@@ -3394,6 +3415,22 @@ export const FileExplorerResponseSchema = z.object({
   }),
 });
 
+export const FsFileWriteResponseSchema = z.object({
+  type: z.literal("fs.file.write.response"),
+  payload: z.object({
+    cwd: z.string(),
+    path: z.string(),
+    /** "written" on success, "conflict" when expectedModifiedAt is stale. */
+    outcome: z.enum(["written", "conflict"]),
+    /** New mtime after a successful write; null on conflict/error. */
+    modifiedAt: z.string().nullable(),
+    /** New byte size after a successful write; null on conflict/error. */
+    size: z.number().nullable(),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
+});
+
 const ProjectIconSchema = z.object({
   data: z.string(),
   mimeType: z.string(),
@@ -3740,6 +3777,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   PaseoWorktreeArchiveResponseSchema,
   CreatePaseoWorktreeResponseSchema,
   FileExplorerResponseSchema,
+  FsFileWriteResponseSchema,
   ProjectIconResponseSchema,
   FileDownloadTokenResponseSchema,
   ListProviderModelsResponseMessageSchema,
@@ -4036,6 +4074,8 @@ export type OpenProjectRequest = z.infer<typeof OpenProjectRequestSchema>;
 export type ArchiveWorkspaceRequest = z.infer<typeof ArchiveWorkspaceRequestSchema>;
 export type FileExplorerRequest = z.infer<typeof FileExplorerRequestSchema>;
 export type FileExplorerResponse = z.infer<typeof FileExplorerResponseSchema>;
+export type FsFileWriteRequest = z.infer<typeof FsFileWriteRequestSchema>;
+export type FsFileWriteResponse = z.infer<typeof FsFileWriteResponseSchema>;
 export type ProjectIconRequest = z.infer<typeof ProjectIconRequestSchema>;
 export type ProjectIconResponse = z.infer<typeof ProjectIconResponseSchema>;
 export type ProjectIcon = z.infer<typeof ProjectIconSchema>;

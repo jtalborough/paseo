@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactElement, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type RefObject,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ActivityIndicator,
@@ -6,6 +14,7 @@ import {
   ListRenderItemInfo,
   Pressable,
   Text,
+  TextInput,
   View,
   type PressableStateCallbackType,
   type StyleProp,
@@ -21,6 +30,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  FilePlus,
   MoreVertical,
   RotateCw,
 } from "lucide-react-native";
@@ -257,12 +267,16 @@ export function FileExplorerPane({
       : undefined,
   );
 
-  const { requestDirectoryListing, requestFileDownloadToken, selectExplorerEntry } =
+  const { requestDirectoryListing, requestFileDownloadToken, createFile, selectExplorerEntry } =
     useFileExplorerActions({
       serverId,
       workspaceId,
       workspaceRoot: normalizedWorkspaceRoot,
     });
+  // COMPAT(fsWrite): creating files needs the daemon fs-write capability.
+  const canCreateFile = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.["fs-write"] === true,
+  );
   const sortOption = usePanelStore((state) => state.explorerSortOption);
   const setSortOption = usePanelStore((state) => state.setExplorerSortOption);
   const expandedPathsArray = usePanelStore((state) =>
@@ -450,6 +464,15 @@ export function FileExplorerPane({
     });
   }, [requestDirectoryListing]);
 
+  const handleCreateFile = useCallback(
+    async (name: string) => {
+      const createdPath = await createFile(name);
+      selectExplorerEntry(createdPath);
+      onOpenFile?.(createdPath);
+    },
+    [createFile, onOpenFile, selectExplorerEntry],
+  );
+
   if (!hasWorkspaceScope) {
     return (
       <View style={styles.centerState}>
@@ -475,6 +498,8 @@ export function FileExplorerPane({
         handleRefresh={handleRefresh}
         handleBackFromError={handleBackFromError}
         handleRetry={handleRetry}
+        canCreateFile={canCreateFile}
+        onCreateFile={handleCreateFile}
         sortTriggerStyle={sortTriggerStyle}
         iconButtonStyle={iconButtonStyle}
       />
@@ -497,6 +522,8 @@ interface FileExplorerPaneContentProps {
   handleRefresh: () => void;
   handleBackFromError: () => void;
   handleRetry: () => void;
+  canCreateFile: boolean;
+  onCreateFile: (name: string) => Promise<void>;
   sortTriggerStyle: (state: PressableStateCallbackType) => StyleProp<ViewStyle>;
   iconButtonStyle: (state: PressableStateCallbackType) => StyleProp<ViewStyle>;
 }
@@ -518,9 +545,50 @@ function FileExplorerPaneContent(props: FileExplorerPaneContentProps) {
     handleRefresh,
     handleBackFromError,
     handleRetry,
+    canCreateFile,
+    onCreateFile,
     sortTriggerStyle: sortTriggerStyleProp,
     iconButtonStyle: iconButtonStyleProp,
   } = props;
+
+  const [newFileName, setNewFileName] = useState<string | null>(null);
+  const [creatingFile, setCreatingFile] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const submitNewFile = useCallback(async () => {
+    const name = newFileName?.trim();
+    if (!name) {
+      setNewFileName(null);
+      return;
+    }
+    setCreatingFile(true);
+    setCreateError(null);
+    try {
+      await onCreateFile(name);
+      setNewFileName(null);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create file");
+    } finally {
+      setCreatingFile(false);
+    }
+  }, [newFileName, onCreateFile]);
+
+  const toggleNewFile = useCallback(() => {
+    setNewFileName((current) => (current === null ? "" : null));
+  }, []);
+
+  const handleNewFileSubmit = useCallback(() => {
+    void submitNewFile();
+  }, [submitNewFile]);
+
+  const handleNewFileBlur = useCallback(() => {
+    setNewFileName((current) => {
+      if (!creatingFile && current !== null && !current.trim()) {
+        return null;
+      }
+      return current;
+    });
+  }, [creatingFile]);
 
   if (error) {
     return (
@@ -564,23 +632,59 @@ function FileExplorerPaneContent(props: FileExplorerPaneContentProps) {
           <Text style={styles.sortTriggerText}>{currentSortLabel}</Text>
           <ChevronDown size={12} color={theme.colors.foregroundMuted} />
         </Pressable>
-        <Pressable
-          onPress={handleRefresh}
-          disabled={isRefreshFetching}
-          hitSlop={8}
-          style={iconButtonStyleProp}
-          accessibilityRole="button"
-          accessibilityLabel={isRefreshFetching ? "Refreshing files" : "Refresh files"}
-        >
-          <View style={styles.refreshIcon}>
-            {isRefreshFetching ? (
-              <LoadingSpinner size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
-            ) : (
-              <RotateCw size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
-            )}
-          </View>
-        </Pressable>
+        <View style={styles.headerActions}>
+          {canCreateFile ? (
+            <Pressable
+              onPress={toggleNewFile}
+              hitSlop={8}
+              style={iconButtonStyleProp}
+              accessibilityRole="button"
+              accessibilityLabel="New file"
+            >
+              <View style={styles.refreshIcon}>
+                <FilePlus size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+              </View>
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={handleRefresh}
+            disabled={isRefreshFetching}
+            hitSlop={8}
+            style={iconButtonStyleProp}
+            accessibilityRole="button"
+            accessibilityLabel={isRefreshFetching ? "Refreshing files" : "Refresh files"}
+          >
+            <View style={styles.refreshIcon}>
+              {isRefreshFetching ? (
+                <LoadingSpinner size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+              ) : (
+                <RotateCw size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+              )}
+            </View>
+          </Pressable>
+        </View>
       </View>
+      {newFileName !== null ? (
+        <View style={styles.newFileRow}>
+          <TextInput
+            value={newFileName}
+            onChangeText={setNewFileName}
+            onSubmitEditing={handleNewFileSubmit}
+            onBlur={handleNewFileBlur}
+            editable={!creatingFile}
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            placeholder="path/to/new-file.ts"
+            placeholderTextColor={theme.colors.foregroundMuted}
+            style={styles.newFileInput}
+            testID="file-explorer-new-file-input"
+          />
+          {creatingFile ? <ActivityIndicator size="small" /> : null}
+          {createError ? <Text style={styles.newFileError}>{createError}</Text> : null}
+        </View>
+      ) : null}
       <FlatList
         ref={treeListRef}
         style={styles.treeList}
@@ -974,6 +1078,31 @@ const styles = StyleSheet.create((theme) => ({
     paddingRight: theme.spacing[3],
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
+  newFileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  newFileInput: {
+    flex: 1,
+    color: theme.colors.foreground,
+    fontFamily: theme.fontFamily.mono,
+    fontSize: theme.fontSize.sm,
+    paddingVertical: theme.spacing[1],
+  },
+  newFileError: {
+    color: theme.colors.destructive,
+    fontSize: theme.fontSize.xs,
   },
   sortTrigger: {
     flexDirection: "row",

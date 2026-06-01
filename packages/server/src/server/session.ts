@@ -18,6 +18,7 @@ import {
   type SessionInboundMessage,
   type SessionOutboundMessage,
   type FileExplorerRequest,
+  type FsFileWriteRequest,
   type FileDownloadTokenRequest,
   type GitSetupOptions,
   type CheckoutRenameBranchRequest,
@@ -181,6 +182,7 @@ import {
   readExplorerFile,
   readExplorerFileBytes,
   getDownloadableFileInfo,
+  writeExplorerFile,
 } from "./file-explorer/service.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import { PushTokenStore } from "./push/token-store.js";
@@ -2138,6 +2140,8 @@ export class Session {
         return this.handleArchiveWorkspaceRequest(msg);
       case "file_explorer_request":
         return this.handleFileExplorerRequest(msg);
+      case "fs.file.write.request":
+        return this.handleFsFileWriteRequest(msg);
       case "project_icon_request":
         return this.handleProjectIconRequest(msg);
       case "file_download_token_request":
@@ -5850,6 +5854,85 @@ export class Session {
           mode,
           directory: null,
           file: null,
+          error: getErrorMessage(error),
+          requestId,
+        },
+      });
+    }
+  }
+
+  /**
+   * Handle a request to write (or create) a file within a workspace cwd.
+   */
+  private async handleFsFileWriteRequest(request: FsFileWriteRequest): Promise<void> {
+    const { cwd: workspaceCwd, path: requestedPath, content, requestId } = request;
+    const cwd = workspaceCwd.trim();
+    if (!cwd) {
+      this.emit({
+        type: "fs.file.write.response",
+        payload: {
+          cwd: workspaceCwd,
+          path: requestedPath,
+          outcome: "written",
+          modifiedAt: null,
+          size: null,
+          error: "cwd is required",
+          requestId,
+        },
+      });
+      return;
+    }
+
+    try {
+      const result = await writeExplorerFile({
+        root: cwd,
+        relativePath: requestedPath,
+        content,
+        expectedModifiedAt: request.expectedModifiedAt,
+        createIfMissing: request.createIfMissing,
+      });
+
+      if (result.outcome === "conflict") {
+        this.emit({
+          type: "fs.file.write.response",
+          payload: {
+            cwd,
+            path: result.path,
+            outcome: "conflict",
+            modifiedAt: null,
+            size: null,
+            error: "File changed on disk since it was loaded",
+            requestId,
+          },
+        });
+        return;
+      }
+
+      this.emit({
+        type: "fs.file.write.response",
+        payload: {
+          cwd,
+          path: result.path,
+          outcome: "written",
+          modifiedAt: result.modifiedAt,
+          size: result.size,
+          error: null,
+          requestId,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, cwd, path: requestedPath },
+        `Failed to write file for workspace ${cwd}`,
+      );
+      this.emit({
+        type: "fs.file.write.response",
+        payload: {
+          cwd,
+          path: requestedPath,
+          outcome: "written",
+          modifiedAt: null,
+          size: null,
           error: getErrorMessage(error),
           requestId,
         },

@@ -230,6 +230,87 @@ export async function readExplorerFileBytes({
   }
 }
 
+export interface WriteFileParams {
+  root: string;
+  relativePath: string;
+  content: string;
+  /**
+   * ISO mtime the caller last observed. When provided and the on-disk mtime no
+   * longer matches, the write is rejected as a conflict instead of clobbering a
+   * change made by an agent or another editor.
+   */
+  expectedModifiedAt?: string;
+  /** When true, create the file (and missing parent dirs) if it does not exist. */
+  createIfMissing?: boolean;
+}
+
+export type WriteExplorerFileResult =
+  | { outcome: "written"; path: string; modifiedAt: string; size: number }
+  | { outcome: "conflict"; path: string };
+
+export async function writeExplorerFile({
+  root,
+  relativePath,
+  content,
+  expectedModifiedAt,
+  createIfMissing = false,
+}: WriteFileParams): Promise<WriteExplorerFileResult> {
+  const filePath = await resolveScopedPath({ root, relativePath });
+  const normalizedPath = normalizeRelativePath({ root, targetPath: filePath.requestedPath });
+
+  let existingStats: Awaited<ReturnType<typeof fs.stat>> | null = null;
+  try {
+    existingStats = await fs.lstat(filePath.resolvedPath);
+  } catch (error) {
+    if (!isMissingEntryError(error)) {
+      throw error;
+    }
+  }
+
+  if (existingStats) {
+    if (existingStats.isDirectory()) {
+      throw new Error("Requested path is not a file");
+    }
+    if (!existingStats.isFile()) {
+      // Refuse symlinks, sockets, devices, etc. — only regular files are editable.
+      throw new Error("Requested path is not a regular file");
+    }
+    if (expectedModifiedAt && existingStats.mtime.toISOString() !== expectedModifiedAt) {
+      return { outcome: "conflict", path: normalizedPath };
+    }
+  } else {
+    if (!createIfMissing) {
+      const error = new Error("File does not exist") as NodeJS.ErrnoException;
+      error.code = "ENOENT";
+      throw error;
+    }
+    await fs.mkdir(path.dirname(filePath.resolvedPath), { recursive: true });
+  }
+
+  // Write atomically: a temp file in the same directory followed by rename so a
+  // reader never observes a half-written file.
+  const directory = path.dirname(filePath.resolvedPath);
+  const tempPath = path.join(
+    directory,
+    `.${path.basename(filePath.resolvedPath)}.${process.pid}.${Date.now()}.tmp`,
+  );
+  await fs.writeFile(tempPath, content, "utf-8");
+  try {
+    await fs.rename(tempPath, filePath.resolvedPath);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true });
+    throw error;
+  }
+
+  const stats = await fs.stat(filePath.resolvedPath);
+  return {
+    outcome: "written",
+    path: normalizedPath,
+    modifiedAt: stats.mtime.toISOString(),
+    size: stats.size,
+  };
+}
+
 export async function getDownloadableFileInfo({ root, relativePath }: ReadFileParams): Promise<{
   path: string;
   absolutePath: string;
