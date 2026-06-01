@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { FileReadResult } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient, FileReadResult } from "@getpaseo/client/internal/daemon-client";
 import Markdown, { MarkdownIt } from "react-native-markdown-display";
 import {
   ActivityIndicator,
@@ -20,6 +20,7 @@ import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { lineNumberGutterWidth } from "@/components/code-insets";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { isRenderedMarkdownFile } from "@/components/file-pane-render-mode";
+import { FileEditor } from "@/components/file-editor";
 import { isWeb } from "@/constants/platform";
 import { createMarkdownStyles } from "@/styles/markdown-styles";
 import type { AttachmentMetadata } from "@/attachments/types";
@@ -37,6 +38,9 @@ interface CodeLineProps {
   highlighted: boolean;
 }
 
+/** Files larger than this stay read-only — a giant TextInput janks badly. */
+const MAX_EDITABLE_FILE_BYTES = 1024 * 1024;
+
 interface FilePreviewBodyProps {
   preview: ExplorerFile | null;
   isLoading: boolean;
@@ -44,6 +48,14 @@ interface FilePreviewBodyProps {
   isMobile: boolean;
   location: WorkspaceFileLocation;
   imagePreviewUri: string | null;
+  editContext: FileEditContext | null;
+  onReload: () => void;
+}
+
+interface FileEditContext {
+  client: DaemonClient;
+  cwd: string;
+  path: string;
 }
 
 function trimNonEmpty(value: string | null | undefined): string | null {
@@ -193,6 +205,8 @@ function FilePreviewBody({
   isMobile,
   location,
   imagePreviewUri,
+  editContext,
+  onReload,
 }: FilePreviewBodyProps) {
   const { theme } = useUnistyles();
   const filePath = location.path;
@@ -267,6 +281,20 @@ function FilePreviewBody({
   }
 
   if (preview.kind === "text") {
+    if (editContext && preview.size <= MAX_EDITABLE_FILE_BYTES) {
+      return (
+        <FileEditor
+          key={`${editContext.cwd}:${editContext.path}`}
+          client={editContext.client}
+          cwd={editContext.cwd}
+          path={editContext.path}
+          initialContent={preview.content ?? ""}
+          initialModifiedAt={preview.modifiedAt}
+          onReload={onReload}
+        />
+      );
+    }
+
     if (isMarkdownFile) {
       return (
         <View style={styles.previewScrollContainer}>
@@ -397,6 +425,11 @@ export function FilePane({
   const showDesktopWebScrollbar = isWeb && !isMobile;
 
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
+  // COMPAT(fsWrite): editing requires the daemon to advertise fs-write; older
+  // hosts fall back to the read-only viewer. Drop the gate when floor >= v0.1.88.
+  const canWriteFiles = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.["fs-write"] === true,
+  );
   const normalizedWorkspaceRoot = useMemo(() => workspaceRoot.trim(), [workspaceRoot]);
   const normalizedFilePath = useMemo(() => trimNonEmpty(location.path), [location.path]);
   const readTarget = useMemo(
@@ -438,6 +471,18 @@ export function FilePane({
   });
   const imagePreviewUri = useAttachmentPreviewUrl(query.data?.imageAttachment ?? null);
 
+  const editContext = useMemo<FileEditContext | null>(() => {
+    if (!canWriteFiles || !client || !readTarget) {
+      return null;
+    }
+    return { client, cwd: readTarget.cwd, path: readTarget.path };
+  }, [canWriteFiles, client, readTarget]);
+
+  const { refetch } = query;
+  const handleReload = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+
   return (
     <View style={styles.container} testID="workspace-file-pane">
       {query.data?.error ? (
@@ -453,6 +498,8 @@ export function FilePane({
         isMobile={isMobile}
         location={location}
         imagePreviewUri={imagePreviewUri}
+        editContext={editContext}
+        onReload={handleReload}
       />
     </View>
   );

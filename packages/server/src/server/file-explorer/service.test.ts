@@ -1,8 +1,8 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { readExplorerFile } from "./service.js";
+import { readExplorerFile, writeExplorerFile } from "./service.js";
 
 async function createHomeTempDir(prefix: string): Promise<string> {
   return mkdtemp(path.join(os.homedir(), prefix));
@@ -129,6 +129,119 @@ describe("file explorer service", () => {
           relativePath: "~/some/file.txt",
         }),
       ).rejects.toThrow("Access outside of workspace is not allowed");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("writeExplorerFile", () => {
+  it("overwrites an existing file and reports new metadata", async () => {
+    const root = await createTempDir("paseo-file-write-");
+    try {
+      const filePath = path.join(root, "notes.txt");
+      await writeFile(filePath, "old\n", "utf-8");
+
+      const result = await writeExplorerFile({
+        root,
+        relativePath: "notes.txt",
+        content: "new contents\n",
+      });
+
+      expect(result.outcome).toBe("written");
+      if (result.outcome !== "written") throw new Error("expected written");
+      expect(result.path).toBe("notes.txt");
+      expect(result.size).toBe(Buffer.byteLength("new contents\n"));
+      expect(await readFile(filePath, "utf-8")).toBe("new contents\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects writes outside the workspace", async () => {
+    const root = await createTempDir("paseo-file-write-");
+    try {
+      await expect(
+        writeExplorerFile({
+          root,
+          relativePath: "../escape.txt",
+          content: "nope",
+          createIfMissing: true,
+        }),
+      ).rejects.toThrow("Access outside of workspace is not allowed");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("returns a conflict when the on-disk mtime no longer matches", async () => {
+    const root = await createTempDir("paseo-file-write-");
+    try {
+      const filePath = path.join(root, "notes.txt");
+      await writeFile(filePath, "original\n", "utf-8");
+
+      const result = await writeExplorerFile({
+        root,
+        relativePath: "notes.txt",
+        content: "should not land\n",
+        expectedModifiedAt: "1999-01-01T00:00:00.000Z",
+      });
+
+      expect(result.outcome).toBe("conflict");
+      expect(await readFile(filePath, "utf-8")).toBe("original\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("writes when the expected mtime matches", async () => {
+    const root = await createTempDir("paseo-file-write-");
+    try {
+      const filePath = path.join(root, "notes.txt");
+      await writeFile(filePath, "original\n", "utf-8");
+      const expectedModifiedAt = (await stat(filePath)).mtime.toISOString();
+
+      const result = await writeExplorerFile({
+        root,
+        relativePath: "notes.txt",
+        content: "updated\n",
+        expectedModifiedAt,
+      });
+
+      expect(result.outcome).toBe("written");
+      expect(await readFile(filePath, "utf-8")).toBe("updated\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("creates a new file (and parent dirs) when createIfMissing is set", async () => {
+    const root = await createTempDir("paseo-file-write-");
+    try {
+      const result = await writeExplorerFile({
+        root,
+        relativePath: "nested/dir/new.txt",
+        content: "fresh\n",
+        createIfMissing: true,
+      });
+
+      expect(result.outcome).toBe("written");
+      expect(await readFile(path.join(root, "nested/dir/new.txt"), "utf-8")).toBe("fresh\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to create a missing file when createIfMissing is not set", async () => {
+    const root = await createTempDir("paseo-file-write-");
+    try {
+      await expect(
+        writeExplorerFile({
+          root,
+          relativePath: "ghost.txt",
+          content: "x",
+        }),
+      ).rejects.toThrow("File does not exist");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

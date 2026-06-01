@@ -499,6 +499,63 @@ test("readFile hides legacy base64 behind bytes", async () => {
   expect(new TextDecoder().decode(result.bytes)).toBe("hello");
 });
 
+test("writeFile sends content and resolves the write outcome", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const responsePromise = client.writeFile("/tmp/project", "src/index.ts", "next\n", {
+    expectedModifiedAt: "2026-05-02T00:00:00.000Z",
+    requestId: "req-write",
+  });
+
+  expect(JSON.parse(assertStr(mock.sent[0]))).toEqual({
+    type: "session",
+    message: {
+      type: "fs.file.write.request",
+      cwd: "/tmp/project",
+      path: "src/index.ts",
+      content: "next\n",
+      expectedModifiedAt: "2026-05-02T00:00:00.000Z",
+      requestId: "req-write",
+    },
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "fs.file.write.response",
+      payload: {
+        cwd: "/tmp/project",
+        path: "src/index.ts",
+        outcome: "written",
+        modifiedAt: "2026-05-02T00:01:00.000Z",
+        size: 5,
+        error: null,
+        requestId: "req-write",
+      },
+    }),
+  );
+
+  await expect(responsePromise).resolves.toMatchObject({
+    outcome: "written",
+    modifiedAt: "2026-05-02T00:01:00.000Z",
+    size: 5,
+    error: null,
+  });
+});
+
 test("readFile resolves from binary file frames when the daemon supports them", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

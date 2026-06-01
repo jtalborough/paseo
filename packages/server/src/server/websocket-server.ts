@@ -1055,6 +1055,8 @@ export class VoiceAssistantWebSocketServer {
         rewind: true,
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
         checkoutRefresh: true,
+        // COMPAT(fsWrite): added in v0.1.88, remove gate after 2026-12-01.
+        "fs-write": true,
       },
     };
   }
