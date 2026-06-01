@@ -21,6 +21,9 @@ import { lineNumberGutterWidth } from "@/components/code-insets";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { isRenderedMarkdownFile } from "@/components/file-pane-render-mode";
 import { FileEditor } from "@/components/file-editor";
+import { MarkdownEditor } from "@/components/markdown-editor";
+import type { MarkdownEditorThemeTokens } from "@/components/markdown-editor-types";
+import { isLosslessMarkdown } from "@/components/markdown-roundtrip-safety";
 import { isWeb } from "@/constants/platform";
 import { createMarkdownStyles } from "@/styles/markdown-styles";
 import type { AttachmentMetadata } from "@/attachments/types";
@@ -198,6 +201,54 @@ const codeLineStyles = StyleSheet.create((theme) => ({
   },
 }));
 
+interface EditableTextContentProps {
+  editContext: FileEditContext;
+  content: string;
+  modifiedAt: string;
+  isMarkdown: boolean;
+  onReload: () => void;
+  themeTokens: MarkdownEditorThemeTokens;
+}
+
+/**
+ * Picks the editor for an editable text file: the WYSIWYG markdown editor for
+ * `.md` files that round-trip cleanly on web/Electron, otherwise the plain
+ * source editor (which also covers native and lossy markdown).
+ */
+function EditableTextContent({
+  editContext,
+  content,
+  modifiedAt,
+  isMarkdown,
+  onReload,
+  themeTokens,
+}: EditableTextContentProps) {
+  const useWysiwyg = isMarkdown && isWeb && isLosslessMarkdown(content);
+  if (useWysiwyg) {
+    return (
+      <MarkdownEditor
+        client={editContext.client}
+        cwd={editContext.cwd}
+        path={editContext.path}
+        initialContent={content}
+        initialModifiedAt={modifiedAt}
+        onReload={onReload}
+        themeTokens={themeTokens}
+      />
+    );
+  }
+  return (
+    <FileEditor
+      client={editContext.client}
+      cwd={editContext.cwd}
+      path={editContext.path}
+      initialContent={content}
+      initialModifiedAt={modifiedAt}
+      onReload={onReload}
+    />
+  );
+}
+
 function FilePreviewBody({
   preview,
   isLoading,
@@ -214,6 +265,23 @@ function FilePreviewBody({
   const markdownParser = useMemo(() => MarkdownIt({ typographer: true, linkify: true }), []);
   const isMarkdownFile =
     preview?.kind === "text" && isRenderedMarkdownFile(filePath) && !location.lineStart;
+
+  // Tokens for the web markdown editor's ProseMirror DOM. Built here (this
+  // component already reads `theme`) so the editor needs no useUnistyles of its
+  // own — see docs/unistyles.md and [[markdown-editor-types]].
+  const markdownEditorTheme = useMemo<MarkdownEditorThemeTokens>(
+    () => ({
+      foreground: theme.colors.foreground,
+      foregroundMuted: theme.colors.foregroundMuted,
+      border: theme.colors.border,
+      surface: theme.colors.surface0,
+      codeSurface: theme.colors.surface2,
+      accent: theme.colors.accent,
+      baseFontSize: theme.fontSize.base,
+      codeFontFamily: theme.fontFamily.mono,
+    }),
+    [theme],
+  );
 
   const previewScrollRef = useRef<RNScrollView>(null);
   const webScrollbarStyle = useWebScrollbarStyle();
@@ -283,14 +351,14 @@ function FilePreviewBody({
   if (preview.kind === "text") {
     if (editContext && preview.size <= MAX_EDITABLE_FILE_BYTES) {
       return (
-        <FileEditor
+        <EditableTextContent
           key={`${editContext.cwd}:${editContext.path}`}
-          client={editContext.client}
-          cwd={editContext.cwd}
-          path={editContext.path}
-          initialContent={preview.content ?? ""}
-          initialModifiedAt={preview.modifiedAt}
+          editContext={editContext}
+          content={preview.content ?? ""}
+          modifiedAt={preview.modifiedAt}
+          isMarkdown={isMarkdownFile}
           onReload={onReload}
+          themeTokens={markdownEditorTheme}
         />
       );
     }
