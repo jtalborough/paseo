@@ -60,12 +60,42 @@ ${s} .ProseMirror blockquote {
   margin-left: 0;
 }
 ${s} .ProseMirror ul, ${s} .ProseMirror ol { padding-left: 1.4em; }
+/* Discrete markers per nesting depth. Markdown only encodes ordered-vs-bullet,
+   so these markers are display-only and never change the serialized source. */
+${s} .ProseMirror ol { list-style-type: decimal; }
+${s} .ProseMirror ol ol { list-style-type: lower-alpha; }
+${s} .ProseMirror ol ol ol { list-style-type: lower-roman; }
+${s} .ProseMirror ol ol ol ol { list-style-type: decimal; }
+${s} .ProseMirror ol ol ol ol ol { list-style-type: lower-alpha; }
+${s} .ProseMirror ul { list-style-type: disc; }
+${s} .ProseMirror ul ul { list-style-type: circle; }
+${s} .ProseMirror ul ul ul { list-style-type: square; }
+${s} .ProseMirror ul ul ul ul { list-style-type: disc; }
 ${s} .ProseMirror li { margin: 0.2em 0; }
 ${s} .ProseMirror li > p { margin: 0; }
 ${s} .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
 ${s} .ProseMirror ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; }
 ${s} .ProseMirror ul[data-type="taskList"] li > label { margin-top: 0.2em; user-select: none; }
 ${s} .ProseMirror ul[data-type="taskList"] li > div { flex: 1 1 auto; min-width: 0; }
+${s} .ProseMirror table {
+  border-collapse: collapse;
+  width: auto;
+  max-width: 100%;
+  margin: 0 0 0.75em 0;
+  overflow: hidden;
+}
+${s} .ProseMirror th, ${s} .ProseMirror td {
+  border: 1px solid ${t.border};
+  padding: 0.4em 0.6em;
+  text-align: left;
+  vertical-align: top;
+}
+${s} .ProseMirror th {
+  background: ${t.codeSurface};
+  font-weight: 600;
+}
+${s} .ProseMirror th > p, ${s} .ProseMirror td > p { margin: 0; }
+${s} .ProseMirror .selectedCell { background: ${t.codeSurface}; }
 ${s} .ProseMirror hr {
   border: none;
   border-top: 1px solid ${t.border};

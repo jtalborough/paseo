@@ -47,6 +47,7 @@
     "@react-navigation/native": "^7.1.8",
     "@tanstack/react-query": "^5.90.11",
     "@tanstack/react-virtual": "^3.13.21",
+    "@tiptap/extension-table": "^3.24.0",
     "@tiptap/extension-task-item": "^3.24.0",
     "@tiptap/extension-task-list": "^3.24.0",
     "@tiptap/pm": "^3.24.0",

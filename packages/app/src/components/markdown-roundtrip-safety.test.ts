@@ -33,14 +33,51 @@ describe("markdown round-trip safety", () => {
     expect(analyzeMarkdownSafety(content)).toEqual({ safe: true, reason: null });
   });
 
-  it("flags YAML frontmatter as unsafe", () => {
+  it("treats YAML frontmatter as safe (preserved verbatim, scanned by body)", () => {
     const content = "---\ntitle: Note\ntags: [a, b]\n---\n\n# Body\n";
-    expect(analyzeMarkdownSafety(content)).toEqual({ safe: false, reason: "frontmatter" });
+    expect(analyzeMarkdownSafety(content)).toEqual({ safe: true, reason: null });
   });
 
-  it("flags GitHub tables as unsafe", () => {
+  it("scans only the body, ignoring frontmatter that looks like HTML", () => {
+    const content = "---\ndescription: <b>hi</b>\n---\n\n# Body\n\nplain text\n";
+    expect(isLosslessMarkdown(content)).toBe(true);
+  });
+
+  it("treats GitHub tables as safe (round-trip via table extensions)", () => {
     const content = "| a | b |\n| --- | --- |\n| 1 | 2 |\n";
-    expect(analyzeMarkdownSafety(content)).toEqual({ safe: false, reason: "table" });
+    expect(analyzeMarkdownSafety(content)).toEqual({ safe: true, reason: null });
+  });
+
+  it("still flags raw HTML in the body even with frontmatter present", () => {
+    const content = "---\ntitle: x\n---\n\n<div>body</div>\n";
+    expect(analyzeMarkdownSafety(content)).toEqual({ safe: false, reason: "html" });
+  });
+
+  it("ignores HTML-looking placeholders inside fenced code blocks", () => {
+    const content = [
+      "# Docs",
+      "",
+      "```bash",
+      "npx vitest run <file> --bail=1",
+      "```",
+      "",
+      "text",
+    ].join("\n");
+    expect(analyzeMarkdownSafety(content)).toEqual({ safe: true, reason: null });
+  });
+
+  it("ignores HTML-looking placeholders inside inline code", () => {
+    expect(isLosslessMarkdown("Pass `<id>` as the first argument.\n")).toBe(true);
+  });
+
+  it("ignores a colon line inside a code block (not a definition list)", () => {
+    const content = ["```yaml", "key:", "  : nested", "```", "", "body"].join("\n");
+    expect(analyzeMarkdownSafety(content)).toEqual({ safe: true, reason: null });
+  });
+
+  it("still flags real HTML outside code", () => {
+    const content = 'intro\n\n<p align="center">logo</p>\n\n```\n<file>\n```\n';
+    expect(analyzeMarkdownSafety(content)).toEqual({ safe: false, reason: "html" });
   });
 
   it("flags footnotes as unsafe", () => {

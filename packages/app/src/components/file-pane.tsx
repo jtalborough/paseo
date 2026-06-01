@@ -23,7 +23,7 @@ import { isRenderedMarkdownFile } from "@/components/file-pane-render-mode";
 import { FileEditor } from "@/components/file-editor";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import type { MarkdownEditorThemeTokens } from "@/components/markdown-editor-types";
-import { isLosslessMarkdown } from "@/components/markdown-roundtrip-safety";
+import { analyzeMarkdownSafety } from "@/components/markdown-roundtrip-safety";
 import { isWeb } from "@/constants/platform";
 import { createMarkdownStyles } from "@/styles/markdown-styles";
 import type { AttachmentMetadata } from "@/attachments/types";
@@ -223,8 +223,8 @@ function EditableTextContent({
   onReload,
   themeTokens,
 }: EditableTextContentProps) {
-  const useWysiwyg = isMarkdown && isWeb && isLosslessMarkdown(content);
-  if (useWysiwyg) {
+  const safety = isMarkdown && isWeb ? analyzeMarkdownSafety(content) : null;
+  if (safety?.safe) {
     return (
       <MarkdownEditor
         client={editContext.client}
@@ -245,6 +245,7 @@ function EditableTextContent({
       initialContent={content}
       initialModifiedAt={modifiedAt}
       onReload={onReload}
+      fallbackReason={safety?.reason ?? null}
     />
   );
 }

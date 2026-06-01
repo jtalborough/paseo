@@ -2,14 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TextInput, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
-import { StarterKit } from "@tiptap/starter-kit";
-import { TaskList } from "@tiptap/extension-task-list";
-import { TaskItem } from "@tiptap/extension-task-item";
-import { Markdown, type MarkdownStorage } from "tiptap-markdown";
+import type { MarkdownStorage } from "tiptap-markdown";
+import { buildMarkdownEditorExtensions } from "@/components/markdown-editor-extensions";
 import { useAutosaveFile } from "@/components/use-autosave-file";
 import { FileSaveStatusBar } from "@/components/file-save-status-bar";
 import type { MarkdownEditorProps } from "@/components/markdown-editor-types";
 import { buildProseMirrorCss, PROSE_SCOPE_CLASS } from "@/components/markdown-editor-styles";
+import { joinFrontmatter, splitFrontmatter } from "@/components/markdown-frontmatter";
 
 /**
  * WYSIWYG markdown editor for `.md` files on web/Electron. Renders rendered
@@ -42,47 +41,53 @@ export function MarkdownEditor({
   // reload, or source→rich), the resulting onUpdate must not be treated as a
   // user edit.
   const seedingRef = useRef(false);
+  // The editor models only the document body; any leading frontmatter block is
+  // held verbatim here and re-attached on serialize so it survives untouched.
+  const frontmatterRef = useRef(splitFrontmatter(initialContent).frontmatter);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ link: { openOnClick: false } }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Markdown.configure({ html: false, linkify: true, breaks: false, transformPastedText: true }),
-    ],
+    extensions: buildMarkdownEditorExtensions(),
     editable: !isConflicted,
-    content: initialContent,
+    content: splitFrontmatter(initialContent).body,
     onUpdate: ({ editor: ed }) => {
       if (seedingRef.current) {
         return;
       }
-      setContent(getEditorMarkdown(ed));
+      setContent(joinFrontmatter(frontmatterRef.current, getEditorMarkdown(ed)));
     },
   });
 
+  // Seed the editor body from a full document, capturing its frontmatter.
+  const seedFrom = useCallback(
+    (full: string) => {
+      if (!editor) {
+        return;
+      }
+      const { frontmatter, body } = splitFrontmatter(full);
+      frontmatterRef.current = frontmatter;
+      seedingRef.current = true;
+      editor.commands.setContent(body);
+      seedingRef.current = false;
+    },
+    [editor],
+  );
+
   // Reseed when the underlying file changes (new file / reload after conflict).
   useEffect(() => {
-    if (!editor) {
-      return;
-    }
-    seedingRef.current = true;
-    editor.commands.setContent(initialContent);
-    seedingRef.current = false;
-  }, [editor, initialContent, initialModifiedAt]);
+    seedFrom(initialContent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- modifiedAt marks a fresh load
+  }, [seedFrom, initialContent, initialModifiedAt]);
 
   useEffect(() => {
     editor?.setEditable(!isConflicted);
   }, [editor, isConflicted]);
 
   const enterRich = useCallback(() => {
-    if (editor) {
-      seedingRef.current = true;
-      // Re-parse any raw edits made in source mode before showing rendered view.
-      editor.commands.setContent(content);
-      seedingRef.current = false;
-    }
+    // Re-parse any raw edits made in source mode (including frontmatter) before
+    // showing the rendered view.
+    seedFrom(content);
     setMode("rich");
-  }, [editor, content]);
+  }, [seedFrom, content]);
 
   const enterSource = useCallback(() => setMode("source"), []);
 
