@@ -304,6 +304,9 @@ function getFallbackTabOptionDescription(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "browser") {
     return "Browser";
   }
+  if (tab.target.kind === "tasks") {
+    return "Tasks";
+  }
   return tab.target.path;
 }
 
@@ -2306,6 +2309,22 @@ function WorkspaceScreenContent({
     [openWorkspaceTabFocused, persistenceKey],
   );
 
+  const handleCreateTasksTab = useCallback(
+    (input?: { paneId?: string }) => {
+      if (!persistenceKey) {
+        return;
+      }
+      if (input?.paneId) {
+        focusWorkspacePane(persistenceKey, input.paneId);
+      }
+      openWorkspaceTabFocused(persistenceKey, {
+        kind: "tasks",
+        workspaceId: normalizedWorkspaceId,
+      });
+    },
+    [focusWorkspacePane, openWorkspaceTabFocused, persistenceKey, normalizedWorkspaceId],
+  );
+
   const handleSelectSwitcherTab = useCallback(
     (key: string) => {
       navigateToTabId(key);
@@ -3219,6 +3238,9 @@ function WorkspaceScreenContent({
     [createTerminalMutation.isPending, pendingTerminalCreateInput],
   );
   const showCreateBrowserTab = getIsElectron();
+  const showCreateTasksTab = useSessionStore(
+    (state) => state.sessions[normalizedServerId]?.serverInfo?.features?.tasks === true,
+  );
   const focusedPaneIdOrUndefined = useMemo(() => focusedPaneId ?? undefined, [focusedPaneId]);
   const desktopFocusModeEnabled = useMemo(
     () => isFocusModeEnabled && !isMobile,
@@ -3258,6 +3280,8 @@ function WorkspaceScreenContent({
         onCreateTerminalTab={handleCreateTerminal}
         onCreateBrowserTab={handleCreateBrowserTab}
         showCreateBrowserTab={showCreateBrowserTab}
+        onCreateTasksTab={handleCreateTasksTab}
+        showCreateTasksTab={showCreateTasksTab}
         buildPaneContentModel={buildDesktopPaneContentModel}
         onFocusPane={handleFocusPane}
         onSplitPane={handleSplitPane}
@@ -3292,6 +3316,8 @@ function WorkspaceScreenContent({
     handleCreateTerminal,
     handleCreateBrowserTab,
     showCreateBrowserTab,
+    handleCreateTasksTab,
+    showCreateTasksTab,
     buildDesktopPaneContentModel,
     handleFocusPane,
     handleSplitPane,
@@ -3392,6 +3418,8 @@ function WorkspaceScreenContent({
           onCreateTerminalTab={handleCreateTerminal}
           onCreateBrowserTab={handleCreateBrowserTab}
           showCreateBrowserTab={showCreateBrowserTab}
+          onCreateTasksTab={handleCreateTasksTab}
+          showCreateTasksTab={showCreateTasksTab}
           disableCreateTerminal={createTerminalMutation.isPending}
           isWaitingOnTerminalReadiness={pendingTerminalCreateInput !== null}
           onReorderTabs={handleReorderTabsInFocusedPane}

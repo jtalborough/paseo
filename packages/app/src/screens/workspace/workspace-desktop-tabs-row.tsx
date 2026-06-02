@@ -26,6 +26,7 @@ import {
   RotateCw,
   Rows2,
   Globe,
+  ListTodo,
   SquarePen,
   SquareTerminal,
   X,
@@ -78,6 +79,7 @@ const ThemedPencil = withUnistyles(Pencil);
 const ThemedSquarePen = withUnistyles(SquarePen);
 const ThemedSquareTerminal = withUnistyles(SquareTerminal);
 const ThemedGlobe = withUnistyles(Globe);
+const ThemedListTodo = withUnistyles(ListTodo);
 const ThemedColumns2 = withUnistyles(Columns2);
 const ThemedRows2 = withUnistyles(Rows2);
 
@@ -86,6 +88,39 @@ const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMut
 
 function newTabActionButtonStyle({ hovered, pressed }: PressableStateCallbackType) {
   return [styles.newTabActionButton, (hovered || pressed) && styles.newTabActionButtonHovered];
+}
+
+function NewTasksTabButton({
+  show,
+  onCreate,
+  paneId,
+}: {
+  show?: boolean;
+  onCreate?: (input: { paneId?: string }) => void;
+  paneId?: string;
+}) {
+  const handlePress = useCallback(() => onCreate?.({ paneId }), [onCreate, paneId]);
+  if (!show || !onCreate) {
+    return null;
+  }
+  return (
+    <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger
+        testID="workspace-open-tasks"
+        onPress={handlePress}
+        accessibilityRole="button"
+        accessibilityLabel="Open tasks"
+        style={newTabActionButtonStyle}
+      >
+        <ThemedListTodo size={14} uniProps={mutedColorMapping} />
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="center" offset={8}>
+        <View style={styles.newTabTooltipRow}>
+          <Text style={styles.newTabTooltipText}>Tasks</Text>
+        </View>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function TabContextMenuItem({
@@ -163,6 +198,8 @@ interface WorkspaceDesktopTabsRowProps {
   onCreateTerminalTab: (input: { paneId?: string }) => void;
   onCreateBrowserTab: (input: { paneId?: string }) => void;
   showCreateBrowserTab?: boolean;
+  onCreateTasksTab?: (input: { paneId?: string }) => void;
+  showCreateTasksTab?: boolean;
   disableCreateTerminal?: boolean;
   isWaitingOnTerminalReadiness?: boolean;
   onReorderTabs: (nextTabs: WorkspaceTabDescriptor[]) => void;
@@ -474,6 +511,8 @@ export function WorkspaceDesktopTabsRow({
   onCreateTerminalTab,
   onCreateBrowserTab,
   showCreateBrowserTab = false,
+  onCreateTasksTab,
+  showCreateTasksTab,
   disableCreateTerminal = false,
   isWaitingOnTerminalReadiness = false,
   onReorderTabs,
@@ -735,6 +774,7 @@ export function WorkspaceDesktopTabsRow({
             </TooltipContent>
           </Tooltip>
         ) : null}
+        <NewTasksTabButton show={showCreateTasksTab} onCreate={onCreateTasksTab} paneId={paneId} />
         {showPaneSplitActions ? (
           <>
             <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>

@@ -94,6 +94,8 @@ interface SplitContainerProps {
   onCreateTerminalTab: (input: { paneId?: string }) => void;
   onCreateBrowserTab: (input: { paneId?: string }) => void;
   showCreateBrowserTab?: boolean;
+  onCreateTasksTab?: (input: { paneId?: string }) => void;
+  showCreateTasksTab?: boolean;
   buildPaneContentModel: (input: {
     paneId: string;
     tab: WorkspaceTabDescriptor;
@@ -372,6 +374,8 @@ export function SplitContainer({
   onCreateTerminalTab,
   onCreateBrowserTab,
   showCreateBrowserTab,
+  onCreateTasksTab,
+  showCreateTasksTab,
   buildPaneContentModel,
   onFocusPane,
   onSplitPane,
@@ -588,6 +592,8 @@ export function SplitContainer({
           onCreateTerminalTab={onCreateTerminalTab}
           onCreateBrowserTab={onCreateBrowserTab}
           showCreateBrowserTab={showCreateBrowserTab}
+          onCreateTasksTab={onCreateTasksTab}
+          showCreateTasksTab={showCreateTasksTab}
           buildPaneContentModel={buildPaneContentModel}
           onFocusPane={onFocusPane}
           onSplitPane={onSplitPane}
@@ -728,6 +734,8 @@ function SplitNodeView({
   onCreateTerminalTab,
   onCreateBrowserTab,
   showCreateBrowserTab,
+  onCreateTasksTab,
+  showCreateTasksTab,
   buildPaneContentModel,
   onFocusPane,
   onSplitPane,
@@ -780,6 +788,8 @@ function SplitNodeView({
         onCreateTerminalTab={onCreateTerminalTab}
         onCreateBrowserTab={onCreateBrowserTab}
         showCreateBrowserTab={showCreateBrowserTab}
+        onCreateTasksTab={onCreateTasksTab}
+        showCreateTasksTab={showCreateTasksTab}
         buildPaneContentModel={buildPaneContentModel}
         onFocusPane={onFocusPane}
         onSplitPane={onSplitPane}
@@ -825,6 +835,8 @@ function SplitNodeView({
               onCreateTerminalTab={onCreateTerminalTab}
               onCreateBrowserTab={onCreateBrowserTab}
               showCreateBrowserTab={showCreateBrowserTab}
+              onCreateTasksTab={onCreateTasksTab}
+              showCreateTasksTab={showCreateTasksTab}
               buildPaneContentModel={buildPaneContentModel}
               onFocusPane={onFocusPane}
               onSplitPane={onSplitPane}
@@ -876,6 +888,8 @@ function SplitPaneView({
   onCreateTerminalTab,
   onCreateBrowserTab,
   showCreateBrowserTab,
+  onCreateTasksTab,
+  showCreateTasksTab,
   buildPaneContentModel,
   onFocusPane,
   onSplitPane: _onSplitPane,
@@ -1017,6 +1031,8 @@ function SplitPaneView({
             onCreateTerminalTab={onCreateTerminalTab}
             onCreateBrowserTab={onCreateBrowserTab}
             showCreateBrowserTab={showCreateBrowserTab}
+            onCreateTasksTab={onCreateTasksTab}
+            showCreateTasksTab={showCreateTasksTab}
             onReorderTabs={handleReorderTabs}
             onSplitRight={handleSplitRight}
             onSplitDown={handleSplitDown}
