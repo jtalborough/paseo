@@ -30,21 +30,35 @@ if [ ! -w /Applications ]; then
   exit 1
 fi
 
+# The daemon port must be freed before relaunch. The app attaches to whatever
+# daemon already holds this port, so if a stale daemon (an old desktop build or
+# a `npm run dev` daemon) is still listening, the freshly installed app re-uses
+# it and never serves the new server code — new capabilities stay invisible.
+# Killing the port holder lets the relaunched app's bundled server claim it.
+PORT="${PASEO_PORT:-6767}"
+
 LOG=/tmp/paseo-dev-install.log
-echo "==> Build done. Scheduling detached swap + relaunch (Paseo will quit). Log: $LOG"
+echo "==> Build done. Scheduling detached swap + relaunch (Paseo and the daemon on :$PORT will be restarted). Log: $LOG"
 
 # Detached into a new session so it survives Paseo (and this script's daemon)
 # quitting. macOS has no `setsid` binary, so we start the session via perl,
 # which is always present on macOS.
 nohup perl -e 'use POSIX qw(setsid); setsid; exec @ARGV' bash -c '
   set -x
+  PORT="'"$PORT"'"
   sleep 2
   osascript -e "quit app \"Paseo\"" 2>/dev/null || true
   for _ in $(seq 1 30); do pgrep -x Paseo >/dev/null 2>&1 || break; sleep 1; done
+  # Free the daemon port so the relaunched app binds its own freshly-built server.
+  pids="$(lsof -ti "tcp:$PORT" 2>/dev/null || true)"
+  [ -n "$pids" ] && kill $pids 2>/dev/null || true
+  for _ in $(seq 1 30); do lsof -ti "tcp:$PORT" >/dev/null 2>&1 || break; sleep 1; done
+  pids="$(lsof -ti "tcp:$PORT" 2>/dev/null || true)"
+  [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
   rm -rf /Applications/Paseo.app
   cp -R "'"$APP"'" /Applications/Paseo.app
   xattr -dr com.apple.quarantine /Applications/Paseo.app 2>/dev/null || true
   open /Applications/Paseo.app
 ' >"$LOG" 2>&1 &
 
-echo "==> Swap scheduled. Paseo will relaunch on the freshly built version shortly."
+echo "==> Swap scheduled. Paseo and the daemon on :$PORT will restart on the freshly built version shortly."
