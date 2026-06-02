@@ -17,6 +17,9 @@
     },
     "typecheck": {
       "command": "npm run typecheck"
+    },
+    "Install dev build": {
+      "command": "./bin/install-dev.sh"
     }
   }
 }
