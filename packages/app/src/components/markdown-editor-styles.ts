@@ -60,6 +60,17 @@ ${s} .ProseMirror blockquote {
   margin-left: 0;
 }
 ${s} .ProseMirror ul, ${s} .ProseMirror ol { padding-left: 1.4em; }
+/* Distinct markers per nesting depth, cycling like a classic outline. */
+${s} .ProseMirror ol { list-style-type: decimal; }
+${s} .ProseMirror ol ol { list-style-type: lower-alpha; }
+${s} .ProseMirror ol ol ol { list-style-type: lower-roman; }
+${s} .ProseMirror ol ol ol ol { list-style-type: decimal; }
+${s} .ProseMirror ol ol ol ol ol { list-style-type: lower-alpha; }
+${s} .ProseMirror ol ol ol ol ol ol { list-style-type: lower-roman; }
+${s} .ProseMirror ul { list-style-type: disc; }
+${s} .ProseMirror ul ul { list-style-type: circle; }
+${s} .ProseMirror ul ul ul { list-style-type: square; }
+${s} .ProseMirror ul ul ul ul { list-style-type: disc; }
 ${s} .ProseMirror li { margin: 0.2em 0; }
 ${s} .ProseMirror li > p { margin: 0; }
 ${s} .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
