@@ -33,8 +33,10 @@ fi
 LOG=/tmp/paseo-dev-install.log
 echo "==> Build done. Scheduling detached swap + relaunch (Paseo will quit). Log: $LOG"
 
-# Detached so it survives Paseo (and this script's daemon) quitting.
-setsid nohup bash -c '
+# Detached into a new session so it survives Paseo (and this script's daemon)
+# quitting. macOS has no `setsid` binary, so we start the session via perl,
+# which is always present on macOS.
+nohup perl -e 'use POSIX qw(setsid); setsid; exec @ARGV' bash -c '
   set -x
   sleep 2
   osascript -e "quit app \"Paseo\"" 2>/dev/null || true
