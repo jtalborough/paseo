@@ -54,8 +54,14 @@ export function MarkdownEditor({
   });
 
   // Reseed when the underlying file changes (new file / reload after conflict).
+  // Skip when the incoming content already matches what the editor holds: a
+  // background refetch can re-supply an unchanged prop, and reseeding then would
+  // reset the cursor/selection and clobber edits made since the fetch.
   useEffect(() => {
     if (!editor) {
+      return;
+    }
+    if (getEditorMarkdown(editor) === initialContent) {
       return;
     }
     seedingRef.current = true;
