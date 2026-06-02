@@ -1648,6 +1648,8 @@ export const GitLogEntrySchema = z.object({
   author: z.string(),
   authoredAt: z.string(),
   parents: z.array(z.string()),
+  // Branch/tag decorations on this commit (cleaned of git's "HEAD ->"/"tag:" prefixes).
+  refs: z.array(z.string()).optional().default([]),
   subject: z.string(),
 });
 

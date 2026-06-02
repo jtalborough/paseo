@@ -217,6 +217,7 @@ export interface WorkspaceGitLogEntry {
   author: string;
   authoredAt: string;
   parents: string[];
+  refs: string[];
   subject: string;
 }
 
@@ -637,7 +638,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     return this.readAuxiliaryCache(this.gitLogCache, key, readOptions, async () => {
       // NUL-delimited fields per record, NUL+newline separates records, so subjects
       // and author names containing arbitrary characters never corrupt the parse.
-      const format = "%H%x00%h%x00%an%x00%aI%x00%P%x00%s";
+      const format = "%H%x00%h%x00%an%x00%aI%x00%P%x00%D%x00%s";
       const { stdout } = await this.deps.runGitCommand(
         ["log", `--max-count=${limit}`, `--skip=${skip}`, `--format=${format}`, ref, "--"],
         {
@@ -2065,21 +2066,33 @@ function parseWorkspaceGitLog(stdout: string): WorkspaceGitLogEntry[] {
 
   for (const record of records) {
     const fields = record.split("\0");
-    if (fields.length < 6) {
+    if (fields.length < 7) {
       continue;
     }
-    const [sha, shortSha, author, authoredAt, parents, subject] = fields;
+    const [sha, shortSha, author, authoredAt, parents, decorations, subject] = fields;
     entries.push({
       sha,
       shortSha,
       author,
       authoredAt,
       parents: parents.split(" ").filter(Boolean),
+      refs: parseGitRefDecorations(decorations),
       subject,
     });
   }
 
   return entries;
+}
+
+// Turn git's %D decoration string ("HEAD -> main, origin/main, tag: v1.0") into
+// clean ref names. Strips the "HEAD -> " arrow and "tag: " prefix git adds.
+function parseGitRefDecorations(decorations: string): string[] {
+  return decorations
+    .split(", ")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.replace(/^HEAD -> /, "").replace(/^tag: /, ""))
+    .filter(Boolean);
 }
 
 function buildNotGitSnapshot(cwd: string): WorkspaceGitRuntimeSnapshot {

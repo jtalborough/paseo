@@ -43,9 +43,18 @@ describe("WorkspaceGitServiceImpl git log", () => {
         "Ada",
         "2026-01-02T03:04:05Z",
         "parent1 parent2",
+        "HEAD -> main, origin/main, tag: v1.0",
         "Add feature",
       ]) +
-      logRecord(["def456fullsha", "def456", "Grace", "2026-01-01T00:00:00Z", "", "Initial commit"]);
+      logRecord([
+        "def456fullsha",
+        "def456",
+        "Grace",
+        "2026-01-01T00:00:00Z",
+        "",
+        "",
+        "Initial commit",
+      ]);
     const runGitCommand = vi.fn(async () => gitResult(logOutput));
     const service = createService({ runGitCommand });
 
@@ -59,6 +68,7 @@ describe("WorkspaceGitServiceImpl git log", () => {
         author: "Ada",
         authoredAt: "2026-01-02T03:04:05Z",
         parents: ["parent1", "parent2"],
+        refs: ["main", "origin/main", "v1.0"],
         subject: "Add feature",
       },
       {
@@ -67,6 +77,7 @@ describe("WorkspaceGitServiceImpl git log", () => {
         author: "Grace",
         authoredAt: "2026-01-01T00:00:00Z",
         parents: [],
+        refs: [],
         subject: "Initial commit",
       },
     ]);
@@ -76,7 +87,7 @@ describe("WorkspaceGitServiceImpl git log", () => {
 
   test("listGitLog reports hasMore=false when fewer rows than the limit return", async () => {
     const runGitCommand = vi.fn(async () =>
-      gitResult(logRecord(["sha1", "sha1", "Ada", "2026-01-02T03:04:05Z", "", "Only commit"])),
+      gitResult(logRecord(["sha1", "sha1", "Ada", "2026-01-02T03:04:05Z", "", "", "Only commit"])),
     );
     const service = createService({ runGitCommand });
 
