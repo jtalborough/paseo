@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TextInput, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
-import { StarterKit } from "@tiptap/starter-kit";
-import { TaskList } from "@tiptap/extension-task-list";
-import { TaskItem } from "@tiptap/extension-task-item";
-import { Markdown, type MarkdownStorage } from "tiptap-markdown";
+import type { MarkdownStorage } from "tiptap-markdown";
 import { useAutosaveFile } from "@/components/use-autosave-file";
 import { FileSaveStatusBar } from "@/components/file-save-status-bar";
 import type { MarkdownEditorProps } from "@/components/markdown-editor-types";
+import { buildMarkdownExtensions } from "@/components/markdown-editor-extensions";
 import { buildProseMirrorCss, PROSE_SCOPE_CLASS } from "@/components/markdown-editor-styles";
 
 /**
@@ -44,12 +42,7 @@ export function MarkdownEditor({
   const seedingRef = useRef(false);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ link: { openOnClick: false } }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Markdown.configure({ html: false, linkify: true, breaks: false, transformPastedText: true }),
-    ],
+    extensions: buildMarkdownExtensions(),
     editable: !isConflicted,
     content: initialContent,
     onUpdate: ({ editor: ed }) => {
