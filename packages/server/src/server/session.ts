@@ -2053,6 +2053,10 @@ export class Session {
         return this.handleCheckoutPushRequest(msg);
       case "checkout.refresh.request":
         return this.handleCheckoutRefreshRequest(msg);
+      case "git.log.list.request":
+        return this.handleGitLogListRequest(msg);
+      case "git.log.commit_diff.request":
+        return this.handleGitLogCommitDiffRequest(msg);
       case "checkout_pr_create_request":
         return this.handleCheckoutPrCreateRequest(msg);
       case "checkout_pr_merge_request":
@@ -5366,6 +5370,66 @@ export class Session {
         payload: {
           cwd,
           success: false,
+          error: toCheckoutError(error),
+          requestId,
+        },
+      });
+    }
+  }
+
+  private async handleGitLogListRequest(
+    msg: Extract<SessionInboundMessage, { type: "git.log.list.request" }>,
+  ): Promise<void> {
+    const { cwd, limit, skip, ref, requestId } = msg;
+
+    try {
+      const { commits, hasMore } = await this.workspaceGitService.listGitLog(cwd, {
+        limit,
+        skip,
+        ref,
+      });
+      this.emit({
+        type: "git.log.list.response",
+        payload: { cwd, commits, hasMore, error: null, requestId },
+      });
+    } catch (error) {
+      this.emit({
+        type: "git.log.list.response",
+        payload: {
+          cwd,
+          commits: [],
+          hasMore: false,
+          error: toCheckoutError(error),
+          requestId,
+        },
+      });
+    }
+  }
+
+  private async handleGitLogCommitDiffRequest(
+    msg: Extract<SessionInboundMessage, { type: "git.log.commit_diff.request" }>,
+  ): Promise<void> {
+    const { cwd, sha, requestId } = msg;
+
+    try {
+      const result = await this.workspaceGitService.getCommitDiff(cwd, sha);
+      this.emit({
+        type: "git.log.commit_diff.response",
+        payload: {
+          cwd,
+          sha,
+          files: result.structured ?? [],
+          error: null,
+          requestId,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "git.log.commit_diff.response",
+        payload: {
+          cwd,
+          sha,
+          files: [],
           error: toCheckoutError(error),
           requestId,
         },

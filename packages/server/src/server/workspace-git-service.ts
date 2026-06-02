@@ -13,6 +13,7 @@ import {
   type CheckoutDiffCompare,
   type CheckoutDiffResult,
   getCheckoutDiff,
+  getCommitDiff,
   getCheckoutSnapshotFacts,
   getCheckoutShortstat,
   getCheckoutStatus,
@@ -141,6 +142,16 @@ export interface WorkspaceGitService {
     options?: WorkspaceGitStashListOptions,
     readOptions?: WorkspaceGitReadOptions,
   ): Promise<WorkspaceGitStashEntry[]>;
+  listGitLog(
+    cwd: string,
+    options: WorkspaceGitLogOptions,
+    readOptions?: WorkspaceGitReadOptions,
+  ): Promise<WorkspaceGitLogResult>;
+  getCommitDiff(
+    cwd: string,
+    sha: string,
+    readOptions?: WorkspaceGitReadOptions,
+  ): Promise<CheckoutDiffResult>;
   listWorktrees(
     cwdOrRepoRoot: string,
     options?: WorkspaceGitReadOptions,
@@ -194,6 +205,26 @@ export interface WorkspaceGitStashEntry {
   isPaseo: boolean;
 }
 
+export interface WorkspaceGitLogOptions {
+  limit: number;
+  skip: number;
+  ref?: string;
+}
+
+export interface WorkspaceGitLogEntry {
+  sha: string;
+  shortSha: string;
+  author: string;
+  authoredAt: string;
+  parents: string[];
+  subject: string;
+}
+
+export interface WorkspaceGitLogResult {
+  commits: WorkspaceGitLogEntry[];
+  hasMore: boolean;
+}
+
 export type WorkspaceGitBranchValidationResult = BranchCheckoutResolution;
 export type WorkspaceGitBranchSuggestion = BranchSuggestion;
 export type WorkspaceGitWorktreeInfo = PaseoWorktreeInfo;
@@ -243,6 +274,7 @@ interface WorkspaceGitServiceDependencies {
   getCheckoutStatus: typeof getCheckoutStatus;
   getCheckoutShortstat: typeof getCheckoutShortstat;
   getCheckoutDiff: typeof getCheckoutDiff;
+  getCommitDiff: typeof getCommitDiff;
   getPullRequestStatus: typeof getPullRequestStatus;
   resolveBranchCheckout: typeof resolveBranchCheckout;
   resolveRepositoryDefaultBranch: typeof resolveRepositoryDefaultBranch;
@@ -330,6 +362,7 @@ function buildDefaultWorkspaceGitServiceDeps(): WorkspaceGitServiceDependencies 
     getCheckoutStatus,
     getCheckoutShortstat,
     getCheckoutDiff,
+    getCommitDiff,
     getPullRequestStatus,
     resolveBranchCheckout,
     resolveRepositoryDefaultBranch,
@@ -386,6 +419,14 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     WorkspaceGitAuxiliaryReadCacheEntry<string>
   >({ max: WORKSPACE_GIT_AUXILIARY_CACHE_MAX });
   private readonly checkoutDiffCache = new LRUCache<
+    string,
+    WorkspaceGitAuxiliaryReadCacheEntry<CheckoutDiffResult>
+  >({ max: WORKSPACE_GIT_CHECKOUT_DIFF_CACHE_MAX });
+  private readonly gitLogCache = new LRUCache<
+    string,
+    WorkspaceGitAuxiliaryReadCacheEntry<WorkspaceGitLogResult>
+  >({ max: WORKSPACE_GIT_AUXILIARY_CACHE_MAX });
+  private readonly commitDiffCache = new LRUCache<
     string,
     WorkspaceGitAuxiliaryReadCacheEntry<CheckoutDiffResult>
   >({ max: WORKSPACE_GIT_CHECKOUT_DIFF_CACHE_MAX });
@@ -581,6 +622,48 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       });
       return parseWorkspaceGitStashList(stdout, { paseoOnly });
     });
+  }
+
+  listGitLog(
+    cwd: string,
+    options: WorkspaceGitLogOptions,
+    readOptions?: WorkspaceGitReadOptions,
+  ): Promise<WorkspaceGitLogResult> {
+    const normalizedCwd = normalizeWorkspaceId(cwd);
+    const ref = options.ref?.trim() || "HEAD";
+    const limit = options.limit;
+    const skip = options.skip;
+    const key = JSON.stringify(["git-log", normalizedCwd, ref, limit, skip]);
+    return this.readAuxiliaryCache(this.gitLogCache, key, readOptions, async () => {
+      // NUL-delimited fields per record, NUL+newline separates records, so subjects
+      // and author names containing arbitrary characters never corrupt the parse.
+      const format = "%H%x00%h%x00%an%x00%aI%x00%P%x00%s";
+      const { stdout } = await this.deps.runGitCommand(
+        ["log", `--max-count=${limit}`, `--skip=${skip}`, `--format=${format}`, ref, "--"],
+        {
+          cwd: normalizedCwd,
+          envOverlay: READ_ONLY_GIT_ENV,
+        },
+      );
+      const commits = parseWorkspaceGitLog(stdout);
+      return { commits, hasMore: commits.length === limit };
+    });
+  }
+
+  getCommitDiff(
+    cwd: string,
+    sha: string,
+    readOptions?: WorkspaceGitReadOptions,
+  ): Promise<CheckoutDiffResult> {
+    const normalizedCwd = normalizeWorkspaceId(cwd);
+    const trimmedSha = sha.trim();
+    const key = JSON.stringify(["commit-diff", normalizedCwd, trimmedSha]);
+    return this.readAuxiliaryCache(this.commitDiffCache, key, readOptions, () =>
+      this.deps.getCommitDiff(normalizedCwd, trimmedSha, {
+        paseoHome: this.paseoHome,
+        worktreesRoot: this.worktreesRoot,
+      }),
+    );
   }
 
   async listWorktrees(
@@ -1969,6 +2052,31 @@ function parseWorkspaceGitStashList(
     }
 
     entries.push({ index, message: subject, branch, isPaseo });
+  }
+
+  return entries;
+}
+
+function parseWorkspaceGitLog(stdout: string): WorkspaceGitLogEntry[] {
+  const entries: WorkspaceGitLogEntry[] = [];
+  // git emits one record per commit terminated by a newline; fields within a record
+  // are NUL-separated (see the --format string in listGitLog).
+  const records = stdout.split("\n").filter((line) => line.length > 0);
+
+  for (const record of records) {
+    const fields = record.split("\0");
+    if (fields.length < 6) {
+      continue;
+    }
+    const [sha, shortSha, author, authoredAt, parents, subject] = fields;
+    entries.push({
+      sha,
+      shortSha,
+      author,
+      authoredAt,
+      parents: parents.split(" ").filter(Boolean),
+      subject,
+    });
   }
 
   return entries;

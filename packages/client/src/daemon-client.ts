@@ -2985,6 +2985,36 @@ export class DaemonClient {
     });
   }
 
+  async listGitLog(
+    cwd: string,
+    input: { limit: number; skip: number; ref?: string },
+    requestId?: string,
+  ) {
+    return this.sendNamespacedCorrelatedSessionRequest<"git.log.list.response">({
+      requestId,
+      message: {
+        type: "git.log.list.request",
+        cwd,
+        limit: input.limit,
+        skip: input.skip,
+        ...(input.ref ? { ref: input.ref } : {}),
+      },
+      timeout: 30000,
+    });
+  }
+
+  async getCommitDiff(cwd: string, sha: string, requestId?: string) {
+    return this.sendNamespacedCorrelatedSessionRequest<"git.log.commit_diff.response">({
+      requestId,
+      message: {
+        type: "git.log.commit_diff.request",
+        cwd,
+        sha,
+      },
+      timeout: 30000,
+    });
+  }
+
   async checkoutPrStatus(cwd: string, requestId?: string): Promise<CheckoutPrStatusPayload> {
     return this.sendCorrelatedSessionRequest({
       requestId,

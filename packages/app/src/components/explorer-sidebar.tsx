@@ -25,6 +25,8 @@ import {
 import { useExplorerSidebarAnimation } from "@/contexts/explorer-sidebar-animation-context";
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { GitDiffPane } from "@/git/diff-pane";
+import { GitLogPane } from "@/git/log-pane";
+import { useSessionStore } from "@/stores/session-store";
 import { FileExplorerPane } from "./file-explorer-pane";
 import { useKeyboardShiftStyle } from "@/hooks/use-keyboard-shift-style";
 import { useWindowControlsPadding } from "@/utils/desktop-window";
@@ -394,6 +396,21 @@ interface SidebarContentProps {
   onOpenFile?: (filePath: string) => void;
 }
 
+function resolveRequestedExplorerTab(params: {
+  activeTab: ExplorerTab;
+  isGit: boolean;
+  showLogTab: boolean;
+}): ExplorerTab {
+  const { activeTab, isGit, showLogTab } = params;
+  if (!isGit && (activeTab === "changes" || activeTab === "pr" || activeTab === "log")) {
+    return "files";
+  }
+  if (activeTab === "log" && !showLogTab) {
+    return "files";
+  }
+  return activeTab;
+}
+
 function SidebarContent({
   activeTab,
   onTabPress,
@@ -416,8 +433,12 @@ function SidebarContent({
     timelineEnabled: activeTab === "pr" && canQueryPullRequest && isOpen,
   });
   const hasPullRequest = prPane.prNumber !== null;
-  const requestedTab: ExplorerTab =
-    !isGit && (activeTab === "changes" || activeTab === "pr") ? "files" : activeTab;
+  // COMPAT(gitLog): added in v0.1.X, remove gate after 2026-12-01.
+  const gitLogSupported = useSessionStore(
+    (s) => s.sessions[serverId]?.serverInfo?.features?.gitLog === true,
+  );
+  const showLogTab = isGit && gitLogSupported;
+  const requestedTab = resolveRequestedExplorerTab({ activeTab, isGit, showLogTab });
   const resolvedTab: ExplorerTab =
     requestedTab === "pr" && !hasPullRequest ? "changes" : requestedTab;
   const prTabLabel = prPane.prNumber === null ? "" : `#${prPane.prNumber}`;
@@ -449,6 +470,15 @@ function SidebarContent({
             onTabPress={onTabPress}
             testID="explorer-tab-files"
           />
+          {showLogTab && (
+            <ExplorerTabButton
+              tab="log"
+              active={resolvedTab === "log"}
+              label="Log"
+              onTabPress={onTabPress}
+              testID="explorer-tab-log"
+            />
+          )}
           {isGit && hasPullRequest && (
             <ExplorerTabButton
               tab="pr"
@@ -493,6 +523,9 @@ function SidebarContent({
             workspaceRoot={workspaceRoot}
             onOpenFile={onOpenFile}
           />
+        )}
+        {resolvedTab === "log" && (
+          <GitLogPane serverId={serverId} cwd={workspaceRoot} enabled={isOpen} />
         )}
         {resolvedTab === "pr" && prPane.data && <PrPane data={prPane.data} />}
       </View>

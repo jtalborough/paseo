@@ -2307,7 +2307,24 @@ export async function getCheckoutDiff(
     return { diff: "" };
   }
 
-  const ignoreWhitespace = compare.ignoreWhitespace === true;
+  return computeStructuredDiffForRefs(cwd, refsForDiff, {
+    ignoreWhitespace: compare.ignoreWhitespace === true,
+    includeStructured: compare.includeStructured === true,
+  });
+}
+
+/**
+ * Produce the diff (raw text + optional structured files) between a pair of refs.
+ * Shared by the working-tree/base diff (getCheckoutDiff) and single-commit diffs
+ * (getCommitDiff) so both go through identical truncation and parsing.
+ */
+async function computeStructuredDiffForRefs(
+  cwd: string,
+  refsForDiff: CheckoutDiffRefs,
+  options: { ignoreWhitespace: boolean; includeStructured: boolean },
+): Promise<CheckoutDiffResult> {
+  const ignoreWhitespace = options.ignoreWhitespace;
+  const includeStructured = options.includeStructured;
   let effectiveRefsForDiff = refsForDiff;
   let changes: CheckoutFileChange[];
   try {
@@ -2364,7 +2381,7 @@ export async function getCheckoutDiff(
     appendDiff(`# ${change.path}: diff too large omitted\n`);
   };
 
-  if (compare.includeStructured) {
+  if (includeStructured) {
     await appendStructuredTrackedDiffs({
       cwd,
       trackedChanges,
@@ -2396,16 +2413,46 @@ export async function getCheckoutDiff(
       cwd,
       change,
       ignoreWhitespace,
-      includeStructured: compare.includeStructured === true,
+      includeStructured,
       structured,
       appendDiff,
     });
   }
 
-  if (compare.includeStructured) {
+  if (includeStructured) {
     return { diff: diffText, structured };
   }
   return { diff: diffText };
+}
+
+/**
+ * Diff a single commit against its first parent (sha^..sha). Root commits (no
+ * parent) diff against the empty tree so the initial commit still renders.
+ */
+export async function getCommitDiff(
+  cwd: string,
+  sha: string,
+  _context?: CheckoutContext,
+): Promise<CheckoutDiffResult> {
+  await requireGitRepo(cwd);
+
+  const trimmedSha = sha.trim();
+  if (!trimmedSha) {
+    throw new Error("Commit sha is required");
+  }
+
+  const parentResult = await runGitCommand(["rev-parse", "--verify", "--quiet", `${trimmedSha}^`], {
+    cwd,
+    envOverlay: READ_ONLY_GIT_ENV,
+    acceptExitCodes: [0, 1],
+  });
+  const baseRef = parentResult.exitCode === 0 ? parentResult.stdout.trim() : EMPTY_TREE_OBJECT_ID;
+
+  return computeStructuredDiffForRefs(
+    cwd,
+    { baseRef, targetRef: trimmedSha, includeUntracked: false },
+    { ignoreWhitespace: false, includeStructured: true },
+  );
 }
 
 export async function commitChanges(

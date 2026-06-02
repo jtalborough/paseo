@@ -1401,6 +1401,22 @@ export const CheckoutRefreshRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const GitLogListRequestSchema = z.object({
+  type: z.literal("git.log.list.request"),
+  cwd: z.string(),
+  limit: z.number().int().positive(),
+  skip: z.number().int().nonnegative(),
+  ref: z.string().optional(),
+  requestId: z.string(),
+});
+
+export const GitLogCommitDiffRequestSchema = z.object({
+  type: z.literal("git.log.commit_diff.request"),
+  cwd: z.string(),
+  sha: z.string(),
+  requestId: z.string(),
+});
+
 export const CheckoutPrCreateRequestSchema = z.object({
   type: z.literal("checkout_pr_create_request"),
   cwd: z.string(),
@@ -1624,6 +1640,15 @@ const ParsedDiffFileSchema = z.object({
   deletions: z.number(),
   hunks: z.array(DiffHunkSchema),
   status: z.enum(["ok", "too_large", "binary"]).optional(),
+});
+
+export const GitLogEntrySchema = z.object({
+  sha: z.string(),
+  shortSha: z.string(),
+  author: z.string(),
+  authoredAt: z.string(),
+  parents: z.array(z.string()),
+  subject: z.string(),
 });
 
 const FileExplorerEntrySchema = z.object({
@@ -1876,6 +1901,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   CheckoutPullRequestSchema,
   CheckoutPushRequestSchema,
   CheckoutRefreshRequestSchema,
+  GitLogListRequestSchema,
+  GitLogCommitDiffRequestSchema,
   CheckoutPrCreateRequestSchema,
   CheckoutPrMergeRequestSchema,
   CheckoutGithubSetAutoMergeRequestSchema,
@@ -2112,6 +2139,8 @@ export const ServerInfoStatusPayloadSchema = z
         rewind: z.boolean().optional(),
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
         checkoutRefresh: z.boolean().optional(),
+        // COMPAT(gitLog): added in v0.1.X, remove gate after 2026-12-01.
+        gitLog: z.boolean().optional(),
       })
       .optional(),
   })
@@ -3084,6 +3113,28 @@ export const CheckoutRefreshResponseSchema = z.object({
   }),
 });
 
+export const GitLogListResponseSchema = z.object({
+  type: z.literal("git.log.list.response"),
+  payload: z.object({
+    cwd: z.string(),
+    commits: z.array(GitLogEntrySchema),
+    hasMore: z.boolean(),
+    error: CheckoutErrorSchema.nullable(),
+    requestId: z.string(),
+  }),
+});
+
+export const GitLogCommitDiffResponseSchema = z.object({
+  type: z.literal("git.log.commit_diff.response"),
+  payload: z.object({
+    cwd: z.string(),
+    sha: z.string(),
+    files: z.array(ParsedDiffFileSchema),
+    error: CheckoutErrorSchema.nullable(),
+    requestId: z.string(),
+  }),
+});
+
 export const CheckoutPrCreateResponseSchema = z.object({
   type: z.literal("checkout_pr_create_response"),
   payload: z.object({
@@ -3698,6 +3749,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   CheckoutPullResponseSchema,
   CheckoutPushResponseSchema,
   CheckoutRefreshResponseSchema,
+  GitLogListResponseSchema,
+  GitLogCommitDiffResponseSchema,
   CheckoutPrCreateResponseSchema,
   CheckoutPrMergeResponseSchema,
   CheckoutGithubSetAutoMergeResponseSchema,
@@ -3960,6 +4013,11 @@ export type CheckoutPushRequest = z.infer<typeof CheckoutPushRequestSchema>;
 export type CheckoutPushResponse = z.infer<typeof CheckoutPushResponseSchema>;
 export type CheckoutRefreshRequest = z.infer<typeof CheckoutRefreshRequestSchema>;
 export type CheckoutRefreshResponse = z.infer<typeof CheckoutRefreshResponseSchema>;
+export type GitLogEntry = z.infer<typeof GitLogEntrySchema>;
+export type GitLogListRequest = z.infer<typeof GitLogListRequestSchema>;
+export type GitLogListResponse = z.infer<typeof GitLogListResponseSchema>;
+export type GitLogCommitDiffRequest = z.infer<typeof GitLogCommitDiffRequestSchema>;
+export type GitLogCommitDiffResponse = z.infer<typeof GitLogCommitDiffResponseSchema>;
 export type CheckoutPrCreateRequest = z.infer<typeof CheckoutPrCreateRequestSchema>;
 export type CheckoutPrCreateResponse = z.infer<typeof CheckoutPrCreateResponseSchema>;
 export type CheckoutPrMergeRequest = z.infer<typeof CheckoutPrMergeRequestSchema>;
