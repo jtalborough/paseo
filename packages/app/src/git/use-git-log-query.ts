@@ -10,6 +10,7 @@ interface UseGitLogQueryOptions {
   serverId: string;
   cwd: string;
   enabled?: boolean;
+  allBranches?: boolean;
 }
 
 interface GitLogQueryData {
@@ -17,7 +18,12 @@ interface GitLogQueryData {
   hasMore: boolean;
 }
 
-export function useGitLogQuery({ serverId, cwd, enabled = true }: UseGitLogQueryOptions) {
+export function useGitLogQuery({
+  serverId,
+  cwd,
+  enabled = true,
+  allBranches = false,
+}: UseGitLogQueryOptions) {
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
   // Capped fetch: grow the window on "Load more" rather than paginating with skip,
@@ -25,12 +31,12 @@ export function useGitLogQuery({ serverId, cwd, enabled = true }: UseGitLogQuery
   const [limit, setLimit] = useState(GIT_LOG_PAGE_SIZE);
 
   const query = useQuery<GitLogQueryData>({
-    queryKey: [...gitLogQueryKey(serverId, cwd), limit],
+    queryKey: [...gitLogQueryKey(serverId, cwd), limit, allBranches],
     queryFn: async () => {
       if (!client) {
         throw new Error("Daemon client not available");
       }
-      const payload = await client.listGitLog(cwd, { limit, skip: 0 });
+      const payload = await client.listGitLog(cwd, { limit, skip: 0, allBranches });
       if (payload.error) {
         throw new Error(payload.error.message);
       }

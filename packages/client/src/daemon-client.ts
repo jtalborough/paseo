@@ -2987,7 +2987,7 @@ export class DaemonClient {
 
   async listGitLog(
     cwd: string,
-    input: { limit: number; skip: number; ref?: string },
+    input: { limit: number; skip: number; ref?: string; allBranches?: boolean },
     requestId?: string,
   ) {
     return this.sendNamespacedCorrelatedSessionRequest<"git.log.list.response">({
@@ -2998,6 +2998,7 @@ export class DaemonClient {
         limit: input.limit,
         skip: input.skip,
         ...(input.ref ? { ref: input.ref } : {}),
+        ...(input.allBranches ? { allBranches: true } : {}),
       },
       timeout: 30000,
     });

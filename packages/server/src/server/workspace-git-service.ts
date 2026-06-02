@@ -209,6 +209,7 @@ export interface WorkspaceGitLogOptions {
   limit: number;
   skip: number;
   ref?: string;
+  allBranches?: boolean;
 }
 
 export interface WorkspaceGitLogEntry {
@@ -634,13 +635,18 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const ref = options.ref?.trim() || "HEAD";
     const limit = options.limit;
     const skip = options.skip;
-    const key = JSON.stringify(["git-log", normalizedCwd, ref, limit, skip]);
+    const allBranches = options.allBranches === true;
+    const key = JSON.stringify(["git-log", normalizedCwd, ref, limit, skip, allBranches]);
     return this.readAuxiliaryCache(this.gitLogCache, key, readOptions, async () => {
       // NUL-delimited fields per record, NUL+newline separates records, so subjects
       // and author names containing arbitrary characters never corrupt the parse.
       const format = "%H%x00%h%x00%an%x00%aI%x00%P%x00%D%x00%s";
+      // --topo-order keeps each branch's commits contiguous so the rendered lanes
+      // stay clean. --all walks every ref (branches/remotes/tags) for a full graph;
+      // otherwise we walk only the requested ref's ancestry.
+      const scopeArgs = allBranches ? ["--all", "--topo-order"] : ["--topo-order", ref];
       const { stdout } = await this.deps.runGitCommand(
-        ["log", `--max-count=${limit}`, `--skip=${skip}`, `--format=${format}`, ref, "--"],
+        ["log", `--max-count=${limit}`, `--skip=${skip}`, `--format=${format}`, ...scopeArgs, "--"],
         {
           cwd: normalizedCwd,
           envOverlay: READ_ONLY_GIT_ENV,

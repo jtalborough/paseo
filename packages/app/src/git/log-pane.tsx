@@ -14,9 +14,9 @@ const ThemedChevronLeft = withUnistyles(ChevronLeft, (theme) => ({
 }));
 
 const ROW_HEIGHT = 52;
-const LANE_WIDTH = 14;
+const LANE_WIDTH = 12;
 const NODE_RADIUS = 4;
-const MAX_GRAPH_LANES = 8;
+const MAX_GRAPH_LANES = 14;
 
 interface GitLogPaneProps {
   serverId: string;
@@ -26,11 +26,16 @@ interface GitLogPaneProps {
 
 export function GitLogPane({ serverId, cwd, enabled = true }: GitLogPaneProps) {
   const [selectedSha, setSelectedSha] = useState<string | null>(null);
+  const [allBranches, setAllBranches] = useState(true);
   const { commits, hasMore, isLoading, isFetching, isError, error, loadMore } = useGitLogQuery({
     serverId,
     cwd,
     enabled,
+    allBranches,
   });
+
+  const showAll = useCallback(() => setAllBranches(true), []);
+  const showCurrent = useCallback(() => setAllBranches(false), []);
 
   const handleSelect = useCallback((sha: string) => {
     setSelectedSha(sha);
@@ -92,42 +97,62 @@ export function GitLogPane({ serverId, cwd, enabled = true }: GitLogPaneProps) {
     return <CommitDiffView serverId={serverId} cwd={cwd} sha={selectedSha} onBack={handleBack} />;
   }
 
-  if (isLoading) {
+  function renderBody() {
+    if (isLoading) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" />
+        </View>
+      );
+    }
+    if (isError) {
+      return (
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>
+            {error instanceof Error ? error.message : "Failed to load commit history"}
+          </Text>
+        </View>
+      );
+    }
+    if (commits.length === 0) {
+      return (
+        <View style={styles.centered}>
+          <Text style={styles.emptyText}>No commits yet</Text>
+        </View>
+      );
+    }
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
-
-  if (isError) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>
-          {error instanceof Error ? error.message : "Failed to load commit history"}
-        </Text>
-      </View>
-    );
-  }
-
-  if (commits.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.emptyText}>No commits yet</Text>
-      </View>
+      <FlatList
+        data={commits}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        getItemLayout={getItemLayout}
+        ListFooterComponent={footer}
+        testID="git-log-list"
+      />
     );
   }
 
   return (
-    <FlatList
-      style={styles.container}
-      data={commits}
-      renderItem={renderItem}
-      keyExtractor={keyExtractor}
-      getItemLayout={getItemLayout}
-      ListFooterComponent={footer}
-      testID="git-log-list"
-    />
+    <View style={styles.container}>
+      <View style={styles.scopeToggle}>
+        <Pressable
+          onPress={showCurrent}
+          style={allBranches ? styles.scopeButton : styles.scopeButtonActive}
+          testID="git-log-scope-current"
+        >
+          <Text style={allBranches ? styles.scopeText : styles.scopeTextActive}>Branch</Text>
+        </Pressable>
+        <Pressable
+          onPress={showAll}
+          style={allBranches ? styles.scopeButtonActive : styles.scopeButton}
+          testID="git-log-scope-all"
+        >
+          <Text style={allBranches ? styles.scopeTextActive : styles.scopeText}>All branches</Text>
+        </Pressable>
+      </View>
+      {renderBody()}
+    </View>
   );
 }
 
@@ -296,6 +321,35 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowPressed: {
     backgroundColor: theme.colors.surfaceSidebarHover,
+  },
+  scopeToggle: {
+    flexDirection: "row",
+    gap: theme.spacing[1],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  scopeButton: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.base,
+  },
+  scopeButtonActive: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.base,
+    backgroundColor: theme.colors.surface2,
+  },
+  scopeText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    fontFamily: theme.fontFamily.ui,
+  },
+  scopeTextActive: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.xs,
+    fontFamily: theme.fontFamily.ui,
   },
   rowText: {
     flex: 1,

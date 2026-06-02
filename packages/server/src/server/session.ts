@@ -5380,13 +5380,14 @@ export class Session {
   private async handleGitLogListRequest(
     msg: Extract<SessionInboundMessage, { type: "git.log.list.request" }>,
   ): Promise<void> {
-    const { cwd, limit, skip, ref, requestId } = msg;
+    const { cwd, limit, skip, ref, allBranches, requestId } = msg;
 
     try {
       const { commits, hasMore } = await this.workspaceGitService.listGitLog(cwd, {
         limit,
         skip,
         ref,
+        allBranches,
       });
       this.emit({
         type: "git.log.list.response",

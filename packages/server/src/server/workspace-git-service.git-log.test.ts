@@ -99,6 +99,37 @@ describe("WorkspaceGitServiceImpl git log", () => {
     service.dispose();
   });
 
+  test("listGitLog passes --all and --topo-order when allBranches is set", async () => {
+    const runGitCommand = vi.fn(async () =>
+      gitResult(logRecord(["sha1", "sha1", "Ada", "2026-01-02T03:04:05Z", "", "", "Commit"])),
+    );
+    const service = createService({ runGitCommand });
+
+    await service.listGitLog(REPO_CWD, { limit: 50, skip: 0, allBranches: true });
+
+    const args = runGitCommand.mock.calls[0][0] as string[];
+    expect(args).toContain("--all");
+    expect(args).toContain("--topo-order");
+    expect(args).not.toContain("HEAD");
+
+    service.dispose();
+  });
+
+  test("listGitLog walks the requested ref (not --all) by default", async () => {
+    const runGitCommand = vi.fn(async () =>
+      gitResult(logRecord(["sha1", "sha1", "Ada", "2026-01-02T03:04:05Z", "", "", "Commit"])),
+    );
+    const service = createService({ runGitCommand });
+
+    await service.listGitLog(REPO_CWD, { limit: 50, skip: 0 });
+
+    const args = runGitCommand.mock.calls[0][0] as string[];
+    expect(args).not.toContain("--all");
+    expect(args).toContain("HEAD");
+
+    service.dispose();
+  });
+
   test("getCommitDiff delegates to the diff dependency and returns structured files", async () => {
     const getCommitDiff = vi.fn(async () => ({
       diff: "diff",

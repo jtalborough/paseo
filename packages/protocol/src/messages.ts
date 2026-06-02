@@ -1407,6 +1407,8 @@ export const GitLogListRequestSchema = z.object({
   limit: z.number().int().positive(),
   skip: z.number().int().nonnegative(),
   ref: z.string().optional(),
+  // When true, include all refs (git log --all) instead of just the current branch.
+  allBranches: z.boolean().optional().default(false),
   requestId: z.string(),
 });
 
