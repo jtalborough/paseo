@@ -26,7 +26,7 @@ echo "==> Built: $APP"
 
 if [ ! -w /Applications ]; then
   echo "!! /Applications is not writable by you; run the swap manually with sudo." >&2
-  echo "   sudo rm -rf /Applications/Paseo.app && sudo cp -R '$APP' /Applications/" >&2
+  echo "   sudo rm -rf /Applications/Paseo.app && sudo ditto '$APP' /Applications/Paseo.app" >&2
   exit 1
 fi
 
@@ -56,7 +56,9 @@ nohup perl -e 'use POSIX qw(setsid); setsid; exec @ARGV' bash -c '
   pids="$(lsof -ti "tcp:$PORT" 2>/dev/null || true)"
   [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
   rm -rf /Applications/Paseo.app
-  cp -R "'"$APP"'" /Applications/Paseo.app
+  # ditto preserves the bundle structure and code-signature seals; cp -R can
+  # corrupt nested framework symlinks/signatures and break launch.
+  ditto "'"$APP"'" /Applications/Paseo.app
   xattr -dr com.apple.quarantine /Applications/Paseo.app 2>/dev/null || true
   open /Applications/Paseo.app
 ' >"$LOG" 2>&1 &
