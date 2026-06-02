@@ -74,9 +74,12 @@ ${s} .ProseMirror ul ul ul ul { list-style-type: disc; }
 ${s} .ProseMirror li { margin: 0.2em 0; }
 ${s} .ProseMirror li > p { margin: 0; }
 ${s} .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
-${s} .ProseMirror ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; }
-${s} .ProseMirror ul[data-type="taskList"] li > label { margin-top: 0.2em; user-select: none; }
+${s} .ProseMirror ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; margin: 0.1em 0; }
+${s} .ProseMirror ul[data-type="taskList"] li > label { margin-top: 0.1em; user-select: none; }
 ${s} .ProseMirror ul[data-type="taskList"] li > div { flex: 1 1 auto; min-width: 0; }
+/* Task items wrap their text in li > div > p, which the li > p reset above does
+   not reach — zero it so checkboxes sit tight and aligned with the first line. */
+${s} .ProseMirror ul[data-type="taskList"] li > div > p { margin: 0; }
 ${s} .ProseMirror hr {
   border: none;
   border-top: 1px solid ${t.border};
