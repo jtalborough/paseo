@@ -90,7 +90,15 @@ import type {
   AgentSessionConfig,
 } from "@getpaseo/protocol/agent-types";
 import type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
+import type { CreateTaskInput, StoredTask } from "@getpaseo/protocol/task/types";
+import type {
+  TaskRunResponseSchema,
+  TaskUpdateRequestSchema,
+} from "@getpaseo/protocol/task/messages";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
+
+export type TaskUpdateRpcPatch = z.infer<typeof TaskUpdateRequestSchema>["patch"];
+export type TaskRunResultPayload = z.infer<typeof TaskRunResponseSchema>["payload"];
 import {
   asUint8Array,
   decodeFileTransferFrame,
@@ -3017,6 +3025,76 @@ export class DaemonClient {
         ...(input.enabled ? { mergeMethod: input.method } : {}),
       },
       timeout: 60000,
+    });
+  }
+
+  // COMPAT(tasks): added in v0.1.89, remove gate after 2026-12-15. Gated on
+  // server_info.features.tasks; callers must check the capability first.
+  async taskList(project: string, requestId?: string): Promise<StoredTask[]> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.list.response", StoredTask[]>({
+      requestId,
+      message: { type: "task.list.request", project },
+      timeout: 15000,
+      selectPayload: (payload) => payload.tasks,
+    });
+  }
+
+  async taskGet(project: string, id: string, requestId?: string): Promise<StoredTask | null> {
+    // Note: no selectPayload here — a null `task` is a valid result, but the
+    // correlation layer treats a null selectPayload return as "not my message".
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"task.get.response">({
+      requestId,
+      message: { type: "task.get.request", project, id },
+      timeout: 15000,
+    });
+    return payload.task;
+  }
+
+  async taskCreate(input: CreateTaskInput, requestId?: string): Promise<StoredTask> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.create.response", StoredTask>({
+      requestId,
+      message: { type: "task.create.request", input },
+      timeout: 15000,
+      selectPayload: (payload) => payload.task,
+    });
+  }
+
+  async taskUpdate(
+    project: string,
+    id: string,
+    patch: TaskUpdateRpcPatch,
+    requestId?: string,
+  ): Promise<StoredTask> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.update.response", StoredTask>({
+      requestId,
+      message: { type: "task.update.request", project, id, patch },
+      timeout: 15000,
+      selectPayload: (payload) => payload.task,
+    });
+  }
+
+  async taskDelete(project: string, id: string, requestId?: string): Promise<void> {
+    await this.sendNamespacedCorrelatedSessionRequest<"task.delete.response">({
+      requestId,
+      message: { type: "task.delete.request", project, id },
+      timeout: 15000,
+    });
+  }
+
+  async taskRun(
+    params: { project: string; id: string; repoRoot: string; baseBranch?: string },
+    requestId?: string,
+  ): Promise<TaskRunResultPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.run.response">({
+      requestId,
+      message: {
+        type: "task.run.request",
+        project: params.project,
+        id: params.id,
+        repoRoot: params.repoRoot,
+        ...(params.baseBranch ? { baseBranch: params.baseBranch } : {}),
+      },
+      timeout: 120000,
     });
   }
 

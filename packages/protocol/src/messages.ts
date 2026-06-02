@@ -53,6 +53,20 @@ import {
   LoopStopResponseSchema,
 } from "@getpaseo/protocol/loop/rpc-schemas";
 import {
+  TaskListRequestSchema,
+  TaskGetRequestSchema,
+  TaskCreateRequestSchema,
+  TaskUpdateRequestSchema,
+  TaskDeleteRequestSchema,
+  TaskRunRequestSchema,
+  TaskListResponseSchema,
+  TaskGetResponseSchema,
+  TaskCreateResponseSchema,
+  TaskUpdateResponseSchema,
+  TaskDeleteResponseSchema,
+  TaskRunResponseSchema,
+} from "@getpaseo/protocol/task/messages";
+import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
   PaseoMetadataGenerationEntrySchema,
@@ -1987,6 +2001,13 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectRequestSchema,
   LoopLogsRequestSchema,
   LoopStopRequestSchema,
+  // COMPAT(tasks): added in v0.1.89, remove gate after 2026-12-15.
+  TaskListRequestSchema,
+  TaskGetRequestSchema,
+  TaskCreateRequestSchema,
+  TaskUpdateRequestSchema,
+  TaskDeleteRequestSchema,
+  TaskRunRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -2163,6 +2184,8 @@ export const ServerInfoStatusPayloadSchema = z
         checkoutRefresh: z.boolean().optional(),
         // COMPAT(fsWrite): added in v0.1.88, remove gate after 2026-12-01.
         "fs-write": z.boolean().optional(),
+        // COMPAT(tasks): added in v0.1.89, remove gate after 2026-12-15.
+        tasks: z.boolean().optional(),
       })
       .optional(),
   })
@@ -3816,6 +3839,13 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectResponseSchema,
   LoopLogsResponseSchema,
   LoopStopResponseSchema,
+  // COMPAT(tasks): added in v0.1.89, remove gate after 2026-12-15.
+  TaskListResponseSchema,
+  TaskGetResponseSchema,
+  TaskCreateResponseSchema,
+  TaskUpdateResponseSchema,
+  TaskDeleteResponseSchema,
+  TaskRunResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

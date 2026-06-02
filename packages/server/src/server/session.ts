@@ -104,6 +104,8 @@ import type {
   ManagedAgent,
 } from "./agent/agent-manager.js";
 import { createAgentCommand } from "./agent/create-agent/create.js";
+import { TaskStore } from "./task/store.js";
+import { getUnattendedModeId } from "@getpaseo/protocol/provider-manifest";
 import {
   archiveAgentCommand,
   cancelAgentRunCommand,
@@ -746,6 +748,9 @@ export class Session {
   private readonly sessionLogger: pino.Logger;
   private readonly paseoHome: string;
   private readonly worktreesRoot: string | undefined;
+  // Task primitive store. Stateless over paseoHome (no caches), so it is
+  // constructed per-session rather than threaded through the daemon wiring.
+  private readonly taskStore: TaskStore;
 
   // State machine
   private abortController: AbortController;
@@ -906,6 +911,7 @@ export class Session {
     this.pushTokenStore = pushTokenStore;
     this.paseoHome = paseoHome;
     this.worktreesRoot = worktreesRoot;
+    this.taskStore = new TaskStore(paseoHome);
     this.sessionLogger = logger.child({
       module: "session",
       clientId: this.clientId,
@@ -1933,8 +1939,175 @@ export class Session {
         return this.handleReadProjectConfigRequest(msg);
       case "write_project_config_request":
         return this.handleWriteProjectConfigRequest(msg);
+      case "task.list.request":
+        return this.handleTaskListRequest(msg);
+      case "task.get.request":
+        return this.handleTaskGetRequest(msg);
+      case "task.create.request":
+        return this.handleTaskCreateRequest(msg);
+      case "task.update.request":
+        return this.handleTaskUpdateRequest(msg);
+      case "task.delete.request":
+        return this.handleTaskDeleteRequest(msg);
+      case "task.run.request":
+        return this.handleTaskRunRequest(msg);
       default:
         return undefined;
+    }
+  }
+
+  private async handleTaskListRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.list.request" }>,
+  ): Promise<void> {
+    const tasks = await this.taskStore.list(msg.project);
+    this.emit({
+      type: "task.list.response",
+      payload: { requestId: msg.requestId, tasks },
+    });
+  }
+
+  private async handleTaskGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.get.request" }>,
+  ): Promise<void> {
+    const task = await this.taskStore.get(msg.project, msg.id);
+    this.emit({
+      type: "task.get.response",
+      payload: { requestId: msg.requestId, task },
+    });
+  }
+
+  private async handleTaskCreateRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.create.request" }>,
+  ): Promise<void> {
+    const task = await this.taskStore.create(msg.input);
+    this.emit({
+      type: "task.create.response",
+      payload: { requestId: msg.requestId, task },
+    });
+  }
+
+  private async handleTaskUpdateRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.update.request" }>,
+  ): Promise<void> {
+    const task = await this.taskStore.update(msg.project, msg.id, msg.patch);
+    this.emit({
+      type: "task.update.response",
+      payload: { requestId: msg.requestId, task },
+    });
+  }
+
+  private async handleTaskDeleteRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.delete.request" }>,
+  ): Promise<void> {
+    await this.taskStore.delete(msg.project, msg.id);
+    this.emit({
+      type: "task.delete.response",
+      payload: { requestId: msg.requestId, id: msg.id },
+    });
+  }
+
+  /**
+   * Run a task: create a worktree-backed agent in the task's project repo,
+   * dispatch the task body as the prompt, and roll the result back onto the task
+   * file. The worktree is the disposable execution substrate; the task file is
+   * the durable record. Responds with the agentId immediately, then updates the
+   * task asynchronously when the agent run completes.
+   */
+  private async handleTaskRunRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.run.request" }>,
+  ): Promise<void> {
+    const emitError = (error: string): void => {
+      this.emit({
+        type: "task.run.response",
+        payload: { ok: false, requestId: msg.requestId, error },
+      });
+    };
+
+    const task = await this.taskStore.get(msg.project, msg.id);
+    if (!task) {
+      emitError(`Task not found: ${msg.project}/${msg.id}`);
+      return;
+    }
+    const provider = task.metadata.provider;
+    if (!provider) {
+      emitError("Task has no provider. Set `run: agent` with a provider to dispatch it.");
+      return;
+    }
+
+    try {
+      const createdWorktree = await this.createPaseoWorktreeWorkflow({
+        cwd: msg.repoRoot,
+        worktreeSlug: task.metadata.id,
+        action: "branch-off",
+        refName: msg.baseBranch,
+      });
+      const worktreePath = createdWorktree.worktree.worktreePath;
+
+      const config: AgentSessionConfig = {
+        provider: provider as AgentProvider,
+        cwd: worktreePath,
+        modeId: getUnattendedModeId(provider as AgentProvider),
+        title: task.metadata.title,
+      };
+      const agent = await this.agentManager.createAgent(config, undefined, {
+        labels: {
+          "paseo.task-id": task.metadata.id,
+          "paseo.task-project": msg.project,
+        },
+      });
+
+      const promptText = [task.metadata.title, task.body]
+        .map((part) => part?.trim() ?? "")
+        .filter((part) => part.length > 0)
+        .join("\n\n");
+
+      const updated = await this.taskStore.update(msg.project, msg.id, {
+        status: "doing",
+        agentId: agent.id,
+        worktree: worktreePath,
+        lastRunAt: new Date().toISOString(),
+        result: null,
+      });
+
+      this.emit({
+        type: "task.run.response",
+        payload: { ok: true, requestId: msg.requestId, task: updated, agentId: agent.id },
+      });
+
+      // Fire-and-forget: run the agent and roll the outcome back onto the task.
+      void this.runTaskAgentAndRollUp(msg.project, msg.id, agent.id, promptText);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.sessionLogger.error(
+        { err: error, project: msg.project, id: msg.id },
+        "Failed to run task",
+      );
+      emitError(message);
+    }
+  }
+
+  private async runTaskAgentAndRollUp(
+    project: string,
+    id: string,
+    agentId: string,
+    promptText: string,
+  ): Promise<void> {
+    try {
+      await this.agentManager.runAgent(agentId, this.buildAgentPrompt(promptText));
+      await this.taskStore.update(project, id, { status: "done", result: "success" });
+    } catch (error) {
+      this.sessionLogger.warn(
+        { err: error, project, id, agentId },
+        "Task agent run failed; marking task result failed",
+      );
+      try {
+        await this.taskStore.update(project, id, { result: "failed" });
+      } catch (updateError) {
+        this.sessionLogger.error(
+          { err: updateError, project, id },
+          "Failed to record failed task result",
+        );
+      }
     }
   }
 
