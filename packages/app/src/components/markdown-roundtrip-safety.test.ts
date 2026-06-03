@@ -43,6 +43,20 @@ describe("markdown round-trip safety", () => {
     expect(analyzeMarkdownSafety(content)).toEqual({ safe: false, reason: "table" });
   });
 
+  it("flags single-column tables as unsafe", () => {
+    const content = "| Head |\n| --- |\n| a |\n";
+    expect(analyzeMarkdownSafety(content)).toEqual({ safe: false, reason: "table" });
+  });
+
+  it("flags pipeless tables as unsafe", () => {
+    const content = "A | B\n--- | ---\n1 | 2\n";
+    expect(analyzeMarkdownSafety(content)).toEqual({ safe: false, reason: "table" });
+  });
+
+  it("does not mistake a bare horizontal rule for a table", () => {
+    expect(isLosslessMarkdown("# Title\n\nbody\n\n---\n\nmore\n")).toBe(true);
+  });
+
   it("flags footnotes as unsafe", () => {
     const content = "Here is a note[^1].\n\n[^1]: the note\n";
     expect(analyzeMarkdownSafety(content)).toEqual({ safe: false, reason: "footnote" });

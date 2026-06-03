@@ -11,8 +11,12 @@
 
 // `---` (or more) fence at the very top of the file = YAML/TOML frontmatter.
 const FRONTMATTER = /^﻿?(?:---|\+\+\+)\r?\n/;
-// A GitHub-style table needs a delimiter row of pipes and dashes.
-const TABLE_DELIMITER_ROW = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/m;
+// A GitHub-style table needs a delimiter row of dash-cells separated by pipes.
+// The leading-pipe lookahead requires at least one `|` on the line so a bare
+// `---` horizontal rule is not mistaken for a table, while keeping outer pipes
+// optional — this catches single-column (`| --- |`) AND pipeless multi-column
+// (`--- | ---`) delimiters, both of which the old `(…)+` form missed.
+const TABLE_DELIMITER_ROW = /^(?=[^\n]*\|)\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/m;
 // Footnote definition or reference, e.g. `[^1]`.
 const FOOTNOTE = /\[\^[^\]]+\]/;
 // A raw HTML block/tag (excluding autolink-style `<https://…>` and `<email@…>`).
