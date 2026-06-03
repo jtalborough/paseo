@@ -11,8 +11,9 @@ import { useIsFocused } from "@react-navigation/native";
 import Animated, { useAnimatedStyle, useSharedValue, runOnJS } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { X } from "lucide-react-native";
+import { Bookmark, X } from "lucide-react-native";
 import { GitHubIcon } from "@/components/icons/github-icon";
+import { BrowserBookmarksPane } from "@/components/browser-bookmarks-pane";
 import { PrPane } from "@/git/pr-pane";
 import { usePrPaneData } from "@/hooks/use-pr-pane-data";
 import {
@@ -449,6 +450,19 @@ function SidebarContent({
             onTabPress={onTabPress}
             testID="explorer-tab-files"
           />
+          <ExplorerTabButton
+            tab="bookmarks"
+            active={resolvedTab === "bookmarks"}
+            onTabPress={onTabPress}
+            testID="explorer-tab-bookmarks"
+          >
+            <Bookmark
+              size={13}
+              color={
+                resolvedTab === "bookmarks" ? theme.colors.foreground : theme.colors.foregroundMuted
+              }
+            />
+          </ExplorerTabButton>
           {isGit && hasPullRequest && (
             <ExplorerTabButton
               tab="pr"
@@ -477,27 +491,70 @@ function SidebarContent({
 
       {/* Content based on active tab */}
       <View style={styles.contentArea} testID="explorer-content-area">
-        {resolvedTab === "changes" && (
-          <GitDiffPane
-            serverId={serverId}
-            workspaceId={workspaceId}
-            cwd={workspaceRoot}
-            hideHeaderRow={!isMobile}
-            enabled={isOpen}
-          />
-        )}
-        {resolvedTab === "files" && (
-          <FileExplorerPane
-            serverId={serverId}
-            workspaceId={workspaceId}
-            workspaceRoot={workspaceRoot}
-            onOpenFile={onOpenFile}
-          />
-        )}
-        {resolvedTab === "pr" && prPane.data && <PrPane data={prPane.data} />}
+        <SidebarTabContent
+          resolvedTab={resolvedTab}
+          serverId={serverId}
+          workspaceId={workspaceId}
+          workspaceRoot={workspaceRoot}
+          isMobile={isMobile}
+          isOpen={isOpen}
+          onOpenFile={onOpenFile}
+          prData={prPane.data}
+        />
       </View>
     </View>
   );
+}
+
+function SidebarTabContent({
+  resolvedTab,
+  serverId,
+  workspaceId,
+  workspaceRoot,
+  isMobile,
+  isOpen,
+  onOpenFile,
+  prData,
+}: {
+  resolvedTab: ExplorerTab;
+  serverId: string;
+  workspaceId?: string | null;
+  workspaceRoot: string;
+  isMobile: boolean;
+  isOpen: boolean;
+  onOpenFile?: (filePath: string) => void;
+  prData: ReturnType<typeof usePrPaneData>["data"];
+}) {
+  if (resolvedTab === "changes") {
+    return (
+      <GitDiffPane
+        serverId={serverId}
+        workspaceId={workspaceId}
+        cwd={workspaceRoot}
+        hideHeaderRow={!isMobile}
+        enabled={isOpen}
+      />
+    );
+  }
+  if (resolvedTab === "files") {
+    return (
+      <FileExplorerPane
+        serverId={serverId}
+        workspaceId={workspaceId}
+        workspaceRoot={workspaceRoot}
+        onOpenFile={onOpenFile}
+      />
+    );
+  }
+  if (resolvedTab === "pr") {
+    return prData ? <PrPane data={prData} /> : null;
+  }
+  if (resolvedTab === "bookmarks") {
+    return workspaceId ? (
+      <BrowserBookmarksPane serverId={serverId} workspaceId={workspaceId} />
+    ) : null;
+  }
+  return null;
 }
 
 // Static styles for Animated.Views — must NOT use Unistyles dynamic theme to

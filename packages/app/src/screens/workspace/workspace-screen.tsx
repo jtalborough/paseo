@@ -104,6 +104,7 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { createWorkspaceBrowser, useBrowserStore } from "@/stores/browser-store";
+import { selectIsBrowserPinned, useWorkspacePinsStore } from "@/stores/workspace-pins";
 import { getDesktopHost } from "@/desktop/host";
 import { buildProviderCommand } from "@/utils/provider-command-templates";
 import { generateDraftId } from "@/stores/draft-keys";
@@ -1813,8 +1814,17 @@ function WorkspaceScreenContent({
       }
       if (input.target?.kind === "browser") {
         const { browserId } = input.target;
-        useBrowserStore.getState().removeBrowser(browserId);
-        void getDesktopHost()?.browser?.clearPartition?.(browserId);
+        // A pinned browser owns a persistent session that must survive tab close;
+        // only tear down the record and partition for unpinned (ad-hoc) browsers.
+        const isPinned = selectIsBrowserPinned(
+          useWorkspacePinsStore.getState(),
+          persistenceKey,
+          browserId,
+        );
+        if (!isPinned) {
+          useBrowserStore.getState().removeBrowser(browserId);
+          void getDesktopHost()?.browser?.clearPartition?.(browserId);
+        }
       }
       closeWorkspaceTab(persistenceKey, normalizedTabId);
     },
