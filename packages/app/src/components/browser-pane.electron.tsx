@@ -8,7 +8,14 @@ import {
   createElement,
 } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { ArrowLeft, ArrowRight, MousePointer2, PencilRuler, RotateCw } from "lucide-react-native";
+import {
+  ArrowLeft,
+  ArrowRight,
+  MousePointer2,
+  PencilRuler,
+  Pin,
+  RotateCw,
+} from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
   buildWorkspaceAttachmentScopeKey,
@@ -24,6 +31,11 @@ import {
 } from "@/desktop/host";
 import { isDev } from "@/constants/platform";
 import { useBrowserStore, normalizeWorkspaceBrowserUrl } from "@/stores/browser-store";
+import {
+  buildWorkspacePinsKey,
+  useIsBrowserPinned,
+  useWorkspacePinsStore,
+} from "@/stores/workspace-pins";
 
 type ElectronWebview = HTMLElement & {
   canGoBack?: () => boolean;
@@ -557,6 +569,16 @@ export function BrowserPane({
     }
   }, []);
 
+  // External one-shot navigation (e.g. bookmarks "return home"): consume and clear.
+  const pendingUrl = browser?.pendingUrl ?? null;
+  useEffect(() => {
+    if (!pendingUrl) {
+      return;
+    }
+    updateBrowserRef.current(browserIdRef.current, { pendingUrl: null });
+    navigate(pendingUrl);
+  }, [pendingUrl, navigate]);
+
   const handleBack = useCallback(() => {
     webviewRef.current?.goBack?.();
     syncNavigationState();
@@ -862,6 +884,39 @@ export function BrowserPane({
     startElementSelector();
   }, [cancelElementSelector, selectorActive, startElementSelector]);
 
+  const workspacePinsKey = useMemo(
+    () => buildWorkspacePinsKey({ serverId, workspaceId }),
+    [serverId, workspaceId],
+  );
+  const isPinned = useIsBrowserPinned(workspacePinsKey, browserId);
+  const addPin = useWorkspacePinsStore((state) => state.addPin);
+  const removePin = useWorkspacePinsStore((state) => state.removePin);
+
+  const handleTogglePin = useCallback(() => {
+    if (!workspacePinsKey) {
+      return;
+    }
+    if (isPinned) {
+      removePin(workspacePinsKey, browserId);
+      return;
+    }
+    const current = browserRef.current;
+    addPin(workspacePinsKey, {
+      browserId,
+      url: current?.url ?? initialUrlRef.current,
+      name: current?.title?.trim() ?? "",
+    });
+  }, [addPin, browserId, isPinned, removePin, workspacePinsKey]);
+
+  const pinIconButtonStyle = useCallback(
+    ({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
+      styles.iconButton,
+      isPinned && styles.selectorActiveButton,
+      (hovered || pressed) && styles.iconButtonHovered,
+    ],
+    [isPinned],
+  );
+
   const handleOpenDevTools = useCallback(() => {
     const currentBrowserId = browserIdRef.current;
     const openDevTools = getDesktopHost()?.browser?.openDevTools;
@@ -984,6 +1039,18 @@ export function BrowserPane({
           />
         </View>
         <View style={styles.chromeRight}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={isPinned ? "Remove bookmark" : "Bookmark this page"}
+            onPress={handleTogglePin}
+            style={pinIconButtonStyle}
+          >
+            <Pin
+              size={16}
+              color={isPinned ? theme.colors.accent : theme.colors.foregroundMuted}
+              fill={isPinned ? theme.colors.accent : "transparent"}
+            />
+          </Pressable>
           {isDev ? (
             <>
               <Pressable
