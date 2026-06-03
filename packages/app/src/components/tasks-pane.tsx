@@ -793,7 +793,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   addButtonDisabled: { opacity: 0.5 },
   addButtonPressed: { opacity: 0.8 },
-  addButtonText: { color: theme.colors.palette.white, fontWeight: theme.fontWeight.medium },
+  addButtonText: { color: theme.colors.accentForeground, fontWeight: theme.fontWeight.medium },
   list: { flex: 1, minHeight: 0 },
   listContent: { padding: theme.spacing[3], gap: theme.spacing[2] },
   rowOuter: {
@@ -895,7 +895,7 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.accent,
   },
   runButtonPressed: { opacity: 0.8 },
-  runButtonText: { color: theme.colors.palette.white, fontSize: theme.fontSize.sm },
+  runButtonText: { color: theme.colors.accentForeground, fontSize: theme.fontSize.sm },
   notesInput: {
     minHeight: 80,
     padding: theme.spacing[2],
