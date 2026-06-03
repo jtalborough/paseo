@@ -10,6 +10,7 @@ import type {
   TaskPriority,
 } from "@getpaseo/protocol/task/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
+import { type SelectOption, TaskMultiSelect, TaskSelect } from "@/components/task-select";
 import { useToast } from "@/contexts/toast-context";
 import { useSessionStore } from "@/stores/session-store";
 import { useWorkspaceExecutionAuthority } from "@/stores/session-store-hooks";
@@ -204,6 +205,16 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
     },
     [config, updateConfigMutate],
   );
+  const handleRemoveType = useCallback(
+    (value: string) =>
+      updateConfigMutate({ ...config, types: config.types.filter((t) => t !== value) }),
+    [config, updateConfigMutate],
+  );
+  const handleRemovePerson = useCallback(
+    (value: string) =>
+      updateConfigMutate({ ...config, people: config.people.filter((p) => p !== value) }),
+    [config, updateConfigMutate],
+  );
 
   const addDisabled = trimmedTitle.length === 0 || createTask.isPending;
   const addButtonStyle = useCallback(
@@ -263,6 +274,8 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
         onDelete={deleteMutate}
         onAddType={handleAddType}
         onAddPerson={handleAddPerson}
+        onRemoveType={handleRemoveType}
+        onRemovePerson={handleRemovePerson}
         runDisabled={runTask.isPending}
       />
     </View>
@@ -282,6 +295,8 @@ function TaskListBody({
   onDelete,
   onAddType,
   onAddPerson,
+  onRemoveType,
+  onRemovePerson,
   runDisabled,
 }: {
   query: { isPending: boolean; isError: boolean; error: unknown };
@@ -294,6 +309,8 @@ function TaskListBody({
   onDelete: (id: string) => void;
   onAddType: (value: string) => void;
   onAddPerson: (value: string) => void;
+  onRemoveType: (value: string) => void;
+  onRemovePerson: (value: string) => void;
   runDisabled: boolean;
 }) {
   if (query.isPending) {
@@ -333,6 +350,8 @@ function TaskListBody({
           onDelete={onDelete}
           onAddType={onAddType}
           onAddPerson={onAddPerson}
+          onRemoveType={onRemoveType}
+          onRemovePerson={onRemovePerson}
           runDisabled={runDisabled}
         />
       ))}
@@ -350,6 +369,8 @@ function TaskRow({
   onDelete,
   onAddType,
   onAddPerson,
+  onRemoveType,
+  onRemovePerson,
   runDisabled,
 }: {
   task: StoredTask;
@@ -361,6 +382,8 @@ function TaskRow({
   onDelete: (id: string) => void;
   onAddType: (value: string) => void;
   onAddPerson: (value: string) => void;
+  onRemoveType: (value: string) => void;
+  onRemovePerson: (value: string) => void;
   runDisabled: boolean;
 }) {
   const { id, actionState, title, priority } = task.metadata;
@@ -393,6 +416,8 @@ function TaskRow({
           onDelete={onDelete}
           onAddType={onAddType}
           onAddPerson={onAddPerson}
+          onRemoveType={onRemoveType}
+          onRemovePerson={onRemovePerson}
           runDisabled={runDisabled}
         />
       ) : null}
@@ -408,6 +433,8 @@ function TaskEditor({
   onDelete,
   onAddType,
   onAddPerson,
+  onRemoveType,
+  onRemovePerson,
   runDisabled,
 }: {
   task: StoredTask;
@@ -417,6 +444,8 @@ function TaskEditor({
   onDelete: (id: string) => void;
   onAddType: (value: string) => void;
   onAddPerson: (value: string) => void;
+  onRemoveType: (value: string) => void;
+  onRemovePerson: (value: string) => void;
   runDisabled: boolean;
 }) {
   const { metadata, body } = task;
@@ -424,19 +453,19 @@ function TaskEditor({
   const patchField = useCallback((patch: TaskUpdateRpcPatch) => onPatch(id, patch), [onPatch, id]);
 
   const setActionState = useCallback(
-    (value: ActionState | null) => {
+    (value: string | null) => {
       if (value) {
-        patchField({ actionState: value });
+        patchField({ actionState: value as ActionState });
       }
     },
     [patchField],
   );
   const setPriority = useCallback(
-    (value: TaskPriority | null) => patchField({ priority: value }),
+    (value: string | null) => patchField({ priority: value as TaskPriority | null }),
     [patchField],
   );
   const setAttention = useCallback(
-    (value: TaskAttention | null) => patchField({ attention: value }),
+    (value: string | null) => patchField({ attention: value as TaskAttention | null }),
     [patchField],
   );
   const setType = useCallback((value: string | null) => patchField({ type: value }), [patchField]);
@@ -462,42 +491,47 @@ function TaskEditor({
   const handleRun = useCallback(() => onRun(id), [onRun, id]);
   const handleDelete = useCallback(() => onDelete(id), [onDelete, id]);
 
+  const typeOptions = useMemo(() => config.types.map(toOption), [config.types]);
+  const peopleOptions = useMemo(() => config.people.map(toOption), [config.people]);
+
   return (
     <View style={styles.editor}>
-      <OptionRow
+      <TaskSelect
         label="Status"
         options={ACTION_STATES}
         value={metadata.actionState}
         onSelect={setActionState}
         clearable={false}
       />
-      <OptionRow
+      <TaskSelect
         label="Priority"
         options={PRIORITIES}
         value={metadata.priority}
         onSelect={setPriority}
-        clearable
       />
-      <OptionRow
+      <TaskSelect
         label="Attention"
         options={ATTENTIONS}
         value={metadata.attention}
         onSelect={setAttention}
-        clearable
       />
-      <SingleSelectField
+      <TaskSelect
         label="Type"
-        options={config.types}
+        options={typeOptions}
         value={metadata.type}
         onSelect={setType}
-        onAdd={onAddType}
+        editable
+        onAddOption={onAddType}
+        onRemoveOption={onRemoveType}
       />
-      <MultiSelectField
+      <TaskMultiSelect
         label="People"
-        options={config.people}
+        options={peopleOptions}
         selected={metadata.people}
         onChange={setPeople}
-        onAdd={onAddPerson}
+        editable
+        onAddOption={onAddPerson}
+        onRemoveOption={onRemovePerson}
       />
       <DateField label="Do date" value={metadata.doDate} onCommit={setDoDate} />
       <TextField
@@ -528,216 +562,8 @@ function TaskEditor({
   );
 }
 
-function OptionRow<T extends string>({
-  label,
-  options,
-  value,
-  onSelect,
-  clearable,
-}: {
-  label: string;
-  options: Option<T>[];
-  value: T | null;
-  onSelect: (value: T | null) => void;
-  clearable: boolean;
-}) {
-  const handleSelect = useCallback(
-    (next: T) => {
-      if (clearable && next === value) {
-        onSelect(null);
-      } else {
-        onSelect(next);
-      }
-    },
-    [clearable, value, onSelect],
-  );
-  return (
-    <View style={styles.fieldRow}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.chips}>
-        {options.map((option) => (
-          <OptionChip
-            key={option.value}
-            option={option}
-            selected={option.value === value}
-            onSelect={handleSelect}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function OptionChip<T extends string>({
-  option,
-  selected,
-  onSelect,
-}: {
-  option: Option<T>;
-  selected: boolean;
-  onSelect: (value: T) => void;
-}) {
-  const handlePress = useCallback(() => onSelect(option.value), [onSelect, option.value]);
-  const chipStyle = useMemo(() => [styles.chip, selected ? styles.chipSelected : null], [selected]);
-  const textStyle = useMemo(
-    () => [styles.chipText, selected ? styles.chipTextSelected : null],
-    [selected],
-  );
-  return (
-    <Pressable accessibilityRole="button" onPress={handlePress} style={chipStyle}>
-      <Text style={textStyle}>{option.label}</Text>
-    </Pressable>
-  );
-}
-
-function SingleSelectField({
-  label,
-  options,
-  value,
-  onSelect,
-  onAdd,
-}: {
-  label: string;
-  options: string[];
-  value: string | null;
-  onSelect: (value: string | null) => void;
-  onAdd: (value: string) => void;
-}) {
-  const handleToggle = useCallback(
-    (next: string) => onSelect(next === value ? null : next),
-    [value, onSelect],
-  );
-  const handleAdd = useCallback(
-    (next: string) => {
-      onAdd(next);
-      onSelect(next);
-    },
-    [onAdd, onSelect],
-  );
-  return (
-    <View style={styles.fieldRow}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.chips}>
-        {options.map((option) => (
-          <StringChip
-            key={option}
-            value={option}
-            selected={option === value}
-            onPress={handleToggle}
-          />
-        ))}
-        <AddChip onAdd={handleAdd} />
-      </View>
-    </View>
-  );
-}
-
-function MultiSelectField({
-  label,
-  options,
-  selected,
-  onChange,
-  onAdd,
-}: {
-  label: string;
-  options: string[];
-  selected: string[];
-  onChange: (values: string[]) => void;
-  onAdd: (value: string) => void;
-}) {
-  const handleToggle = useCallback(
-    (next: string) => {
-      if (selected.includes(next)) {
-        onChange(selected.filter((value) => value !== next));
-      } else {
-        onChange([...selected, next]);
-      }
-    },
-    [selected, onChange],
-  );
-  const handleAdd = useCallback(
-    (next: string) => {
-      onAdd(next);
-      if (!selected.includes(next)) {
-        onChange([...selected, next]);
-      }
-    },
-    [onAdd, onChange, selected],
-  );
-  return (
-    <View style={styles.fieldRow}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.chips}>
-        {options.map((option) => (
-          <StringChip
-            key={option}
-            value={option}
-            selected={selected.includes(option)}
-            onPress={handleToggle}
-          />
-        ))}
-        <AddChip onAdd={handleAdd} />
-      </View>
-    </View>
-  );
-}
-
-function StringChip({
-  value,
-  selected,
-  onPress,
-}: {
-  value: string;
-  selected: boolean;
-  onPress: (value: string) => void;
-}) {
-  const handlePress = useCallback(() => onPress(value), [onPress, value]);
-  const chipStyle = useMemo(() => [styles.chip, selected ? styles.chipSelected : null], [selected]);
-  const textStyle = useMemo(
-    () => [styles.chipText, selected ? styles.chipTextSelected : null],
-    [selected],
-  );
-  return (
-    <Pressable accessibilityRole="button" onPress={handlePress} style={chipStyle}>
-      <Text style={textStyle}>{value}</Text>
-    </Pressable>
-  );
-}
-
-function AddChip({ onAdd }: { onAdd: (value: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState("");
-  const handleOpen = useCallback(() => setOpen(true), []);
-  const handleCommit = useCallback(() => {
-    const value = draft.trim();
-    if (value.length > 0) {
-      onAdd(value);
-    }
-    setDraft("");
-    setOpen(false);
-  }, [draft, onAdd]);
-  if (!open) {
-    return (
-      <Pressable accessibilityRole="button" onPress={handleOpen} style={styles.addChip}>
-        <Text style={styles.addChipText}>+ Add</Text>
-      </Pressable>
-    );
-  }
-  return (
-    <TextInput
-      style={styles.addChipInput}
-      value={draft}
-      onChangeText={setDraft}
-      onBlur={handleCommit}
-      onSubmitEditing={handleCommit}
-      placeholder="New…"
-      placeholderTextColor={PLACEHOLDER_COLOR}
-      autoFocus
-      autoCapitalize="none"
-      autoCorrect={false}
-      returnKeyType="done"
-    />
-  );
+function toOption(value: string): SelectOption {
+  return { value, label: value };
 }
 
 function DateField({
@@ -762,7 +588,14 @@ function DateField({
         <QuickChip label="+1 wk" onPress={setNextWeek} />
         <QuickChip label="Clear" onPress={clear} />
       </View>
-      <TextField label="" value={value} placeholder="2026-06-20" onCommit={onCommit} />
+      {/* key on value so quick-set chips (external changes) refresh the field */}
+      <TextField
+        key={value ?? "empty"}
+        label=""
+        value={value}
+        placeholder="2026-06-20"
+        onCommit={onCommit}
+      />
     </View>
   );
 }
