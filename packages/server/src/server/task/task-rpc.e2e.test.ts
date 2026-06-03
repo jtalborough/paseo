@@ -124,13 +124,7 @@ test("task.run dispatches a worktree-backed agent and rolls the result up", asyn
   expect(rolledUp?.metadata.actionState).toBe("done");
 
   // The task file is the source of truth: confirm it landed on disk as markdown.
-  const taskFile = path.join(
-    daemon.paseoHome,
-    "projects",
-    "proj-run",
-    "tasks",
-    `${task.metadata.id}.md`,
-  );
+  const taskFile = path.join(daemon.paseoHome, "tasks", "proj-run", `${task.metadata.id}.md`);
   const raw = await readFile(taskFile, "utf-8");
   expect(raw).toContain("result: success");
   expect(raw).toContain("actionState: done");

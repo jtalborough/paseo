@@ -7,16 +7,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TaskStore } from "./store.js";
 
 describe("TaskStore", () => {
-  let paseoHome: string;
+  let vaultRoot: string;
   let store: TaskStore;
 
   beforeEach(async () => {
-    paseoHome = await mkdtemp(path.join(tmpdir(), "paseo-tasks-"));
-    store = new TaskStore(paseoHome);
+    vaultRoot = await mkdtemp(path.join(tmpdir(), "paseo-tasks-"));
+    store = new TaskStore(vaultRoot);
   });
 
   afterEach(async () => {
-    await rm(paseoHome, { recursive: true, force: true });
+    await rm(vaultRoot, { recursive: true, force: true });
   });
 
   it("creates a task and round-trips it from disk", async () => {
@@ -39,13 +39,7 @@ describe("TaskStore", () => {
 
   it("writes a real markdown file with a frontmatter fence", async () => {
     const created = await store.create({ project: "proj-1", title: "Write docs" });
-    const filePath = path.join(
-      paseoHome,
-      "projects",
-      "proj-1",
-      "tasks",
-      `${created.metadata.id}.md`,
-    );
+    const filePath = path.join(vaultRoot, "proj-1", `${created.metadata.id}.md`);
     const raw = await readFile(filePath, "utf-8");
     expect(raw.startsWith("---\n")).toBe(true);
     expect(raw).toContain("title: Write docs");
@@ -100,6 +94,18 @@ describe("TaskStore", () => {
     expect(projectTwo.map((t) => t.metadata.title)).toEqual(["Gamma"]);
   });
 
+  it("queryAll gathers tasks across every project folder in the vault", async () => {
+    await store.create({ project: "alpha", title: "A1" });
+    await store.create({ project: "alpha", title: "A2" });
+    await store.create({ project: "beta", title: "B1" });
+
+    const all = await store.queryAll();
+    expect(all).toHaveLength(3);
+    expect(new Set(all.map((t) => t.metadata.project))).toEqual(new Set(["alpha", "beta"]));
+
+    expect(await store.listProjects()).toEqual(expect.arrayContaining(["alpha", "beta"]));
+  });
+
   it("returns an empty list for a project with no tasks", async () => {
     expect(await store.list("never-seen")).toEqual([]);
   });
@@ -116,7 +122,7 @@ describe("TaskStore", () => {
 
   it("migrates a legacy `status` task file onto the Action State spine", async () => {
     // Simulate a task file authored before Action State existed.
-    const dir = path.join(paseoHome, "projects", "proj-legacy", "tasks");
+    const dir = path.join(vaultRoot, "proj-legacy");
     await mkdir(dir, { recursive: true });
     await writeFile(
       path.join(dir, "2026-01-01-legacy.md"),

@@ -71,27 +71,59 @@ function serializeTask(task: StoredTask): string {
 }
 
 /**
- * File-backed store for Task primitives. One markdown file per task under
- * `$PASEO_HOME/projects/<projectId>/tasks/<id>.md`. The file is the source of
- * truth; the frontmatter is validated with Zod on every read and write.
+ * Resolve the tasks vault root. A single relocatable folder (so a server daemon
+ * can own it and Obsidian/Nextcloud can mirror it) rather than being buried
+ * per-project under PASEO_HOME. Override with PASEO_TASKS_DIR; defaults to
+ * `<paseoHome>/tasks`.
+ */
+export function resolveTasksVaultRoot(paseoHome: string): string {
+  const override = process.env.PASEO_TASKS_DIR?.trim();
+  return override && override.length > 0 ? override : path.join(paseoHome, "tasks");
+}
+
+/**
+ * File-backed store for Task primitives. The vault is a single root holding one
+ * folder per project: `<vaultRoot>/<project>/<id>.md`. The `project` key is the
+ * Paseo project's identity, so a project's tasks stay linked to it. The file is
+ * the source of truth; frontmatter is validated with Zod on every read/write.
  */
 export class TaskStore {
-  constructor(private readonly paseoHome: string) {}
+  constructor(private readonly vaultRoot: string) {}
 
-  private tasksDir(projectId: string): string {
-    return path.join(this.paseoHome, "projects", projectId, "tasks");
+  private projectDir(project: string): string {
+    return path.join(this.vaultRoot, project);
   }
 
-  private filePath(projectId: string, id: string): string {
-    return path.join(this.tasksDir(projectId), `${id}.md`);
+  private filePath(project: string, id: string): string {
+    return path.join(this.projectDir(project), `${id}.md`);
   }
 
-  private async ensureDir(projectId: string): Promise<void> {
-    await mkdir(this.tasksDir(projectId), { recursive: true });
+  private async ensureDir(project: string): Promise<void> {
+    await mkdir(this.projectDir(project), { recursive: true });
   }
 
-  async list(projectId: string): Promise<StoredTask[]> {
-    const dir = this.tasksDir(projectId);
+  /** List the project folders present in the vault. */
+  async listProjects(): Promise<string[]> {
+    try {
+      const entries = await readdir(this.vaultRoot, { withFileTypes: true });
+      return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  /** All tasks across every project in the vault — powers cross-project views. */
+  async queryAll(): Promise<StoredTask[]> {
+    const projects = await this.listProjects();
+    const perProject = await Promise.all(projects.map((project) => this.list(project)));
+    return perProject.flat();
+  }
+
+  async list(project: string): Promise<StoredTask[]> {
+    const dir = this.projectDir(project);
     let entries: string[];
     try {
       entries = (await readdir(dir, { withFileTypes: true }))
@@ -217,7 +249,7 @@ export class TaskStore {
   }
 
   private configPath(projectId: string): string {
-    return path.join(this.tasksDir(projectId), "task-config.json");
+    return path.join(this.projectDir(projectId), "task-config.json");
   }
 
   /** Editable Type/People option lists for a project; defaults when absent. */

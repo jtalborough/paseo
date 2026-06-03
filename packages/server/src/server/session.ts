@@ -104,7 +104,7 @@ import type {
   ManagedAgent,
 } from "./agent/agent-manager.js";
 import { createAgentCommand } from "./agent/create-agent/create.js";
-import { TaskStore } from "./task/store.js";
+import { resolveTasksVaultRoot, TaskStore } from "./task/store.js";
 import { getUnattendedModeId } from "@getpaseo/protocol/provider-manifest";
 import {
   archiveAgentCommand,
@@ -914,7 +914,7 @@ export class Session {
     this.pushTokenStore = pushTokenStore;
     this.paseoHome = paseoHome;
     this.worktreesRoot = worktreesRoot;
-    this.taskStore = new TaskStore(paseoHome);
+    this.taskStore = new TaskStore(resolveTasksVaultRoot(paseoHome));
     this.sessionLogger = logger.child({
       module: "session",
       clientId: this.clientId,
@@ -1979,16 +1979,14 @@ export class Session {
   private async handleTaskQueryRequest(
     msg: Extract<SessionInboundMessage, { type: "tasks.query.request" }>,
   ): Promise<void> {
-    // Cross-project: enumerate every project and gather its tasks. Powers the
-    // global views (Inbox / Today / …). At personal scale a direct scan is fine;
-    // a derived index can come later if it ever hurts.
-    const projects = await this.projectRegistry.list();
-    const perProject = await Promise.all(
-      projects.map((project) => this.taskStore.list(project.projectId)),
-    );
+    // Cross-project: scan the vault directly (not the git project registry) so
+    // this works on a headless server daemon with no git checkouts. Powers the
+    // global views (Inbox / Today / …). A derived index can come later if it
+    // ever hurts.
+    const tasks = await this.taskStore.queryAll();
     this.emit({
       type: "tasks.query.response",
-      payload: { requestId: msg.requestId, tasks: perProject.flat() },
+      payload: { requestId: msg.requestId, tasks },
     });
   }
 
