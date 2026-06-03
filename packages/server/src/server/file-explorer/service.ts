@@ -275,6 +275,14 @@ export async function writeExplorerFile({
       // Refuse symlinks, sockets, devices, etc. — only regular files are editable.
       throw new Error("Requested path is not a regular file");
     }
+    if (createIfMissing && expectedModifiedAt === undefined) {
+      // A pure create (the "New file" action) — refuse to clobber an existing
+      // file with empty content. The autosave path always sends
+      // expectedModifiedAt, so it is unaffected.
+      const error = new Error("File already exists") as NodeJS.ErrnoException;
+      error.code = "EEXIST";
+      throw error;
+    }
     if (expectedModifiedAt && existingStats.mtime.toISOString() !== expectedModifiedAt) {
       return { outcome: "conflict", path: normalizedPath };
     }

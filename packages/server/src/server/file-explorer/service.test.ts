@@ -232,6 +232,25 @@ describe("writeExplorerFile", () => {
     }
   });
 
+  it("refuses to overwrite an existing file via createIfMissing (no expectedModifiedAt)", async () => {
+    const root = await createTempDir("paseo-file-write-");
+    try {
+      await writeFile(path.join(root, "exists.txt"), "original\n");
+      await expect(
+        writeExplorerFile({
+          root,
+          relativePath: "exists.txt",
+          content: "",
+          createIfMissing: true,
+        }),
+      ).rejects.toThrow("File already exists");
+      // The original content must be untouched.
+      expect(await readFile(path.join(root, "exists.txt"), "utf-8")).toBe("original\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("refuses to create a missing file when createIfMissing is not set", async () => {
     const root = await createTempDir("paseo-file-write-");
     try {
