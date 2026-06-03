@@ -90,7 +90,7 @@ import type {
   AgentSessionConfig,
 } from "@getpaseo/protocol/agent-types";
 import type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
-import type { CreateTaskInput, StoredTask } from "@getpaseo/protocol/task/types";
+import type { CreateTaskInput, StoredTask, TaskConfig } from "@getpaseo/protocol/task/types";
 import type {
   TaskRunResponseSchema,
   TaskUpdateRequestSchema,
@@ -3095,6 +3095,28 @@ export class DaemonClient {
         ...(params.baseBranch ? { baseBranch: params.baseBranch } : {}),
       },
       timeout: 120000,
+    });
+  }
+
+  async taskConfigGet(project: string, requestId?: string): Promise<TaskConfig> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.config.get.response", TaskConfig>({
+      requestId,
+      message: { type: "task.config.get.request", project },
+      timeout: 15000,
+      selectPayload: (payload) => payload.config,
+    });
+  }
+
+  async taskConfigUpdate(
+    project: string,
+    config: TaskConfig,
+    requestId?: string,
+  ): Promise<TaskConfig> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.config.update.response", TaskConfig>({
+      requestId,
+      message: { type: "task.config.update.request", project, config },
+      timeout: 15000,
+      selectPayload: (payload) => payload.config,
     });
   }
 

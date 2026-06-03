@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   ActionStateSchema,
   TaskAttentionSchema,
+  TaskConfigSchema,
   TaskPrioritySchema,
   TaskResultSchema,
   TaskRunModeSchema,
@@ -15,6 +16,7 @@ const TaskEditableFields = {
   run: TaskRunModeSchema.optional(),
   priority: TaskPrioritySchema.nullable().optional(),
   type: z.string().nullable().optional(),
+  people: z.array(z.string()).optional(),
   context: z.string().nullable().optional(),
   attention: TaskAttentionSchema.nullable().optional(),
   doDate: z.string().nullable().optional(),
@@ -142,6 +144,33 @@ export const TaskRunResponseSchema = z.object({
   ]),
 });
 
+// --- task.config.get / task.config.update --- (editable Type/People option lists)
+export const TaskConfigGetRequestSchema = z.object({
+  type: z.literal("task.config.get.request"),
+  requestId: z.string(),
+  project: z.string().min(1),
+});
+export const TaskConfigGetResponseSchema = z.object({
+  type: z.literal("task.config.get.response"),
+  payload: z.object({
+    requestId: z.string(),
+    config: TaskConfigSchema,
+  }),
+});
+export const TaskConfigUpdateRequestSchema = z.object({
+  type: z.literal("task.config.update.request"),
+  requestId: z.string(),
+  project: z.string().min(1),
+  config: TaskConfigSchema,
+});
+export const TaskConfigUpdateResponseSchema = z.object({
+  type: z.literal("task.config.update.response"),
+  payload: z.object({
+    requestId: z.string(),
+    config: TaskConfigSchema,
+  }),
+});
+
 export const TaskRequestSchemas = [
   TaskListRequestSchema,
   TaskGetRequestSchema,
@@ -149,6 +178,8 @@ export const TaskRequestSchemas = [
   TaskUpdateRequestSchema,
   TaskDeleteRequestSchema,
   TaskRunRequestSchema,
+  TaskConfigGetRequestSchema,
+  TaskConfigUpdateRequestSchema,
 ] as const;
 
 export const TaskResponseSchemas = [
@@ -158,4 +189,6 @@ export const TaskResponseSchemas = [
   TaskUpdateResponseSchema,
   TaskDeleteResponseSchema,
   TaskRunResponseSchema,
+  TaskConfigGetResponseSchema,
+  TaskConfigUpdateResponseSchema,
 ] as const;

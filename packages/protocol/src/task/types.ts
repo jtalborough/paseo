@@ -21,15 +21,15 @@ import { z } from "zod";
  */
 
 /**
- * The GTD engagement state — the spine of a task. Not a progress bar:
- * - do        — actionable now
- * - schedule  — deferred to a date / not yet actionable
- * - waiting   — blocked on someone/something else (incl. a dispatched agent)
- * - review    — needs a decision or attention (e.g. an agent run that failed)
- * - park      — someday/maybe; intentionally not now
- * - done      — completed or dropped (Notion "Drop/Done")
+ * The engagement state — the spine of a task. Not a progress bar:
+ * - todo     — actionable now
+ * - waiting  — blocked on someone/something else (incl. a dispatched agent)
+ * - info     — needs a decision, more info, or attention (e.g. a failed run)
+ * - someday  — deferred / maybe; intentionally not now
+ * - dropped  — abandoned, won't do
+ * - done     — completed
  */
-export const ActionStateSchema = z.enum(["do", "schedule", "waiting", "review", "park", "done"]);
+export const ActionStateSchema = z.enum(["todo", "waiting", "info", "someday", "dropped", "done"]);
 export type ActionState = z.infer<typeof ActionStateSchema>;
 
 export const TaskPrioritySchema = z.enum(["high", "medium", "low"]);
@@ -55,13 +55,20 @@ function nullableString() {
 }
 
 /**
- * Migration shim: tasks created before Action State used `status: todo|doing|done`.
- * Map any legacy value onto the Action State spine so old files keep parsing.
+ * Migration shim. Two older vocabularies map onto the current Action State:
+ * - the original `status: todo|doing|done`
+ * - the first Action State set `do|schedule|waiting|review|park|done`
+ * Mapping them on read keeps existing task files loading without migrations.
  */
 const LEGACY_STATUS_TO_ACTION_STATE: Record<string, ActionState> = {
-  todo: "do",
+  // original status vocabulary
   doing: "waiting",
-  done: "done",
+  // first action-state vocabulary
+  do: "todo",
+  schedule: "someday",
+  review: "info",
+  park: "someday",
+  // values that are already valid pass through untouched
 };
 
 export const TaskFrontmatterSchema = z
@@ -71,16 +78,21 @@ export const TaskFrontmatterSchema = z
     /** The project this task belongs to (projectId from the workspace registry). */
     project: z.string().min(1),
     title: z.string().min(1),
-    /** GTD engagement state — the spine. */
-    actionState: ActionStateSchema.default("do"),
+    /**
+     * Engagement state — the spine. Accepted leniently as a string so legacy
+     * vocabularies parse; normalized to a valid ActionState in the transform.
+     */
+    actionState: z.string().optional(),
     run: TaskRunModeSchema.default("self"),
 
     // --- GTD context / classification (free-form where the user customizes). ---
     priority: TaskPrioritySchema.nullable()
       .optional()
       .transform((value) => value ?? null),
-    /** Category, e.g. chore / rnd / create / meeting / coding. Free-form. */
+    /** Category, e.g. chore / coding / meeting. Picked from the project's list. */
     type: nullableString(),
+    /** People associated with the task. Picked from the project's list. */
+    people: z.array(z.string()).default([]),
     /** Where/how it gets done, e.g. cpu / desktop / outdoors / home. Free-form. */
     context: nullableString(),
     attention: TaskAttentionSchema.nullable()
@@ -118,21 +130,30 @@ export const TaskFrontmatterSchema = z
       .optional()
       .transform((value) => value ?? null),
 
-    // COMPAT(tasks-actionstate): legacy `status` field, mapped into actionState
-    // below. Tasks predate Action State only within the unreleased feature
-    // branch; kept so any locally-created files still load.
+    // COMPAT(tasks-actionstate): legacy `status` field, folded into actionState
+    // in the transform. Kept so files from before Action State still load.
     status: z.string().optional(),
   })
   .transform((task) => {
-    const { status, ...rest } = task;
-    // If a legacy status is present and actionState wasn't explicitly set away
-    // from its default, honor the legacy value.
-    if (status && rest.actionState === "do" && LEGACY_STATUS_TO_ACTION_STATE[status]) {
-      return { ...rest, actionState: LEGACY_STATUS_TO_ACTION_STATE[status] };
-    }
-    return rest;
+    const { status, actionState, ...rest } = task;
+    return { ...rest, actionState: resolveActionState(actionState, status) };
   });
 export type TaskFrontmatter = z.infer<typeof TaskFrontmatterSchema>;
+
+/** Resolve a valid ActionState from the (possibly legacy/empty) raw fields. */
+function resolveActionState(
+  raw: string | undefined,
+  legacyStatus: string | undefined,
+): ActionState {
+  for (const candidate of [raw, legacyStatus]) {
+    if (!candidate) continue;
+    const parsed = ActionStateSchema.safeParse(candidate);
+    if (parsed.success) return parsed.data;
+    const mapped = LEGACY_STATUS_TO_ACTION_STATE[candidate];
+    if (mapped) return mapped;
+  }
+  return "todo";
+}
 
 /**
  * Wire shape of a task: queryable frontmatter + free-form markdown body. Used
@@ -153,6 +174,7 @@ export interface CreateTaskInput {
   run?: TaskRunMode;
   priority?: TaskPriority | null;
   type?: string | null;
+  people?: string[];
   context?: string | null;
   attention?: TaskAttention | null;
   doDate?: string | null;
@@ -169,6 +191,7 @@ export interface UpdateTaskInput {
   run?: TaskRunMode;
   priority?: TaskPriority | null;
   type?: string | null;
+  people?: string[];
   context?: string | null;
   attention?: TaskAttention | null;
   doDate?: string | null;
@@ -183,3 +206,24 @@ export interface UpdateTaskInput {
   lastRunAt?: string | null;
   result?: TaskResult | null;
 }
+
+/**
+ * Per-project, user-editable option lists that back the Type and People
+ * pickers. Stored at `projects/<id>/tasks/task-config.json`. Free-form: the
+ * owner adds/removes values; tasks reference them by string.
+ */
+export const TaskConfigSchema = z.object({
+  types: z.array(z.string()).default([]),
+  people: z.array(z.string()).default([]),
+});
+export type TaskConfig = z.infer<typeof TaskConfigSchema>;
+
+/** Sensible starter Type options for a new project (owner can edit). */
+export const DEFAULT_TASK_TYPES: string[] = [
+  "chore",
+  "coding",
+  "create",
+  "research",
+  "meeting",
+  "errand",
+];

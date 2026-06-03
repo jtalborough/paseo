@@ -27,7 +27,7 @@ describe("TaskStore", () => {
     });
 
     expect(created.metadata.id).toMatch(/^\d{4}-\d{2}-\d{2}-replace-the-hvac-filter$/);
-    expect(created.metadata.actionState).toBe("do");
+    expect(created.metadata.actionState).toBe("todo");
     expect(created.metadata.run).toBe("self");
     expect(created.metadata.links).toEqual([]);
 
@@ -49,7 +49,7 @@ describe("TaskStore", () => {
     const raw = await readFile(filePath, "utf-8");
     expect(raw.startsWith("---\n")).toBe(true);
     expect(raw).toContain("title: Write docs");
-    expect(raw).toContain("actionState: do");
+    expect(raw).toContain("actionState: todo");
   });
 
   it("preserves the body on a metadata-only update", async () => {
@@ -142,6 +142,31 @@ describe("TaskStore", () => {
     // The legacy field is dropped from the parsed shape.
     const meta = (loaded as { metadata: Record<string, unknown> }).metadata;
     expect(meta.status).toBeUndefined();
+  });
+
+  it("round-trips people and editable Type/People config", async () => {
+    const created = await store.create({
+      project: "proj-cfg",
+      title: "Call the plumber",
+      type: "errand",
+      people: ["Chad", "Rachel"],
+    });
+    expect(created.metadata.type).toBe("errand");
+    expect(created.metadata.people).toEqual(["Chad", "Rachel"]);
+
+    // Defaults when no config file exists yet.
+    const defaults = await store.getConfig("proj-cfg");
+    expect(defaults.types.length).toBeGreaterThan(0);
+    expect(defaults.people).toEqual([]);
+
+    const saved = await store.updateConfig("proj-cfg", {
+      types: ["errand", "coding"],
+      people: ["Chad", "Rachel", "J"],
+    });
+    expect(saved.people).toContain("J");
+    const reloaded = await store.getConfig("proj-cfg");
+    expect(reloaded.types).toEqual(["errand", "coding"]);
+    expect(reloaded.people).toEqual(["Chad", "Rachel", "J"]);
   });
 
   it("deletes a task", async () => {

@@ -59,12 +59,16 @@ import {
   TaskUpdateRequestSchema,
   TaskDeleteRequestSchema,
   TaskRunRequestSchema,
+  TaskConfigGetRequestSchema,
+  TaskConfigUpdateRequestSchema,
   TaskListResponseSchema,
   TaskGetResponseSchema,
   TaskCreateResponseSchema,
   TaskUpdateResponseSchema,
   TaskDeleteResponseSchema,
   TaskRunResponseSchema,
+  TaskConfigGetResponseSchema,
+  TaskConfigUpdateResponseSchema,
 } from "@getpaseo/protocol/task/messages";
 import {
   PaseoConfigRawSchema,
@@ -2008,6 +2012,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   TaskUpdateRequestSchema,
   TaskDeleteRequestSchema,
   TaskRunRequestSchema,
+  TaskConfigGetRequestSchema,
+  TaskConfigUpdateRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3852,6 +3858,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   TaskUpdateResponseSchema,
   TaskDeleteResponseSchema,
   TaskRunResponseSchema,
+  TaskConfigGetResponseSchema,
+  TaskConfigUpdateResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

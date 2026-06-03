@@ -4,7 +4,10 @@ import path from "node:path";
 
 import {
   type CreateTaskInput,
+  DEFAULT_TASK_TYPES,
   type StoredTask,
+  type TaskConfig,
+  TaskConfigSchema,
   type TaskFrontmatter,
   TaskFrontmatterSchema,
   type UpdateTaskInput,
@@ -119,10 +122,11 @@ export class TaskStore {
       id,
       project: input.project,
       title: input.title,
-      actionState: input.actionState ?? "do",
+      actionState: input.actionState ?? "todo",
       run: input.run ?? "self",
       priority: input.priority ?? null,
       type: input.type ?? null,
+      people: input.people ?? [],
       context: input.context ?? null,
       attention: input.attention ?? null,
       doDate: input.doDate ?? null,
@@ -155,6 +159,7 @@ export class TaskStore {
         run: patch.run,
         priority: patch.priority,
         type: patch.type,
+        people: patch.people,
         context: patch.context,
         attention: patch.attention,
         doDate: patch.doDate,
@@ -179,6 +184,36 @@ export class TaskStore {
 
   async delete(projectId: string, id: string): Promise<void> {
     await rm(this.filePath(projectId, id), { force: true });
+  }
+
+  private configPath(projectId: string): string {
+    return path.join(this.tasksDir(projectId), "task-config.json");
+  }
+
+  /** Editable Type/People option lists for a project; defaults when absent. */
+  async getConfig(projectId: string): Promise<TaskConfig> {
+    try {
+      const content = await readFile(this.configPath(projectId), "utf-8");
+      return TaskConfigSchema.parse(JSON.parse(content));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return { types: [...DEFAULT_TASK_TYPES], people: [] };
+      }
+      throw error;
+    }
+  }
+
+  async updateConfig(projectId: string, config: TaskConfig): Promise<TaskConfig> {
+    const parsed = TaskConfigSchema.parse(config);
+    await this.ensureDir(projectId);
+    const target = this.configPath(projectId);
+    const tempPath = path.join(
+      path.dirname(target),
+      `.task-config.tmp-${process.pid}-${randomBytes(6).toString("hex")}`,
+    );
+    await writeFile(tempPath, JSON.stringify(parsed, null, 2), "utf-8");
+    await rename(tempPath, target);
+    return parsed;
   }
 
   private async readFile(filePath: string): Promise<StoredTask> {

@@ -6,6 +6,7 @@ import type {
   ActionState,
   StoredTask,
   TaskAttention,
+  TaskConfig,
   TaskPriority,
 } from "@getpaseo/protocol/task/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
@@ -20,19 +21,19 @@ interface Option<T> {
 }
 
 const ACTION_STATES: Option<ActionState>[] = [
-  { value: "do", label: "Do" },
-  { value: "schedule", label: "Schedule" },
+  { value: "todo", label: "ToDo" },
   { value: "waiting", label: "Waiting" },
-  { value: "review", label: "Review" },
-  { value: "park", label: "Park" },
+  { value: "info", label: "Info" },
+  { value: "someday", label: "Someday" },
+  { value: "dropped", label: "Dropped" },
   { value: "done", label: "Done" },
 ];
 const ACTION_STATE_LABEL: Record<ActionState, string> = {
-  do: "Do",
-  schedule: "Schedule",
+  todo: "ToDo",
   waiting: "Waiting",
-  review: "Review",
-  park: "Park",
+  info: "Info",
+  someday: "Someday",
+  dropped: "Dropped",
   done: "Done",
 };
 const PRIORITIES: Option<TaskPriority>[] = [
@@ -65,14 +66,15 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
   const [newTitle, setNewTitle] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const queryKey = useMemo(() => ["tasks", serverId, projectId], [serverId, projectId]);
-  const invalidate = useCallback(
-    () => queryClient.invalidateQueries({ queryKey }),
-    [queryClient, queryKey],
+  const tasksKey = useMemo(() => ["tasks", serverId, projectId], [serverId, projectId]);
+  const configKey = useMemo(() => ["task-config", serverId, projectId], [serverId, projectId]);
+  const invalidateTasks = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: tasksKey }),
+    [queryClient, tasksKey],
   );
 
   const tasksQuery = useQuery({
-    queryKey,
+    queryKey: tasksKey,
     enabled: Boolean(client && projectId && tasksSupported),
     queryFn: async () => {
       if (!client || !projectId) {
@@ -81,6 +83,18 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
       return client.taskList(projectId);
     },
     staleTime: 2_000,
+  });
+
+  const configQuery = useQuery({
+    queryKey: configKey,
+    enabled: Boolean(client && projectId && tasksSupported),
+    queryFn: async () => {
+      if (!client || !projectId) {
+        return { types: [], people: [] } as TaskConfig;
+      }
+      return client.taskConfigGet(projectId);
+    },
+    staleTime: 30_000,
   });
 
   const createTask = useMutation({
@@ -92,7 +106,7 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
     },
     onSuccess: () => {
       setNewTitle("");
-      void invalidate();
+      void invalidateTasks();
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Failed to create task"),
@@ -105,7 +119,7 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
       }
       return client.taskUpdate(projectId, params.id, params.patch);
     },
-    onSuccess: () => void invalidate(),
+    onSuccess: () => void invalidateTasks(),
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Failed to update task"),
   });
@@ -117,7 +131,7 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
       }
       await client.taskDelete(projectId, id);
     },
-    onSuccess: () => void invalidate(),
+    onSuccess: () => void invalidateTasks(),
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Failed to delete task"),
   });
@@ -132,12 +146,24 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
     onSuccess: (result) => {
       if (result.ok) {
         toast.show("Task dispatched to an agent.");
-        void invalidate();
+        void invalidateTasks();
       } else {
         toast.error(result.error);
       }
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to run task"),
+  });
+
+  const updateConfig = useMutation({
+    mutationFn: async (config: TaskConfig) => {
+      if (!client || !projectId) {
+        throw new Error("Host is not connected");
+      }
+      return client.taskConfigUpdate(projectId, config);
+    },
+    onSuccess: (config) => queryClient.setQueryData(configKey, config),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Failed to update options"),
   });
 
   const trimmedTitle = newTitle.trim();
@@ -151,6 +177,9 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
   const patchMutate = patchTask.mutate;
   const runMutate = runTask.mutate;
   const deleteMutate = deleteTask.mutate;
+  const updateConfigMutate = updateConfig.mutate;
+  const config = configQuery.data ?? EMPTY_CONFIG;
+
   const handlePatch = useCallback(
     (id: string, patch: TaskUpdateRpcPatch) => patchMutate({ id, patch }),
     [patchMutate],
@@ -158,6 +187,22 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
   const handleToggleExpand = useCallback(
     (id: string) => setExpandedId((current) => (current === id ? null : id)),
     [],
+  );
+  const handleAddType = useCallback(
+    (value: string) => {
+      if (!config.types.includes(value)) {
+        updateConfigMutate({ ...config, types: [...config.types, value] });
+      }
+    },
+    [config, updateConfigMutate],
+  );
+  const handleAddPerson = useCallback(
+    (value: string) => {
+      if (!config.people.includes(value)) {
+        updateConfigMutate({ ...config, people: [...config.people, value] });
+      }
+    },
+    [config, updateConfigMutate],
   );
 
   const addDisabled = trimmedTitle.length === 0 || createTask.isPending;
@@ -210,34 +255,45 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
       <TaskListBody
         query={tasksQuery}
         tasks={tasksQuery.data}
+        config={config}
         expandedId={expandedId}
         onToggleExpand={handleToggleExpand}
         onPatch={handlePatch}
         onRun={runMutate}
         onDelete={deleteMutate}
+        onAddType={handleAddType}
+        onAddPerson={handleAddPerson}
         runDisabled={runTask.isPending}
       />
     </View>
   );
 }
 
+const EMPTY_CONFIG: TaskConfig = { types: [], people: [] };
+
 function TaskListBody({
   query,
   tasks,
+  config,
   expandedId,
   onToggleExpand,
   onPatch,
   onRun,
   onDelete,
+  onAddType,
+  onAddPerson,
   runDisabled,
 }: {
   query: { isPending: boolean; isError: boolean; error: unknown };
   tasks: StoredTask[] | undefined;
+  config: TaskConfig;
   expandedId: string | null;
   onToggleExpand: (id: string) => void;
   onPatch: (id: string, patch: TaskUpdateRpcPatch) => void;
   onRun: (id: string) => void;
   onDelete: (id: string) => void;
+  onAddType: (value: string) => void;
+  onAddPerson: (value: string) => void;
   runDisabled: boolean;
 }) {
   if (query.isPending) {
@@ -269,11 +325,14 @@ function TaskListBody({
         <TaskRow
           key={task.metadata.id}
           task={task}
+          config={config}
           expanded={expandedId === task.metadata.id}
           onToggleExpand={onToggleExpand}
           onPatch={onPatch}
           onRun={onRun}
           onDelete={onDelete}
+          onAddType={onAddType}
+          onAddPerson={onAddPerson}
           runDisabled={runDisabled}
         />
       ))}
@@ -283,19 +342,25 @@ function TaskListBody({
 
 function TaskRow({
   task,
+  config,
   expanded,
   onToggleExpand,
   onPatch,
   onRun,
   onDelete,
+  onAddType,
+  onAddPerson,
   runDisabled,
 }: {
   task: StoredTask;
+  config: TaskConfig;
   expanded: boolean;
   onToggleExpand: (id: string) => void;
   onPatch: (id: string, patch: TaskUpdateRpcPatch) => void;
   onRun: (id: string) => void;
   onDelete: (id: string) => void;
+  onAddType: (value: string) => void;
+  onAddPerson: (value: string) => void;
   runDisabled: boolean;
 }) {
   const { id, actionState, title, priority } = task.metadata;
@@ -322,9 +387,12 @@ function TaskRow({
       {expanded ? (
         <TaskEditor
           task={task}
+          config={config}
           onPatch={onPatch}
           onRun={onRun}
           onDelete={onDelete}
+          onAddType={onAddType}
+          onAddPerson={onAddPerson}
           runDisabled={runDisabled}
         />
       ) : null}
@@ -334,20 +402,27 @@ function TaskRow({
 
 function TaskEditor({
   task,
+  config,
   onPatch,
   onRun,
   onDelete,
+  onAddType,
+  onAddPerson,
   runDisabled,
 }: {
   task: StoredTask;
+  config: TaskConfig;
   onPatch: (id: string, patch: TaskUpdateRpcPatch) => void;
   onRun: (id: string) => void;
   onDelete: (id: string) => void;
+  onAddType: (value: string) => void;
+  onAddPerson: (value: string) => void;
   runDisabled: boolean;
 }) {
-  const { metadata } = task;
+  const { metadata, body } = task;
   const id = metadata.id;
   const patchField = useCallback((patch: TaskUpdateRpcPatch) => onPatch(id, patch), [onPatch, id]);
+
   const setActionState = useCallback(
     (value: ActionState | null) => {
       if (value) {
@@ -364,7 +439,8 @@ function TaskEditor({
     (value: TaskAttention | null) => patchField({ attention: value }),
     [patchField],
   );
-  const setType = useCallback((value: string) => patchField({ type: value || null }), [patchField]);
+  const setType = useCallback((value: string | null) => patchField({ type: value }), [patchField]);
+  const setPeople = useCallback((people: string[]) => patchField({ people }), [patchField]);
   const setContext = useCallback(
     (value: string) => patchField({ context: value || null }),
     [patchField],
@@ -381,6 +457,7 @@ function TaskEditor({
     (value: string) => patchField({ github: value || null }),
     [patchField],
   );
+  const setBody = useCallback((value: string) => patchField({ body: value }), [patchField]);
 
   const handleRun = useCallback(() => onRun(id), [onRun, id]);
   const handleDelete = useCallback(() => onDelete(id), [onDelete, id]);
@@ -388,7 +465,7 @@ function TaskEditor({
   return (
     <View style={styles.editor}>
       <OptionRow
-        label="State"
+        label="Status"
         options={ACTION_STATES}
         value={metadata.actionState}
         onSelect={setActionState}
@@ -408,29 +485,32 @@ function TaskEditor({
         onSelect={setAttention}
         clearable
       />
-      <TextField
+      <SingleSelectField
         label="Type"
+        options={config.types}
         value={metadata.type}
-        placeholder="chore / coding / …"
-        onCommit={setType}
+        onSelect={setType}
+        onAdd={onAddType}
       />
+      <MultiSelectField
+        label="People"
+        options={config.people}
+        selected={metadata.people}
+        onChange={setPeople}
+        onAdd={onAddPerson}
+      />
+      <DateField label="Do date" value={metadata.doDate} onCommit={setDoDate} />
       <TextField
         label="Context"
         value={metadata.context}
         placeholder="cpu / home / outdoors"
         onCommit={setContext}
       />
-      <TextField
-        label="Do date"
-        value={metadata.doDate}
-        placeholder="2026-06-20"
-        onCommit={setDoDate}
-      />
-      <TextField
-        label="Agent"
+      <AgentRunField
         value={metadata.provider}
-        placeholder="claude / codex"
         onCommit={setProvider}
+        onRun={handleRun}
+        runDisabled={runDisabled}
       />
       <TextField
         label="GitHub"
@@ -438,17 +518,10 @@ function TaskEditor({
         placeholder="https://github.com/…/issues/1"
         onCommit={setGithub}
       />
+      <NotesField value={body} onCommit={setBody} />
       <View style={styles.editorActions}>
-        <Pressable
-          accessibilityRole="button"
-          disabled={runDisabled}
-          onPress={handleRun}
-          style={rowActionStyle}
-        >
-          <Text style={styles.rowActionText}>Run</Text>
-        </Pressable>
         <Pressable accessibilityRole="button" onPress={handleDelete} style={rowActionStyle}>
-          <Text style={styles.rowActionDanger}>Delete</Text>
+          <Text style={styles.rowActionDanger}>Delete task</Text>
         </Pressable>
       </View>
     </View>
@@ -517,6 +590,237 @@ function OptionChip<T extends string>({
   );
 }
 
+function SingleSelectField({
+  label,
+  options,
+  value,
+  onSelect,
+  onAdd,
+}: {
+  label: string;
+  options: string[];
+  value: string | null;
+  onSelect: (value: string | null) => void;
+  onAdd: (value: string) => void;
+}) {
+  const handleToggle = useCallback(
+    (next: string) => onSelect(next === value ? null : next),
+    [value, onSelect],
+  );
+  const handleAdd = useCallback(
+    (next: string) => {
+      onAdd(next);
+      onSelect(next);
+    },
+    [onAdd, onSelect],
+  );
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.chips}>
+        {options.map((option) => (
+          <StringChip
+            key={option}
+            value={option}
+            selected={option === value}
+            onPress={handleToggle}
+          />
+        ))}
+        <AddChip onAdd={handleAdd} />
+      </View>
+    </View>
+  );
+}
+
+function MultiSelectField({
+  label,
+  options,
+  selected,
+  onChange,
+  onAdd,
+}: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+  onAdd: (value: string) => void;
+}) {
+  const handleToggle = useCallback(
+    (next: string) => {
+      if (selected.includes(next)) {
+        onChange(selected.filter((value) => value !== next));
+      } else {
+        onChange([...selected, next]);
+      }
+    },
+    [selected, onChange],
+  );
+  const handleAdd = useCallback(
+    (next: string) => {
+      onAdd(next);
+      if (!selected.includes(next)) {
+        onChange([...selected, next]);
+      }
+    },
+    [onAdd, onChange, selected],
+  );
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.chips}>
+        {options.map((option) => (
+          <StringChip
+            key={option}
+            value={option}
+            selected={selected.includes(option)}
+            onPress={handleToggle}
+          />
+        ))}
+        <AddChip onAdd={handleAdd} />
+      </View>
+    </View>
+  );
+}
+
+function StringChip({
+  value,
+  selected,
+  onPress,
+}: {
+  value: string;
+  selected: boolean;
+  onPress: (value: string) => void;
+}) {
+  const handlePress = useCallback(() => onPress(value), [onPress, value]);
+  const chipStyle = useMemo(() => [styles.chip, selected ? styles.chipSelected : null], [selected]);
+  const textStyle = useMemo(
+    () => [styles.chipText, selected ? styles.chipTextSelected : null],
+    [selected],
+  );
+  return (
+    <Pressable accessibilityRole="button" onPress={handlePress} style={chipStyle}>
+      <Text style={textStyle}>{value}</Text>
+    </Pressable>
+  );
+}
+
+function AddChip({ onAdd }: { onAdd: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const handleOpen = useCallback(() => setOpen(true), []);
+  const handleCommit = useCallback(() => {
+    const value = draft.trim();
+    if (value.length > 0) {
+      onAdd(value);
+    }
+    setDraft("");
+    setOpen(false);
+  }, [draft, onAdd]);
+  if (!open) {
+    return (
+      <Pressable accessibilityRole="button" onPress={handleOpen} style={styles.addChip}>
+        <Text style={styles.addChipText}>+ Add</Text>
+      </Pressable>
+    );
+  }
+  return (
+    <TextInput
+      style={styles.addChipInput}
+      value={draft}
+      onChangeText={setDraft}
+      onBlur={handleCommit}
+      onSubmitEditing={handleCommit}
+      placeholder="New…"
+      placeholderTextColor={PLACEHOLDER_COLOR}
+      autoFocus
+      autoCapitalize="none"
+      autoCorrect={false}
+      returnKeyType="done"
+    />
+  );
+}
+
+function DateField({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: string | null;
+  onCommit: (value: string) => void;
+}) {
+  const setToday = useCallback(() => onCommit(isoDateOffset(0)), [onCommit]);
+  const setTomorrow = useCallback(() => onCommit(isoDateOffset(1)), [onCommit]);
+  const setNextWeek = useCallback(() => onCommit(isoDateOffset(7)), [onCommit]);
+  const clear = useCallback(() => onCommit(""), [onCommit]);
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.chips}>
+        <QuickChip label="Today" onPress={setToday} />
+        <QuickChip label="Tomorrow" onPress={setTomorrow} />
+        <QuickChip label="+1 wk" onPress={setNextWeek} />
+        <QuickChip label="Clear" onPress={clear} />
+      </View>
+      <TextField label="" value={value} placeholder="2026-06-20" onCommit={onCommit} />
+    </View>
+  );
+}
+
+function QuickChip({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={styles.addChip}>
+      <Text style={styles.addChipText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function AgentRunField({
+  value,
+  onCommit,
+  onRun,
+  runDisabled,
+}: {
+  value: string | null;
+  onCommit: (value: string) => void;
+  onRun: () => void;
+  runDisabled: boolean;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  const handleBlur = useCallback(() => {
+    if (draft.trim() !== (value ?? "")) {
+      onCommit(draft.trim());
+    }
+  }, [draft, value, onCommit]);
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>Agent</Text>
+      <View style={styles.agentRow}>
+        <TextInput
+          style={styles.agentInput}
+          value={draft}
+          onChangeText={setDraft}
+          onBlur={handleBlur}
+          onSubmitEditing={handleBlur}
+          placeholder="claude / codex"
+          placeholderTextColor={PLACEHOLDER_COLOR}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="done"
+        />
+        <Pressable
+          accessibilityRole="button"
+          disabled={runDisabled}
+          onPress={onRun}
+          style={runButtonStyle}
+        >
+          <Text style={styles.runButtonText}>Run</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function TextField({
   label,
   value,
@@ -536,7 +840,7 @@ function TextField({
   }, [draft, value, onCommit]);
   return (
     <View style={styles.fieldRow}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
       <TextInput
         style={styles.fieldInput}
         value={draft}
@@ -553,6 +857,36 @@ function TextField({
   );
 }
 
+function NotesField({ value, onCommit }: { value: string; onCommit: (value: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const handleBlur = useCallback(() => {
+    if (draft !== value) {
+      onCommit(draft);
+    }
+  }, [draft, value, onCommit]);
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>Notes</Text>
+      <TextInput
+        style={styles.notesInput}
+        value={draft}
+        onChangeText={setDraft}
+        onBlur={handleBlur}
+        placeholder="Notes, acceptance criteria, the prompt for the agent…"
+        placeholderTextColor={PLACEHOLDER_COLOR}
+        multiline
+        textAlignVertical="top"
+      />
+    </View>
+  );
+}
+
+function isoDateOffset(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function rowHeaderStyle({ pressed }: PressableStateCallbackType) {
   return [styles.rowHeader, pressed ? styles.rowHeaderPressed : null];
 }
@@ -561,19 +895,23 @@ function rowActionStyle({ pressed }: PressableStateCallbackType) {
   return [styles.rowAction, pressed ? styles.rowActionPressed : null];
 }
 
+function runButtonStyle({ pressed }: PressableStateCallbackType) {
+  return [styles.runButton, pressed ? styles.runButtonPressed : null];
+}
+
 function stateDotStyle(state: ActionState) {
   return styles[STATE_DOT_KEY[state]];
 }
 
 const STATE_DOT_KEY: Record<
   ActionState,
-  "dotDo" | "dotSchedule" | "dotWaiting" | "dotReview" | "dotPark" | "dotDone"
+  "dotTodo" | "dotWaiting" | "dotInfo" | "dotSomeday" | "dotDropped" | "dotDone"
 > = {
-  do: "dotDo",
-  schedule: "dotSchedule",
+  todo: "dotTodo",
   waiting: "dotWaiting",
-  review: "dotReview",
-  park: "dotPark",
+  info: "dotInfo",
+  someday: "dotSomeday",
+  dropped: "dotDropped",
   done: "dotDone",
 };
 
@@ -641,11 +979,11 @@ const styles = StyleSheet.create((theme) => ({
   rowTitleDone: { color: theme.colors.foregroundMuted, textDecorationLine: "line-through" },
   stateLabel: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
   stateDot: { width: 10, height: 10, borderRadius: 5 },
-  dotDo: { backgroundColor: theme.colors.accent },
-  dotSchedule: { backgroundColor: theme.colors.palette.blue[500] },
+  dotTodo: { backgroundColor: theme.colors.accent },
   dotWaiting: { backgroundColor: theme.colors.palette.amber[500] },
-  dotReview: { backgroundColor: theme.colors.destructive },
-  dotPark: { backgroundColor: theme.colors.foregroundMuted },
+  dotInfo: { backgroundColor: theme.colors.palette.blue[500] },
+  dotSomeday: { backgroundColor: theme.colors.foregroundMuted },
+  dotDropped: { backgroundColor: theme.colors.destructive },
   dotDone: { backgroundColor: theme.colors.palette.green[600] },
   priorityHigh: {
     color: theme.colors.destructive,
@@ -664,7 +1002,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   editor: {
     padding: theme.spacing[3],
-    gap: theme.spacing[2],
+    gap: theme.spacing[3],
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
@@ -680,6 +1018,23 @@ const styles = StyleSheet.create((theme) => ({
   chipSelected: { backgroundColor: theme.colors.accent },
   chipText: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
   chipTextSelected: { color: theme.colors.palette.white },
+  addChip: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  addChipText: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  addChipInput: {
+    minWidth: 90,
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.xs,
+  },
   fieldInput: {
     height: 32,
     paddingHorizontal: theme.spacing[2],
@@ -688,13 +1043,36 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
   },
-  editorActions: {
-    flexDirection: "row",
-    gap: theme.spacing[2],
-    marginTop: theme.spacing[1],
+  agentRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
+  agentInput: {
+    flex: 1,
+    height: 32,
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
   },
+  runButton: {
+    paddingHorizontal: theme.spacing[3],
+    height: 32,
+    borderRadius: theme.borderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.accent,
+  },
+  runButtonPressed: { opacity: 0.8 },
+  runButtonText: { color: theme.colors.palette.white, fontSize: theme.fontSize.sm },
+  notesInput: {
+    minHeight: 80,
+    padding: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+  },
+  editorActions: { flexDirection: "row", gap: theme.spacing[2], marginTop: theme.spacing[1] },
   rowAction: { paddingHorizontal: theme.spacing[2], paddingVertical: theme.spacing[1] },
   rowActionPressed: { opacity: 0.6 },
-  rowActionText: { color: theme.colors.accent, fontSize: theme.fontSize.sm },
   rowActionDanger: { color: theme.colors.destructive, fontSize: theme.fontSize.sm },
 }));

@@ -1955,6 +1955,10 @@ export class Session {
         return this.handleTaskDeleteRequest(msg);
       case "task.run.request":
         return this.handleTaskRunRequest(msg);
+      case "task.config.get.request":
+        return this.handleTaskConfigGetRequest(msg);
+      case "task.config.update.request":
+        return this.handleTaskConfigUpdateRequest(msg);
       default:
         return undefined;
     }
@@ -2007,6 +2011,26 @@ export class Session {
     this.emit({
       type: "task.delete.response",
       payload: { requestId: msg.requestId, id: msg.id },
+    });
+  }
+
+  private async handleTaskConfigGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.config.get.request" }>,
+  ): Promise<void> {
+    const config = await this.taskStore.getConfig(msg.project);
+    this.emit({
+      type: "task.config.get.response",
+      payload: { requestId: msg.requestId, config },
+    });
+  }
+
+  private async handleTaskConfigUpdateRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.config.update.request" }>,
+  ): Promise<void> {
+    const config = await this.taskStore.updateConfig(msg.project, msg.config);
+    this.emit({
+      type: "task.config.update.response",
+      payload: { requestId: msg.requestId, config },
     });
   }
 
@@ -2105,7 +2129,7 @@ export class Session {
         "Task agent run failed; moving task to review",
       );
       try {
-        await this.taskStore.update(project, id, { actionState: "review", result: "failed" });
+        await this.taskStore.update(project, id, { actionState: "info", result: "failed" });
       } catch (updateError) {
         this.sessionLogger.error(
           { err: updateError, project, id },

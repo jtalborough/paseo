@@ -56,7 +56,7 @@ test("task CRUD round-trips over the WebSocket protocol", async () => {
     title: "Write the docs",
     body: "## Notes\nDo the thing.\n",
   });
-  expect(created.metadata.actionState).toBe("do");
+  expect(created.metadata.actionState).toBe("todo");
   expect(created.metadata.title).toBe("Write the docs");
 
   const listed = await client.taskList("proj-crud");
