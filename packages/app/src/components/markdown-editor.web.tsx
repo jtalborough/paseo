@@ -73,10 +73,22 @@ export function MarkdownEditor({
   );
 
   // Reseed when the underlying file changes (new file / reload after conflict).
+  // Skip when the incoming content already matches what the editor holds: a
+  // background refetch can re-supply an unchanged prop, and reseeding then would
+  // reset the cursor/selection and clobber edits made since the fetch.
   useEffect(() => {
+    if (!editor) {
+      return;
+    }
+    // The editor holds the frontmatter-stripped body, so compare against the
+    // incoming body — an unchanged background refetch then skips reseeding
+    // instead of resetting the cursor or clobbering edits made since the fetch.
+    if (getEditorMarkdown(editor) === splitFrontmatter(initialContent).body) {
+      return;
+    }
     seedFrom(initialContent);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- modifiedAt marks a fresh load
-  }, [seedFrom, initialContent, initialModifiedAt]);
+  }, [seedFrom, editor, initialContent, initialModifiedAt]);
 
   useEffect(() => {
     editor?.setEditable(!isConflicted);

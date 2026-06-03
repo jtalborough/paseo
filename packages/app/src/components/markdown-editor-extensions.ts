@@ -5,6 +5,25 @@ import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table
 import { Markdown } from "tiptap-markdown";
 import type { Extensions } from "@tiptap/react";
 
+// tiptap-markdown only registers its `tight` list attribute on bulletList and
+// orderedList, so taskList nodes serialize loose — a blank line between every
+// item, which markdown-it then re-parses into broken separate lists (and a
+// stray empty item). Carry the same `tight: true` attribute on taskList so the
+// markdown serializer keeps checkbox lists tight on round-trip. Covered by
+// markdown-task-list-roundtrip.browser.test.ts.
+export const TightTaskList = TaskList.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      tight: {
+        default: true,
+        parseHTML: (element) => element.getAttribute("data-tight") !== "false",
+        renderHTML: (attributes) => (attributes.tight ? { "data-tight": "true" } : {}),
+      },
+    };
+  },
+});
+
 /**
  * The TipTap extension set for the WYSIWYG markdown editor. Extracted so the
  * editor component and the round-trip browser test share one definition — the
@@ -14,7 +33,7 @@ import type { Extensions } from "@tiptap/react";
 export function buildMarkdownEditorExtensions(): Extensions {
   return [
     StarterKit.configure({ link: { openOnClick: false } }),
-    TaskList,
+    TightTaskList,
     TaskItem.configure({ nested: true }),
     Table.configure({ resizable: false }),
     TableRow,

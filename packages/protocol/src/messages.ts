@@ -2369,6 +2369,8 @@ export const WorkspaceScriptPayloadSchema = z.object({
   type: z.enum(["script", "service"]).optional().default("service"),
   hostname: z.string(),
   port: z.number().int().positive().nullable(),
+  localProxyUrl: z.string().nullable().optional(),
+  publicProxyUrl: z.string().nullable().optional(),
   proxyUrl: z.string().nullable().optional().default(null),
   lifecycle: WorkspaceScriptLifecycleSchema,
   health: WorkspaceScriptHealthSchema.nullable(),
@@ -3441,8 +3443,12 @@ export const FsFileWriteResponseSchema = z.object({
   payload: z.object({
     cwd: z.string(),
     path: z.string(),
-    /** "written" on success, "conflict" when expectedModifiedAt is stale. */
-    outcome: z.enum(["written", "conflict"]),
+    /**
+     * "written" on success, "conflict" when expectedModifiedAt is stale,
+     * "error" when the write failed (see `error` for the reason). Never report
+     * "written" on a failed write — callers may key on `outcome` before `error`.
+     */
+    outcome: z.enum(["written", "conflict", "error"]),
     /** New mtime after a successful write; null on conflict/error. */
     modifiedAt: z.string().nullable(),
     /** New byte size after a successful write; null on conflict/error. */
