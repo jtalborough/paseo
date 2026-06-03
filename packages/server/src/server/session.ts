@@ -2066,7 +2066,7 @@ export class Session {
         .join("\n\n");
 
       const updated = await this.taskStore.update(msg.project, msg.id, {
-        status: "doing",
+        actionState: "waiting",
         agentId: agent.id,
         worktree: worktreePath,
         lastRunAt: new Date().toISOString(),
@@ -2098,14 +2098,14 @@ export class Session {
   ): Promise<void> {
     try {
       await this.agentManager.runAgent(agentId, this.buildAgentPrompt(promptText));
-      await this.taskStore.update(project, id, { status: "done", result: "success" });
+      await this.taskStore.update(project, id, { actionState: "done", result: "success" });
     } catch (error) {
       this.sessionLogger.warn(
         { err: error, project, id, agentId },
-        "Task agent run failed; marking task result failed",
+        "Task agent run failed; moving task to review",
       );
       try {
-        await this.taskStore.update(project, id, { result: "failed" });
+        await this.taskStore.update(project, id, { actionState: "review", result: "failed" });
       } catch (updateError) {
         this.sessionLogger.error(
           { err: updateError, project, id },

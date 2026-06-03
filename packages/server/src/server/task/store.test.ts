@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -27,7 +27,7 @@ describe("TaskStore", () => {
     });
 
     expect(created.metadata.id).toMatch(/^\d{4}-\d{2}-\d{2}-replace-the-hvac-filter$/);
-    expect(created.metadata.status).toBe("todo");
+    expect(created.metadata.actionState).toBe("do");
     expect(created.metadata.run).toBe("self");
     expect(created.metadata.links).toEqual([]);
 
@@ -49,7 +49,7 @@ describe("TaskStore", () => {
     const raw = await readFile(filePath, "utf-8");
     expect(raw.startsWith("---\n")).toBe(true);
     expect(raw).toContain("title: Write docs");
-    expect(raw).toContain("status: todo");
+    expect(raw).toContain("actionState: do");
   });
 
   it("preserves the body on a metadata-only update", async () => {
@@ -59,9 +59,9 @@ describe("TaskStore", () => {
       body: "## Acceptance\n- it works\n",
     });
 
-    const updated = await store.update("proj-1", created.metadata.id, { status: "doing" });
+    const updated = await store.update("proj-1", created.metadata.id, { actionState: "waiting" });
 
-    expect(updated.metadata.status).toBe("doing");
+    expect(updated.metadata.actionState).toBe("waiting");
     expect(updated.body).toBe("## Acceptance\n- it works\n");
     expect(updated.metadata.updatedAt >= created.metadata.updatedAt).toBe(true);
   });
@@ -75,7 +75,7 @@ describe("TaskStore", () => {
     });
 
     const ran = await store.update("proj-1", created.metadata.id, {
-      status: "done",
+      actionState: "done",
       agentId: "agent-123",
       worktree: "/tmp/wt/royal-pony",
       lastRunAt: "2026-06-02T10:00:00.000Z",
@@ -112,6 +112,36 @@ describe("TaskStore", () => {
     const first = await store.create({ project: "proj-1", title: "Same Title" });
     const second = await store.create({ project: "proj-1", title: "Same Title" });
     expect(first.metadata.id).not.toBe(second.metadata.id);
+  });
+
+  it("migrates a legacy `status` task file onto the Action State spine", async () => {
+    // Simulate a task file authored before Action State existed.
+    const dir = path.join(paseoHome, "projects", "proj-legacy", "tasks");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, "2026-01-01-legacy.md"),
+      [
+        "---",
+        "id: 2026-01-01-legacy",
+        "project: proj-legacy",
+        "title: Legacy task",
+        "status: doing",
+        "createdAt: 2026-01-01T00:00:00.000Z",
+        "updatedAt: 2026-01-01T00:00:00.000Z",
+        "---",
+        "",
+        "body",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const loaded = await store.get("proj-legacy", "2026-01-01-legacy");
+    expect(loaded).not.toBeNull();
+    expect(loaded?.metadata.actionState).toBe("waiting");
+    // The legacy field is dropped from the parsed shape.
+    const meta = (loaded as { metadata: Record<string, unknown> }).metadata;
+    expect(meta.status).toBeUndefined();
   });
 
   it("deletes a task", async () => {

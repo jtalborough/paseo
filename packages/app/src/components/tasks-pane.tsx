@@ -2,23 +2,49 @@ import { useCallback, useMemo, useState } from "react";
 import type { PressableStateCallbackType } from "react-native";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { StoredTask, TaskStatus } from "@getpaseo/protocol/task/types";
+import type {
+  ActionState,
+  StoredTask,
+  TaskAttention,
+  TaskPriority,
+} from "@getpaseo/protocol/task/types";
+import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
 import { useToast } from "@/contexts/toast-context";
 import { useSessionStore } from "@/stores/session-store";
 import { useWorkspaceExecutionAuthority } from "@/stores/session-store-hooks";
 import { StyleSheet } from "react-native-unistyles";
 
-const STATUS_ORDER: TaskStatus[] = ["todo", "doing", "done"];
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  todo: "To do",
-  doing: "Doing",
+interface Option<T> {
+  value: T;
+  label: string;
+}
+
+const ACTION_STATES: Option<ActionState>[] = [
+  { value: "do", label: "Do" },
+  { value: "schedule", label: "Schedule" },
+  { value: "waiting", label: "Waiting" },
+  { value: "review", label: "Review" },
+  { value: "park", label: "Park" },
+  { value: "done", label: "Done" },
+];
+const ACTION_STATE_LABEL: Record<ActionState, string> = {
+  do: "Do",
+  schedule: "Schedule",
+  waiting: "Waiting",
+  review: "Review",
+  park: "Park",
   done: "Done",
 };
-
-function nextStatus(status: TaskStatus): TaskStatus {
-  const index = STATUS_ORDER.indexOf(status);
-  return STATUS_ORDER[(index + 1) % STATUS_ORDER.length];
-}
+const PRIORITIES: Option<TaskPriority>[] = [
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "low", label: "Low" },
+];
+const ATTENTIONS: Option<TaskAttention>[] = [
+  { value: "full", label: "Full" },
+  { value: "medium", label: "Medium" },
+  { value: "minimal", label: "Minimal" },
+];
 
 interface TasksPaneProps {
   serverId: string;
@@ -37,6 +63,7 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
   const projectRootPath = authority?.ok ? authority.authority.workspace.projectRootPath : null;
 
   const [newTitle, setNewTitle] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const queryKey = useMemo(() => ["tasks", serverId, projectId], [serverId, projectId]);
   const invalidate = useCallback(
@@ -71,12 +98,12 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
       toast.error(error instanceof Error ? error.message : "Failed to create task"),
   });
 
-  const updateStatus = useMutation({
-    mutationFn: async (params: { id: string; status: TaskStatus }) => {
+  const patchTask = useMutation({
+    mutationFn: async (params: { id: string; patch: TaskUpdateRpcPatch }) => {
       if (!client || !projectId) {
         throw new Error("Host is not connected");
       }
-      return client.taskUpdate(projectId, params.id, { status: params.status });
+      return client.taskUpdate(projectId, params.id, params.patch);
     },
     onSuccess: () => void invalidate(),
     onError: (error) =>
@@ -121,12 +148,16 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
     }
   }, [createMutate, trimmedTitle]);
 
-  const updateMutate = updateStatus.mutate;
+  const patchMutate = patchTask.mutate;
   const runMutate = runTask.mutate;
   const deleteMutate = deleteTask.mutate;
-  const handleCycleStatus = useCallback(
-    (id: string, status: TaskStatus) => updateMutate({ id, status: nextStatus(status) }),
-    [updateMutate],
+  const handlePatch = useCallback(
+    (id: string, patch: TaskUpdateRpcPatch) => patchMutate({ id, patch }),
+    [patchMutate],
+  );
+  const handleToggleExpand = useCallback(
+    (id: string) => setExpandedId((current) => (current === id ? null : id)),
+    [],
   );
 
   const addDisabled = trimmedTitle.length === 0 || createTask.isPending;
@@ -179,7 +210,9 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
       <TaskListBody
         query={tasksQuery}
         tasks={tasksQuery.data}
-        onCycleStatus={handleCycleStatus}
+        expandedId={expandedId}
+        onToggleExpand={handleToggleExpand}
+        onPatch={handlePatch}
         onRun={runMutate}
         onDelete={deleteMutate}
         runDisabled={runTask.isPending}
@@ -191,14 +224,18 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
 function TaskListBody({
   query,
   tasks,
-  onCycleStatus,
+  expandedId,
+  onToggleExpand,
+  onPatch,
   onRun,
   onDelete,
   runDisabled,
 }: {
   query: { isPending: boolean; isError: boolean; error: unknown };
   tasks: StoredTask[] | undefined;
-  onCycleStatus: (id: string, status: TaskStatus) => void;
+  expandedId: string | null;
+  onToggleExpand: (id: string) => void;
+  onPatch: (id: string, patch: TaskUpdateRpcPatch) => void;
   onRun: (id: string) => void;
   onDelete: (id: string) => void;
   runDisabled: boolean;
@@ -232,7 +269,9 @@ function TaskListBody({
         <TaskRow
           key={task.metadata.id}
           task={task}
-          onCycleStatus={onCycleStatus}
+          expanded={expandedId === task.metadata.id}
+          onToggleExpand={onToggleExpand}
+          onPatch={onPatch}
           onRun={onRun}
           onDelete={onDelete}
           runDisabled={runDisabled}
@@ -244,69 +283,310 @@ function TaskListBody({
 
 function TaskRow({
   task,
-  onCycleStatus,
+  expanded,
+  onToggleExpand,
+  onPatch,
   onRun,
   onDelete,
   runDisabled,
 }: {
   task: StoredTask;
-  onCycleStatus: (id: string, status: TaskStatus) => void;
+  expanded: boolean;
+  onToggleExpand: (id: string) => void;
+  onPatch: (id: string, patch: TaskUpdateRpcPatch) => void;
   onRun: (id: string) => void;
   onDelete: (id: string) => void;
   runDisabled: boolean;
 }) {
-  const { id, status, title } = task.metadata;
-  const handleCycle = useCallback(() => onCycleStatus(id, status), [onCycleStatus, id, status]);
+  const { id, actionState, title, priority } = task.metadata;
+  const handleToggle = useCallback(() => onToggleExpand(id), [onToggleExpand, id]);
+
+  const titleStyle = useMemo(
+    () => [styles.rowTitle, actionState === "done" ? styles.rowTitleDone : null],
+    [actionState],
+  );
+  const dotStyle = useMemo(() => [styles.stateDot, stateDotStyle(actionState)], [actionState]);
+
+  return (
+    <View style={styles.rowOuter}>
+      <Pressable accessibilityRole="button" onPress={handleToggle} style={rowHeaderStyle}>
+        <View style={dotStyle} />
+        <Text style={titleStyle} numberOfLines={2}>
+          {title}
+        </Text>
+        {priority ? (
+          <Text style={priorityTextStyle(priority)}>{priorityGlyph(priority)}</Text>
+        ) : null}
+        <Text style={styles.stateLabel}>{ACTION_STATE_LABEL[actionState]}</Text>
+      </Pressable>
+      {expanded ? (
+        <TaskEditor
+          task={task}
+          onPatch={onPatch}
+          onRun={onRun}
+          onDelete={onDelete}
+          runDisabled={runDisabled}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function TaskEditor({
+  task,
+  onPatch,
+  onRun,
+  onDelete,
+  runDisabled,
+}: {
+  task: StoredTask;
+  onPatch: (id: string, patch: TaskUpdateRpcPatch) => void;
+  onRun: (id: string) => void;
+  onDelete: (id: string) => void;
+  runDisabled: boolean;
+}) {
+  const { metadata } = task;
+  const id = metadata.id;
+  const patchField = useCallback((patch: TaskUpdateRpcPatch) => onPatch(id, patch), [onPatch, id]);
+  const setActionState = useCallback(
+    (value: ActionState | null) => {
+      if (value) {
+        patchField({ actionState: value });
+      }
+    },
+    [patchField],
+  );
+  const setPriority = useCallback(
+    (value: TaskPriority | null) => patchField({ priority: value }),
+    [patchField],
+  );
+  const setAttention = useCallback(
+    (value: TaskAttention | null) => patchField({ attention: value }),
+    [patchField],
+  );
+  const setType = useCallback((value: string) => patchField({ type: value || null }), [patchField]);
+  const setContext = useCallback(
+    (value: string) => patchField({ context: value || null }),
+    [patchField],
+  );
+  const setDoDate = useCallback(
+    (value: string) => patchField({ doDate: value || null }),
+    [patchField],
+  );
+  const setProvider = useCallback(
+    (value: string) => patchField({ provider: value || null }),
+    [patchField],
+  );
+  const setGithub = useCallback(
+    (value: string) => patchField({ github: value || null }),
+    [patchField],
+  );
+
   const handleRun = useCallback(() => onRun(id), [onRun, id]);
   const handleDelete = useCallback(() => onDelete(id), [onDelete, id]);
 
-  const chipStyle = useMemo(() => [styles.statusChip, statusChipStyle(status)], [status]);
-  const chipTextStyle = useMemo(
-    () => [styles.statusChipText, statusChipTextStyle(status)],
-    [status],
-  );
-  const titleStyle = useMemo(
-    () => [styles.rowTitle, status === "done" ? styles.rowTitleDone : null],
-    [status],
-  );
-
   return (
-    <View style={styles.row}>
-      <Pressable accessibilityRole="button" onPress={handleCycle} style={chipStyle}>
-        <Text style={chipTextStyle}>{STATUS_LABEL[status]}</Text>
-      </Pressable>
-      <Text style={titleStyle} numberOfLines={2}>
-        {title}
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        disabled={runDisabled}
-        onPress={handleRun}
-        style={rowActionStyle}
-      >
-        <Text style={styles.rowActionText}>Run</Text>
-      </Pressable>
-      <Pressable accessibilityRole="button" onPress={handleDelete} style={rowActionStyle}>
-        <Text style={styles.rowActionDanger}>Delete</Text>
-      </Pressable>
+    <View style={styles.editor}>
+      <OptionRow
+        label="State"
+        options={ACTION_STATES}
+        value={metadata.actionState}
+        onSelect={setActionState}
+        clearable={false}
+      />
+      <OptionRow
+        label="Priority"
+        options={PRIORITIES}
+        value={metadata.priority}
+        onSelect={setPriority}
+        clearable
+      />
+      <OptionRow
+        label="Attention"
+        options={ATTENTIONS}
+        value={metadata.attention}
+        onSelect={setAttention}
+        clearable
+      />
+      <TextField
+        label="Type"
+        value={metadata.type}
+        placeholder="chore / coding / …"
+        onCommit={setType}
+      />
+      <TextField
+        label="Context"
+        value={metadata.context}
+        placeholder="cpu / home / outdoors"
+        onCommit={setContext}
+      />
+      <TextField
+        label="Do date"
+        value={metadata.doDate}
+        placeholder="2026-06-20"
+        onCommit={setDoDate}
+      />
+      <TextField
+        label="Agent"
+        value={metadata.provider}
+        placeholder="claude / codex"
+        onCommit={setProvider}
+      />
+      <TextField
+        label="GitHub"
+        value={metadata.github}
+        placeholder="https://github.com/…/issues/1"
+        onCommit={setGithub}
+      />
+      <View style={styles.editorActions}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={runDisabled}
+          onPress={handleRun}
+          style={rowActionStyle}
+        >
+          <Text style={styles.rowActionText}>Run</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={handleDelete} style={rowActionStyle}>
+          <Text style={styles.rowActionDanger}>Delete</Text>
+        </Pressable>
+      </View>
     </View>
   );
+}
+
+function OptionRow<T extends string>({
+  label,
+  options,
+  value,
+  onSelect,
+  clearable,
+}: {
+  label: string;
+  options: Option<T>[];
+  value: T | null;
+  onSelect: (value: T | null) => void;
+  clearable: boolean;
+}) {
+  const handleSelect = useCallback(
+    (next: T) => {
+      if (clearable && next === value) {
+        onSelect(null);
+      } else {
+        onSelect(next);
+      }
+    },
+    [clearable, value, onSelect],
+  );
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.chips}>
+        {options.map((option) => (
+          <OptionChip
+            key={option.value}
+            option={option}
+            selected={option.value === value}
+            onSelect={handleSelect}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function OptionChip<T extends string>({
+  option,
+  selected,
+  onSelect,
+}: {
+  option: Option<T>;
+  selected: boolean;
+  onSelect: (value: T) => void;
+}) {
+  const handlePress = useCallback(() => onSelect(option.value), [onSelect, option.value]);
+  const chipStyle = useMemo(() => [styles.chip, selected ? styles.chipSelected : null], [selected]);
+  const textStyle = useMemo(
+    () => [styles.chipText, selected ? styles.chipTextSelected : null],
+    [selected],
+  );
+  return (
+    <Pressable accessibilityRole="button" onPress={handlePress} style={chipStyle}>
+      <Text style={textStyle}>{option.label}</Text>
+    </Pressable>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  placeholder,
+  onCommit,
+}: {
+  label: string;
+  value: string | null;
+  placeholder: string;
+  onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  const handleBlur = useCallback(() => {
+    if (draft.trim() !== (value ?? "")) {
+      onCommit(draft.trim());
+    }
+  }, [draft, value, onCommit]);
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        style={styles.fieldInput}
+        value={draft}
+        onChangeText={setDraft}
+        onBlur={handleBlur}
+        onSubmitEditing={handleBlur}
+        placeholder={placeholder}
+        placeholderTextColor={PLACEHOLDER_COLOR}
+        returnKeyType="done"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+    </View>
+  );
+}
+
+function rowHeaderStyle({ pressed }: PressableStateCallbackType) {
+  return [styles.rowHeader, pressed ? styles.rowHeaderPressed : null];
 }
 
 function rowActionStyle({ pressed }: PressableStateCallbackType) {
   return [styles.rowAction, pressed ? styles.rowActionPressed : null];
 }
 
-function statusChipStyle(status: TaskStatus) {
-  if (status === "done") return styles.chipDone;
-  if (status === "doing") return styles.chipDoing;
-  return styles.chipTodo;
+function stateDotStyle(state: ActionState) {
+  return styles[STATE_DOT_KEY[state]];
 }
 
-function statusChipTextStyle(status: TaskStatus) {
-  if (status === "done") return styles.chipTextDone;
-  if (status === "doing") return styles.chipTextDoing;
-  return styles.chipTextTodo;
+const STATE_DOT_KEY: Record<
+  ActionState,
+  "dotDo" | "dotSchedule" | "dotWaiting" | "dotReview" | "dotPark" | "dotDone"
+> = {
+  do: "dotDo",
+  schedule: "dotSchedule",
+  waiting: "dotWaiting",
+  review: "dotReview",
+  park: "dotPark",
+  done: "dotDone",
+};
+
+function priorityGlyph(priority: TaskPriority): string {
+  if (priority === "high") return "!!!";
+  if (priority === "medium") return "!!";
+  return "!";
+}
+
+function priorityTextStyle(priority: TaskPriority) {
+  if (priority === "high") return styles.priorityHigh;
+  if (priority === "medium") return styles.priorityMedium;
+  return styles.priorityLow;
 }
 
 const PLACEHOLDER_COLOR = "#9ca3af";
@@ -345,30 +625,74 @@ const styles = StyleSheet.create((theme) => ({
   addButtonText: { color: theme.colors.palette.white, fontWeight: theme.fontWeight.medium },
   list: { flex: 1, minHeight: 0 },
   listContent: { padding: theme.spacing[3], gap: theme.spacing[2] },
-  row: {
+  rowOuter: {
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surface1,
+    overflow: "hidden",
+  },
+  rowHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[3],
     padding: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
-    backgroundColor: theme.colors.surface1,
   },
+  rowHeaderPressed: { backgroundColor: theme.colors.surface2 },
   rowTitle: { flex: 1, color: theme.colors.foreground, fontSize: theme.fontSize.sm },
   rowTitleDone: { color: theme.colors.foregroundMuted, textDecorationLine: "line-through" },
-  statusChip: {
+  stateLabel: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  stateDot: { width: 10, height: 10, borderRadius: 5 },
+  dotDo: { backgroundColor: theme.colors.accent },
+  dotSchedule: { backgroundColor: theme.colors.palette.blue[500] },
+  dotWaiting: { backgroundColor: theme.colors.palette.amber[500] },
+  dotReview: { backgroundColor: theme.colors.destructive },
+  dotPark: { backgroundColor: theme.colors.foregroundMuted },
+  dotDone: { backgroundColor: theme.colors.palette.green[600] },
+  priorityHigh: {
+    color: theme.colors.destructive,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.bold,
+  },
+  priorityMedium: {
+    color: theme.colors.palette.amber[500],
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.bold,
+  },
+  priorityLow: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.bold,
+  },
+  editor: {
+    padding: theme.spacing[3],
+    gap: theme.spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  fieldRow: { gap: theme.spacing[1] },
+  fieldLabel: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing[1] },
+  chip: {
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[1],
     borderRadius: theme.borderRadius.md,
-    minWidth: 56,
-    alignItems: "center",
+    backgroundColor: theme.colors.surface3,
   },
-  statusChipText: { fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.medium },
-  chipTodo: { backgroundColor: theme.colors.surface3 },
-  chipDoing: { backgroundColor: theme.colors.palette.amber[500] },
-  chipDone: { backgroundColor: theme.colors.palette.green[600] },
-  chipTextTodo: { color: theme.colors.foregroundMuted },
-  chipTextDoing: { color: theme.colors.palette.white },
-  chipTextDone: { color: theme.colors.palette.white },
+  chipSelected: { backgroundColor: theme.colors.accent },
+  chipText: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  chipTextSelected: { color: theme.colors.palette.white },
+  fieldInput: {
+    height: 32,
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+  },
+  editorActions: {
+    flexDirection: "row",
+    gap: theme.spacing[2],
+    marginTop: theme.spacing[1],
+  },
   rowAction: { paddingHorizontal: theme.spacing[2], paddingVertical: theme.spacing[1] },
   rowActionPressed: { opacity: 0.6 },
   rowActionText: { color: theme.colors.accent, fontSize: theme.fontSize.sm },

@@ -56,18 +56,22 @@ test("task CRUD round-trips over the WebSocket protocol", async () => {
     title: "Write the docs",
     body: "## Notes\nDo the thing.\n",
   });
-  expect(created.metadata.status).toBe("todo");
+  expect(created.metadata.actionState).toBe("do");
   expect(created.metadata.title).toBe("Write the docs");
 
   const listed = await client.taskList("proj-crud");
   expect(listed.map((t) => t.metadata.id)).toContain(created.metadata.id);
 
-  const updated = await client.taskUpdate("proj-crud", created.metadata.id, { status: "doing" });
-  expect(updated.metadata.status).toBe("doing");
+  const updated = await client.taskUpdate("proj-crud", created.metadata.id, {
+    actionState: "waiting",
+    priority: "high",
+  });
+  expect(updated.metadata.actionState).toBe("waiting");
+  expect(updated.metadata.priority).toBe("high");
   expect(updated.body).toBe("## Notes\nDo the thing.\n");
 
   const fetched = await client.taskGet("proj-crud", created.metadata.id);
-  expect(fetched?.metadata.status).toBe("doing");
+  expect(fetched?.metadata.actionState).toBe("waiting");
 
   await client.taskDelete("proj-crud", created.metadata.id);
   expect(await client.taskGet("proj-crud", created.metadata.id)).toBeNull();
@@ -104,8 +108,8 @@ test("task.run dispatches a worktree-backed agent and rolls the result up", asyn
     throw new Error(`task.run failed: ${runResult.error}`);
   }
   expect(runResult.agentId).toBeTruthy();
-  // The task is immediately marked doing with the dispatched agent recorded.
-  expect(runResult.task.metadata.status).toBe("doing");
+  // The task is immediately marked waiting (on the agent) with it recorded.
+  expect(runResult.task.metadata.actionState).toBe("waiting");
   expect(runResult.task.metadata.agentId).toBe(runResult.agentId);
   expect(runResult.task.metadata.worktree).toContain(path.sep);
 
@@ -117,7 +121,7 @@ test("task.run dispatches a worktree-backed agent and rolls the result up", asyn
     rolledUp = await client.taskGet("proj-run", task.metadata.id);
   }
   expect(rolledUp?.metadata.result).toBe("success");
-  expect(rolledUp?.metadata.status).toBe("done");
+  expect(rolledUp?.metadata.actionState).toBe("done");
 
   // The task file is the source of truth: confirm it landed on disk as markdown.
   const taskFile = path.join(
@@ -129,7 +133,7 @@ test("task.run dispatches a worktree-backed agent and rolls the result up", asyn
   );
   const raw = await readFile(taskFile, "utf-8");
   expect(raw).toContain("result: success");
-  expect(raw).toContain("status: done");
+  expect(raw).toContain("actionState: done");
 });
 
 test("task.run reports a clean error when the task has no provider", async () => {

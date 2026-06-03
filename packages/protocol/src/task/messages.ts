@@ -1,11 +1,29 @@
 import { z } from "zod";
 
 import {
+  ActionStateSchema,
+  TaskAttentionSchema,
+  TaskPrioritySchema,
   TaskResultSchema,
   TaskRunModeSchema,
-  TaskStatusSchema,
   TaskWireSchema,
 } from "@getpaseo/protocol/task/types";
+
+/** Editable GTD fields shared by create input and update patch. */
+const TaskEditableFields = {
+  actionState: ActionStateSchema.optional(),
+  run: TaskRunModeSchema.optional(),
+  priority: TaskPrioritySchema.nullable().optional(),
+  type: z.string().nullable().optional(),
+  context: z.string().nullable().optional(),
+  attention: TaskAttentionSchema.nullable().optional(),
+  doDate: z.string().nullable().optional(),
+  remind: z.array(z.string()).optional(),
+  provider: z.string().nullable().optional(),
+  links: z.array(z.string()).optional(),
+  github: z.string().nullable().optional(),
+  body: z.string().optional(),
+} as const;
 
 /**
  * WebSocket RPC schemas for the Task primitive. Dotted-namespace convention per
@@ -50,13 +68,7 @@ export const TaskCreateRequestSchema = z.object({
   input: z.object({
     project: z.string().min(1),
     title: z.string().min(1),
-    status: TaskStatusSchema.optional(),
-    run: TaskRunModeSchema.optional(),
-    provider: z.string().nullable().optional(),
-    due: z.string().nullable().optional(),
-    remind: z.array(z.string()).optional(),
-    links: z.array(z.string()).optional(),
-    body: z.string().optional(),
+    ...TaskEditableFields,
   }),
 });
 export const TaskCreateResponseSchema = z.object({
@@ -75,13 +87,7 @@ export const TaskUpdateRequestSchema = z.object({
   id: z.string().min(1),
   patch: z.object({
     title: z.string().min(1).optional(),
-    status: TaskStatusSchema.optional(),
-    run: TaskRunModeSchema.optional(),
-    provider: z.string().nullable().optional(),
-    due: z.string().nullable().optional(),
-    remind: z.array(z.string()).optional(),
-    links: z.array(z.string()).optional(),
-    body: z.string().optional(),
+    ...TaskEditableFields,
     result: TaskResultSchema.nullable().optional(),
   }),
 });
