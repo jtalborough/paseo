@@ -42,6 +42,33 @@ export type TaskAttention = z.infer<typeof TaskAttentionSchema>;
 export const TaskRunModeSchema = z.enum(["self", "agent"]);
 export type TaskRunMode = z.infer<typeof TaskRunModeSchema>;
 
+export const WeekdaySchema = z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
+export type Weekday = z.infer<typeof WeekdaySchema>;
+
+/**
+ * Recurrence rule. When a recurring task is completed the daemon reschedules it
+ * in place (resets to ToDo with the next doDate) — see the server's recurrence
+ * compute. Supports both relative ("every N units") and absolute (weekday /
+ * month-day / year) cadences.
+ */
+export const RecurrenceSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("relative"),
+    every: z.number().int().positive(),
+    unit: z.enum(["day", "week", "month", "year"]),
+    /** treadmill ("completion") vs fixed cadence ("scheduled"). */
+    from: z.enum(["completion", "scheduled"]).default("scheduled"),
+  }),
+  z.object({ kind: z.literal("weekly"), weekdays: z.array(WeekdaySchema).min(1) }),
+  z.object({ kind: z.literal("monthly"), day: z.number().int().min(1).max(31) }),
+  z.object({
+    kind: z.literal("yearly"),
+    month: z.number().int().min(1).max(12),
+    day: z.number().int().min(1).max(31),
+  }),
+]);
+export type Recurrence = z.infer<typeof RecurrenceSchema>;
+
 /** Outcome rolled up from an agent run back onto the task. */
 export const TaskResultSchema = z.enum(["success", "failed"]);
 export type TaskResult = z.infer<typeof TaskResultSchema>;
@@ -102,6 +129,10 @@ export const TaskFrontmatterSchema = z
     // --- Scheduling. ---
     /** When to do it (ISO date or datetime); the GTD defer/do date. */
     doDate: nullableString(),
+    /** Recurrence rule; null for one-off tasks. */
+    recurrence: RecurrenceSchema.nullable()
+      .optional()
+      .transform((value) => value ?? null),
     /** Reminder offsets: absolute ISO datetimes and/or relative like "-3d". */
     remind: z.array(z.string()).default([]),
 
@@ -129,6 +160,12 @@ export const TaskFrontmatterSchema = z
     result: TaskResultSchema.nullable()
       .optional()
       .transform((value) => value ?? null),
+
+    // --- Completion history (for recurring tasks reset in place). ---
+    /** ISO timestamp of the most recent completion. */
+    lastCompletedAt: nullableString(),
+    /** Recent completion timestamps (most recent last), capped by the daemon. */
+    completions: z.array(z.string()).default([]),
 
     // COMPAT(tasks-actionstate): legacy `status` field, folded into actionState
     // in the transform. Kept so files from before Action State still load.
@@ -178,6 +215,7 @@ export interface CreateTaskInput {
   context?: string | null;
   attention?: TaskAttention | null;
   doDate?: string | null;
+  recurrence?: Recurrence | null;
   remind?: string[];
   provider?: string | null;
   links?: string[];
@@ -195,16 +233,19 @@ export interface UpdateTaskInput {
   context?: string | null;
   attention?: TaskAttention | null;
   doDate?: string | null;
+  recurrence?: Recurrence | null;
   remind?: string[];
   provider?: string | null;
   links?: string[];
   github?: string | null;
   body?: string;
-  // Roll-up fields (set by the daemon, not the UI).
+  // Roll-up / completion fields (set by the daemon, not the UI).
   agentId?: string | null;
   worktree?: string | null;
   lastRunAt?: string | null;
   result?: TaskResult | null;
+  lastCompletedAt?: string | null;
+  completions?: string[];
 }
 
 /**
@@ -215,6 +256,7 @@ export interface UpdateTaskInput {
 export const TaskConfigSchema = z.object({
   types: z.array(z.string()).default([]),
   people: z.array(z.string()).default([]),
+  contexts: z.array(z.string()).default([]),
 });
 export type TaskConfig = z.infer<typeof TaskConfigSchema>;
 
@@ -227,3 +269,6 @@ export const DEFAULT_TASK_TYPES: string[] = [
   "meeting",
   "errand",
 ];
+
+/** Sensible starter Context options for a new project (owner can edit). */
+export const DEFAULT_TASK_CONTEXTS: string[] = ["cpu", "desktop", "home", "outdoors", "errands"];

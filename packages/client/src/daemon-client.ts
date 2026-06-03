@@ -3039,6 +3039,15 @@ export class DaemonClient {
     });
   }
 
+  async taskQuery(requestId?: string): Promise<StoredTask[]> {
+    return this.sendNamespacedCorrelatedSessionRequest<"tasks.query.response", StoredTask[]>({
+      requestId,
+      message: { type: "tasks.query.request" },
+      timeout: 15000,
+      selectPayload: (payload) => payload.tasks,
+    });
+  }
+
   async taskGet(project: string, id: string, requestId?: string): Promise<StoredTask | null> {
     // Note: no selectPayload here — a null `task` is a valid result, but the
     // correlation layer treats a null selectPayload return as "not my message".

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   ActionStateSchema,
+  RecurrenceSchema,
   TaskAttentionSchema,
   TaskConfigSchema,
   TaskPrioritySchema,
@@ -20,6 +21,7 @@ const TaskEditableFields = {
   context: z.string().nullable().optional(),
   attention: TaskAttentionSchema.nullable().optional(),
   doDate: z.string().nullable().optional(),
+  recurrence: RecurrenceSchema.nullable().optional(),
   remind: z.array(z.string()).optional(),
   provider: z.string().nullable().optional(),
   links: z.array(z.string()).optional(),
@@ -42,6 +44,19 @@ export const TaskListRequestSchema = z.object({
 });
 export const TaskListResponseSchema = z.object({
   type: z.literal("task.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    tasks: z.array(TaskWireSchema),
+  }),
+});
+
+// --- tasks.query --- (cross-project: powers Inbox / Today / … views)
+export const TaskQueryRequestSchema = z.object({
+  type: z.literal("tasks.query.request"),
+  requestId: z.string(),
+});
+export const TaskQueryResponseSchema = z.object({
+  type: z.literal("tasks.query.response"),
   payload: z.object({
     requestId: z.string(),
     tasks: z.array(TaskWireSchema),
@@ -173,6 +188,7 @@ export const TaskConfigUpdateResponseSchema = z.object({
 
 export const TaskRequestSchemas = [
   TaskListRequestSchema,
+  TaskQueryRequestSchema,
   TaskGetRequestSchema,
   TaskCreateRequestSchema,
   TaskUpdateRequestSchema,
@@ -184,6 +200,7 @@ export const TaskRequestSchemas = [
 
 export const TaskResponseSchemas = [
   TaskListResponseSchema,
+  TaskQueryResponseSchema,
   TaskGetResponseSchema,
   TaskCreateResponseSchema,
   TaskUpdateResponseSchema,

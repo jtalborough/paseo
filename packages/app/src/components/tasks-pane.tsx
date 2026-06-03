@@ -91,7 +91,7 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
     enabled: Boolean(client && projectId && tasksSupported),
     queryFn: async () => {
       if (!client || !projectId) {
-        return { types: [], people: [] } as TaskConfig;
+        return { types: [], people: [], contexts: [] } as TaskConfig;
       }
       return client.taskConfigGet(projectId);
     },
@@ -282,7 +282,7 @@ export function TasksPane({ serverId, workspaceId }: TasksPaneProps) {
   );
 }
 
-const EMPTY_CONFIG: TaskConfig = { types: [], people: [] };
+const EMPTY_CONFIG: TaskConfig = { types: [], people: [], contexts: [] };
 
 function TaskListBody({
   query,

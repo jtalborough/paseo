@@ -4,6 +4,7 @@ import path from "node:path";
 
 import {
   type CreateTaskInput,
+  DEFAULT_TASK_CONTEXTS,
   DEFAULT_TASK_TYPES,
   type StoredTask,
   type TaskConfig,
@@ -13,6 +14,10 @@ import {
   type UpdateTaskInput,
 } from "@getpaseo/protocol/task/types";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+
+import { computeNextDoDate } from "./recurrence.js";
+
+const MAX_COMPLETIONS = 20;
 
 const FRONTMATTER_FENCE = "---";
 
@@ -130,6 +135,7 @@ export class TaskStore {
       context: input.context ?? null,
       attention: input.attention ?? null,
       doDate: input.doDate ?? null,
+      recurrence: input.recurrence ?? null,
       remind: input.remind ?? [],
       provider: input.provider ?? null,
       links: input.links ?? [],
@@ -151,7 +157,8 @@ export class TaskStore {
     if (!existing) {
       throw new Error(`Task not found: ${projectId}/${id}`);
     }
-    const metadata: TaskFrontmatter = TaskFrontmatterSchema.parse({
+    const now = new Date().toISOString();
+    let metadata: TaskFrontmatter = TaskFrontmatterSchema.parse({
       ...existing.metadata,
       ...stripUndefined({
         title: patch.title,
@@ -163,6 +170,7 @@ export class TaskStore {
         context: patch.context,
         attention: patch.attention,
         doDate: patch.doDate,
+        recurrence: patch.recurrence,
         remind: patch.remind,
         provider: patch.provider,
         links: patch.links,
@@ -171,9 +179,31 @@ export class TaskStore {
         worktree: patch.worktree,
         lastRunAt: patch.lastRunAt,
         result: patch.result,
+        lastCompletedAt: patch.lastCompletedAt,
+        completions: patch.completions,
       }),
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     });
+
+    // Recurring task completed → reschedule in place (reset to ToDo, advance
+    // doDate) and record the completion. The daemon owns this so it is
+    // consistent across the UI, mobile, scripts, and agents.
+    const justCompleted =
+      existing.metadata.actionState !== "done" && metadata.actionState === "done";
+    if (justCompleted && metadata.recurrence) {
+      const nextDoDate = computeNextDoDate(metadata.recurrence, {
+        doDate: existing.metadata.doDate,
+        completedAt: now,
+      });
+      metadata = TaskFrontmatterSchema.parse({
+        ...metadata,
+        actionState: "todo",
+        doDate: nextDoDate,
+        lastCompletedAt: now,
+        completions: [...existing.metadata.completions, now].slice(-MAX_COMPLETIONS),
+      });
+    }
+
     const task: StoredTask = {
       metadata,
       body: patch.body ?? existing.body,
@@ -197,7 +227,7 @@ export class TaskStore {
       return TaskConfigSchema.parse(JSON.parse(content));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return { types: [...DEFAULT_TASK_TYPES], people: [] };
+        return { types: [...DEFAULT_TASK_TYPES], people: [], contexts: [...DEFAULT_TASK_CONTEXTS] };
       }
       throw error;
     }

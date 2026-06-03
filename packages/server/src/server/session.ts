@@ -1945,6 +1945,8 @@ export class Session {
         return this.handleWriteProjectConfigRequest(msg);
       case "task.list.request":
         return this.handleTaskListRequest(msg);
+      case "tasks.query.request":
+        return this.handleTaskQueryRequest(msg);
       case "task.get.request":
         return this.handleTaskGetRequest(msg);
       case "task.create.request":
@@ -1971,6 +1973,22 @@ export class Session {
     this.emit({
       type: "task.list.response",
       payload: { requestId: msg.requestId, tasks },
+    });
+  }
+
+  private async handleTaskQueryRequest(
+    msg: Extract<SessionInboundMessage, { type: "tasks.query.request" }>,
+  ): Promise<void> {
+    // Cross-project: enumerate every project and gather its tasks. Powers the
+    // global views (Inbox / Today / …). At personal scale a direct scan is fine;
+    // a derived index can come later if it ever hurts.
+    const projects = await this.projectRegistry.list();
+    const perProject = await Promise.all(
+      projects.map((project) => this.taskStore.list(project.projectId)),
+    );
+    this.emit({
+      type: "tasks.query.response",
+      payload: { requestId: msg.requestId, tasks: perProject.flat() },
     });
   }
 

@@ -54,6 +54,8 @@ import {
 } from "@getpaseo/protocol/loop/rpc-schemas";
 import {
   TaskListRequestSchema,
+  TaskQueryRequestSchema,
+  TaskQueryResponseSchema,
   TaskGetRequestSchema,
   TaskCreateRequestSchema,
   TaskUpdateRequestSchema,
@@ -2007,6 +2009,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopStopRequestSchema,
   // COMPAT(tasks): added in v0.1.89, remove gate after 2026-12-15.
   TaskListRequestSchema,
+  TaskQueryRequestSchema,
   TaskGetRequestSchema,
   TaskCreateRequestSchema,
   TaskUpdateRequestSchema,
@@ -3853,6 +3856,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LoopStopResponseSchema,
   // COMPAT(tasks): added in v0.1.89, remove gate after 2026-12-15.
   TaskListResponseSchema,
+  TaskQueryResponseSchema,
   TaskGetResponseSchema,
   TaskCreateResponseSchema,
   TaskUpdateResponseSchema,

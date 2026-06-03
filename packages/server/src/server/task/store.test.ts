@@ -169,6 +169,29 @@ describe("TaskStore", () => {
     expect(reloaded.people).toEqual(["Chad", "Rachel", "J"]);
   });
 
+  it("reschedules a recurring task in place when completed", async () => {
+    const created = await store.create({
+      project: "proj-rec",
+      title: "Weekly review",
+      doDate: "2026-06-01",
+      recurrence: { kind: "relative", every: 1, unit: "week", from: "scheduled" },
+    });
+    expect(created.metadata.actionState).toBe("todo");
+
+    const completed = await store.update("proj-rec", created.metadata.id, { actionState: "done" });
+
+    // Reset in place: back to ToDo, do-date advanced, completion recorded.
+    expect(completed.metadata.actionState).toBe("todo");
+    expect(completed.metadata.doDate).toBe("2026-06-08");
+    expect(completed.metadata.completions).toHaveLength(1);
+    expect(completed.metadata.lastCompletedAt).not.toBeNull();
+
+    // A non-recurring task simply stays done.
+    const plain = await store.create({ project: "proj-rec", title: "One-off" });
+    const plainDone = await store.update("proj-rec", plain.metadata.id, { actionState: "done" });
+    expect(plainDone.metadata.actionState).toBe("done");
+  });
+
   it("deletes a task", async () => {
     const created = await store.create({ project: "proj-1", title: "Temporary" });
     await store.delete("proj-1", created.metadata.id);
