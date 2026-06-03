@@ -1,7 +1,7 @@
-export type ExplorerTab = "changes" | "files" | "pr";
+export type ExplorerTab = "changes" | "files" | "pr" | "log";
 
 export function isExplorerTab(value: unknown): value is ExplorerTab {
-  return value === "changes" || value === "files" || value === "pr";
+  return value === "changes" || value === "files" || value === "pr" || value === "log";
 }
 
 export function buildExplorerCheckoutKey(serverId: string, cwd: string): string | null {
@@ -14,7 +14,7 @@ export function buildExplorerCheckoutKey(serverId: string, cwd: string): string 
 }
 
 export function coerceExplorerTabForCheckout(tab: ExplorerTab, isGit: boolean): ExplorerTab {
-  if (!isGit && tab === "changes") {
+  if (!isGit && (tab === "changes" || tab === "log")) {
     return "files";
   }
   return tab;
