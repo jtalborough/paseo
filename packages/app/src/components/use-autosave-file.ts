@@ -51,8 +51,17 @@ export function useAutosaveFile({
   const savedContentRef = useRef(initialContent);
   const conflictedRef = useRef(false);
 
-  // Reset when the underlying file changes (different path or a reload).
+  // Re-seed when the underlying file changes. A background refetch after an
+  // autosave re-supplies the content we just saved (with a fresh mtime); fully
+  // resetting then would discard characters typed inside the debounce window and
+  // jump the cursor. So only re-seed on a genuine external change — a different
+  // file (path change) or disk content we have not saved (reload after
+  // conflict). For a post-save refetch, just adopt the new mtime.
   useEffect(() => {
+    if (initialContent === savedContentRef.current) {
+      savedModifiedAtRef.current = initialModifiedAt;
+      return;
+    }
     setContent(initialContent);
     setSaveState({ status: "idle" });
     savedModifiedAtRef.current = initialModifiedAt;

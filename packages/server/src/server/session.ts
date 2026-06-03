@@ -5873,7 +5873,7 @@ export class Session {
         payload: {
           cwd: workspaceCwd,
           path: requestedPath,
-          outcome: "written",
+          outcome: "error",
           modifiedAt: null,
           size: null,
           error: "cwd is required",
@@ -5930,7 +5930,7 @@ export class Session {
         payload: {
           cwd,
           path: requestedPath,
-          outcome: "written",
+          outcome: "error",
           modifiedAt: null,
           size: null,
           error: getErrorMessage(error),
