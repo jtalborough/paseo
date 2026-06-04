@@ -775,19 +775,17 @@ const MobileMountedTabSlot = memo(function MobileMountedTabSlot({
 
 interface MobileExplorerOpenGestureSurfaceProps {
   children: ReactNode;
+  enabled: boolean;
   onOpenExplorer: () => void;
 }
 
 function MobileExplorerOpenGestureSurface({
   children,
+  enabled,
   onOpenExplorer,
 }: MobileExplorerOpenGestureSurfaceProps) {
-  const canOpenExplorerFromAgentView = usePanelStore(
-    (state) =>
-      state.mobileView === "agent" && !selectIsFileExplorerOpen(state, { isCompact: true }),
-  );
   const explorerOpenGesture = useExplorerOpenGesture({
-    enabled: canOpenExplorerFromAgentView,
+    enabled,
     onOpen: onOpenExplorer,
   });
 
@@ -2414,7 +2412,7 @@ function WorkspaceScreenContent({
         const agent =
           useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
         const closePolicy = resolveCloseAgentTabPolicy(agent);
-        const isRunning = agent?.status === "running" || agent?.status === "initializing";
+        const isRunning = agent?.status === "running";
 
         if (isRunning && closePolicy.kind === "archive-on-close") {
           const confirmed = await confirmDialog({
@@ -3454,7 +3452,10 @@ function WorkspaceScreenContent({
 
       <View style={styles.centerContent}>
         {isMobile ? (
-          <MobileExplorerOpenGestureSurface onOpenExplorer={openExplorerForWorkspace}>
+          <MobileExplorerOpenGestureSurface
+            enabled={Boolean(activeExplorerCheckout)}
+            onOpenExplorer={openExplorerForWorkspace}
+          >
             {content}
           </MobileExplorerOpenGestureSurface>
         ) : (

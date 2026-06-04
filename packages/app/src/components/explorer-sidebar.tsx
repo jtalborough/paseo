@@ -24,6 +24,11 @@ import {
   type ExplorerTab,
 } from "@/stores/panel-store";
 import { useExplorerSidebarAnimation } from "@/contexts/explorer-sidebar-animation-context";
+import {
+  MOBILE_VISUAL_PANEL_AGENT,
+  MOBILE_VISUAL_PANEL_FILE_EXPLORER,
+  useSidebarAnimation,
+} from "@/contexts/sidebar-animation-context";
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { GitDiffPane } from "@/git/diff-pane";
 import { GitLogPane } from "@/git/log-pane";
@@ -66,6 +71,8 @@ export function ExplorerSidebar({
   const { width: viewportWidth } = useWindowDimensions();
   const closeTouchStartX = useSharedValue(0);
   const closeTouchStartY = useSharedValue(0);
+  const { mobileVisualPanel, gestureAnimatingRef: mobilePanelGestureAnimatingRef } =
+    useSidebarAnimation();
 
   const { style: mobileKeyboardInsetStyle } = useKeyboardShiftStyle({
     mode: "padding",
@@ -117,10 +124,11 @@ export function ExplorerSidebar({
 
   const handleCloseFromGesture = useCallback(() => {
     gestureAnimatingRef.current = true;
+    mobilePanelGestureAnimatingRef.current = true;
     showMobileAgent();
-  }, [gestureAnimatingRef, showMobileAgent]);
+  }, [gestureAnimatingRef, mobilePanelGestureAnimatingRef, showMobileAgent]);
 
-  const enableSidebarCloseGesture = isMobile && isOpen;
+  const enableSidebarCloseGesture = isMobile;
 
   const handleTabPress = useCallback(
     (tab: ExplorerTab) => {
@@ -161,6 +169,11 @@ export function ExplorerSidebar({
           const absDeltaX = Math.abs(deltaX);
           const absDeltaY = Math.abs(deltaY);
 
+          if (mobileVisualPanel.value !== MOBILE_VISUAL_PANEL_FILE_EXPLORER) {
+            stateManager.fail();
+            return;
+          }
+
           // Fail quickly on clear leftward or vertical intent so child views keep control.
           if (deltaX <= -10) {
             stateManager.fail();
@@ -196,9 +209,11 @@ export function ExplorerSidebar({
             windowWidth,
           });
           if (shouldClose) {
+            mobileVisualPanel.value = MOBILE_VISUAL_PANEL_AGENT;
             animateToClose();
             runOnJS(handleCloseFromGesture)();
           } else {
+            mobileVisualPanel.value = MOBILE_VISUAL_PANEL_FILE_EXPLORER;
             animateToOpen();
           }
         })
@@ -210,6 +225,7 @@ export function ExplorerSidebar({
       windowWidth,
       translateX,
       backdropOpacity,
+      mobileVisualPanel,
       animateToOpen,
       animateToClose,
       handleCloseFromGesture,
