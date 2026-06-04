@@ -41,6 +41,8 @@ interface ExplorerSidebarProps {
   workspaceRoot: string;
   isGit: boolean;
   onOpenFile?: (filePath: string) => void;
+  activeUrl?: string | null;
+  onSwitchBookmark?: (input: { url: string }) => void;
 }
 
 export function ExplorerSidebar({
@@ -49,6 +51,8 @@ export function ExplorerSidebar({
   workspaceRoot,
   isGit,
   onOpenFile,
+  activeUrl = null,
+  onSwitchBookmark,
 }: ExplorerSidebarProps) {
   const { theme } = useUnistyles();
   const isScreenFocused = useIsFocused();
@@ -317,6 +321,8 @@ export function ExplorerSidebar({
               isMobile={isMobile}
               isOpen={isOpen}
               onOpenFile={onOpenFile}
+              activeUrl={activeUrl}
+              onSwitchBookmark={onSwitchBookmark}
             />
           </Animated.View>
         </GestureDetector>
@@ -348,6 +354,8 @@ export function ExplorerSidebar({
           isMobile={false}
           isOpen={isOpen}
           onOpenFile={onOpenFile}
+          activeUrl={activeUrl}
+          onSwitchBookmark={onSwitchBookmark}
         />
       </View>
     </Animated.View>
@@ -393,6 +401,8 @@ interface SidebarContentProps {
   isMobile: boolean;
   isOpen: boolean;
   onOpenFile?: (filePath: string) => void;
+  activeUrl?: string | null;
+  onSwitchBookmark?: (input: { url: string }) => void;
 }
 
 function SidebarContent({
@@ -406,6 +416,8 @@ function SidebarContent({
   isMobile,
   isOpen,
   onOpenFile,
+  activeUrl = null,
+  onSwitchBookmark,
 }: SidebarContentProps) {
   const { theme } = useUnistyles();
   const padding = useWindowControlsPadding("explorerSidebar");
@@ -500,6 +512,8 @@ function SidebarContent({
           isOpen={isOpen}
           onOpenFile={onOpenFile}
           prData={prPane.data}
+          activeUrl={activeUrl}
+          onSwitchBookmark={onSwitchBookmark}
         />
       </View>
     </View>
@@ -515,6 +529,8 @@ function SidebarTabContent({
   isOpen,
   onOpenFile,
   prData,
+  activeUrl,
+  onSwitchBookmark,
 }: {
   resolvedTab: ExplorerTab;
   serverId: string;
@@ -524,6 +540,8 @@ function SidebarTabContent({
   isOpen: boolean;
   onOpenFile?: (filePath: string) => void;
   prData: ReturnType<typeof usePrPaneData>["data"];
+  activeUrl?: string | null;
+  onSwitchBookmark?: (input: { url: string }) => void;
 }) {
   if (resolvedTab === "changes") {
     return (
@@ -551,7 +569,12 @@ function SidebarTabContent({
   }
   if (resolvedTab === "bookmarks") {
     return workspaceId ? (
-      <BrowserBookmarksPane serverId={serverId} workspaceId={workspaceId} />
+      <BrowserBookmarksPane
+        serverId={serverId}
+        workspaceId={workspaceId}
+        activeUrl={activeUrl ?? null}
+        onSwitchBookmark={onSwitchBookmark}
+      />
     ) : null;
   }
   return null;

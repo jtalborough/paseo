@@ -11,9 +11,9 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import {
   ArrowLeft,
   ArrowRight,
+  Bookmark,
   MousePointer2,
   PencilRuler,
-  Pin,
   RotateCw,
 } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -32,9 +32,9 @@ import {
 import { isDev } from "@/constants/platform";
 import { useBrowserStore, normalizeWorkspaceBrowserUrl } from "@/stores/browser-store";
 import {
-  buildWorkspacePinsKey,
-  useIsBrowserPinned,
-  useWorkspacePinsStore,
+  buildWorkspaceBookmarksKey,
+  useIsUrlBookmarked,
+  useWorkspaceBookmarksStore,
 } from "@/stores/workspace-pins";
 
 type ElectronWebview = HTMLElement & {
@@ -90,15 +90,26 @@ function getWebviewLoadErrorMessage(event: Event): string | null {
   return url ? `${description}: ${url}` : description;
 }
 
+// Loads that are superseded/cancelled — most commonly when switching tabs or
+// navigating again before the prior load settles — reject with ERR_ABORTED. The
+// webview surfaces this as the numeric Chromium code "(-3)" (e.g.
+// "GUEST_VIEW_MANAGER_CALL: Error: (-3) loading ...") rather than the textual
+// name, so match both. These are benign and must not be shown as load errors.
+function isIgnorableLoadError(text: string): boolean {
+  return (
+    text.includes("ERR_ABORTED") || text.includes("ERR_BLOCKED_BY_CLIENT") || text.includes("(-3)")
+  );
+}
+
 function getLoadUrlRejectionMessage(error: unknown): string | null {
   if (error instanceof Error && error.message.trim()) {
-    if (error.message.includes("ERR_ABORTED") || error.message.includes("ERR_BLOCKED_BY_CLIENT")) {
+    if (isIgnorableLoadError(error.message)) {
       return null;
     }
     return error.message.trim();
   }
   if (typeof error === "string" && error.trim()) {
-    if (error.includes("ERR_ABORTED") || error.includes("ERR_BLOCKED_BY_CLIENT")) {
+    if (isIgnorableLoadError(error)) {
       return null;
     }
     return error.trim();
@@ -884,37 +895,39 @@ export function BrowserPane({
     startElementSelector();
   }, [cancelElementSelector, selectorActive, startElementSelector]);
 
-  const workspacePinsKey = useMemo(
-    () => buildWorkspacePinsKey({ serverId, workspaceId }),
+  const bookmarksKey = useMemo(
+    () => buildWorkspaceBookmarksKey({ serverId, workspaceId }),
     [serverId, workspaceId],
   );
-  const isPinned = useIsBrowserPinned(workspacePinsKey, browserId);
-  const addPin = useWorkspacePinsStore((state) => state.addPin);
-  const removePin = useWorkspacePinsStore((state) => state.removePin);
+  const currentUrl = browser?.url ?? "";
+  const isBookmarked = useIsUrlBookmarked(bookmarksKey, currentUrl);
+  const addBookmark = useWorkspaceBookmarksStore((state) => state.addBookmark);
+  const removeBookmarkByUrl = useWorkspaceBookmarksStore((state) => state.removeBookmarkByUrl);
 
-  const handleTogglePin = useCallback(() => {
-    if (!workspacePinsKey) {
-      return;
-    }
-    if (isPinned) {
-      removePin(workspacePinsKey, browserId);
-      return;
-    }
+  const handleToggleBookmark = useCallback(() => {
     const current = browserRef.current;
-    addPin(workspacePinsKey, {
-      browserId,
-      url: current?.url ?? initialUrlRef.current,
+    const url = current?.url ?? "";
+    if (!bookmarksKey || !url) {
+      return;
+    }
+    if (isBookmarked) {
+      removeBookmarkByUrl(bookmarksKey, url);
+      return;
+    }
+    addBookmark(bookmarksKey, {
+      url,
       name: current?.title?.trim() ?? "",
+      faviconUrl: current?.faviconUrl ?? null,
     });
-  }, [addPin, browserId, isPinned, removePin, workspacePinsKey]);
+  }, [addBookmark, bookmarksKey, isBookmarked, removeBookmarkByUrl]);
 
-  const pinIconButtonStyle = useCallback(
+  const bookmarkIconButtonStyle = useCallback(
     ({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
       styles.iconButton,
-      isPinned && styles.selectorActiveButton,
+      isBookmarked && styles.selectorActiveButton,
       (hovered || pressed) && styles.iconButtonHovered,
     ],
-    [isPinned],
+    [isBookmarked],
   );
 
   const handleOpenDevTools = useCallback(() => {
@@ -1041,14 +1054,14 @@ export function BrowserPane({
         <View style={styles.chromeRight}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={isPinned ? "Remove bookmark" : "Bookmark this page"}
-            onPress={handleTogglePin}
-            style={pinIconButtonStyle}
+            accessibilityLabel={isBookmarked ? "Remove bookmark" : "Bookmark this page"}
+            onPress={handleToggleBookmark}
+            style={bookmarkIconButtonStyle}
           >
-            <Pin
+            <Bookmark
               size={16}
-              color={isPinned ? theme.colors.accent : theme.colors.foregroundMuted}
-              fill={isPinned ? theme.colors.accent : "transparent"}
+              color={isBookmarked ? theme.colors.accent : theme.colors.foregroundMuted}
+              fill={isBookmarked ? theme.colors.accent : "transparent"}
             />
           </Pressable>
           {isDev ? (

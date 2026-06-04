@@ -1,167 +1,197 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyAddPin,
-  applyPurgeWorkspacePins,
-  applyRemovePin,
-  applyRenamePin,
-  applyReorderPins,
-  buildWorkspacePinsKey,
-  selectIsBrowserPinned,
-  selectWorkspacePins,
-  sanitizeWorkspacePinsForPersist,
-  type WorkspacePinsIndexState,
+  applyAddBookmark,
+  applyPurgeWorkspaceBookmarks,
+  applyRemoveBookmark,
+  applyRemoveBookmarkByUrl,
+  applyRenameBookmark,
+  applyReorderBookmarks,
+  buildWorkspaceBookmarksKey,
+  migrateLegacyPins,
+  sanitizeWorkspaceBookmarksForPersist,
+  selectIsUrlBookmarked,
+  selectWorkspaceBookmarks,
+  type WorkspaceBookmarksIndexState,
 } from "./state";
 
 const KEY = "server-1:workspace-1";
 
-function withPins(
-  pins: Array<{ browserId: string; url?: string; name?: string; createdAt?: number }>,
+function withBookmarks(
+  bookmarks: Array<{ id: string; url?: string; name?: string; faviconUrl?: string | null }>,
 ) {
   return {
-    pinsByWorkspace: {
-      [KEY]: pins.map((pin) => ({
-        browserId: pin.browserId,
-        url: pin.url ?? "https://example.com",
-        name: pin.name ?? "",
-        createdAt: pin.createdAt ?? 0,
+    bookmarksByWorkspace: {
+      [KEY]: bookmarks.map((bookmark, index) => ({
+        id: bookmark.id,
+        url: bookmark.url ?? `https://example.com/${index}`,
+        name: bookmark.name ?? "",
+        faviconUrl: bookmark.faviconUrl ?? null,
+        createdAt: 0,
       })),
     },
-  } satisfies WorkspacePinsIndexState;
+  } satisfies WorkspaceBookmarksIndexState;
 }
 
-describe("buildWorkspacePinsKey", () => {
+describe("buildWorkspaceBookmarksKey", () => {
   it("joins server and workspace ids", () => {
-    expect(buildWorkspacePinsKey({ serverId: "s", workspaceId: "w" })).toBe("s:w");
+    expect(buildWorkspaceBookmarksKey({ serverId: "s", workspaceId: "w" })).toBe("s:w");
   });
 
   it("returns null when either id is blank", () => {
-    expect(buildWorkspacePinsKey({ serverId: "  ", workspaceId: "w" })).toBeNull();
-    expect(buildWorkspacePinsKey({ serverId: "s", workspaceId: "" })).toBeNull();
+    expect(buildWorkspaceBookmarksKey({ serverId: "  ", workspaceId: "w" })).toBeNull();
   });
 });
 
-describe("applyAddPin", () => {
-  it("appends a pin with a trimmed name", () => {
-    const next = applyAddPin({ pinsByWorkspace: {} }, KEY, {
-      browserId: "b1",
+describe("applyAddBookmark", () => {
+  it("appends a bookmark with trimmed fields", () => {
+    const next = applyAddBookmark({ bookmarksByWorkspace: {} }, KEY, {
+      id: "b1",
       url: "https://docs.test",
       name: "  Docs  ",
+      faviconUrl: "https://docs.test/favicon.ico",
       now: 5,
     });
-    expect(selectWorkspacePins(next, KEY)).toEqual([
-      { browserId: "b1", url: "https://docs.test", name: "Docs", createdAt: 5 },
+    expect(selectWorkspaceBookmarks(next, KEY)).toEqual([
+      {
+        id: "b1",
+        url: "https://docs.test",
+        name: "Docs",
+        faviconUrl: "https://docs.test/favicon.ico",
+        createdAt: 5,
+      },
     ]);
   });
 
-  it("is idempotent for an already-pinned browser", () => {
-    const initial = withPins([{ browserId: "b1", name: "Docs" }]);
-    expect(
-      applyAddPin(initial, KEY, { browserId: "b1", url: "https://x.test", name: "Other", now: 9 }),
-    ).toBe(initial);
+  it("deduplicates by url", () => {
+    const initial = withBookmarks([{ id: "b1", url: "https://docs.test" }]);
+    expect(applyAddBookmark(initial, KEY, { id: "b2", url: "https://docs.test", now: 9 })).toBe(
+      initial,
+    );
   });
 
-  it("ignores blank ids", () => {
-    const initial = withPins([{ browserId: "b1" }]);
-    expect(applyAddPin(initial, KEY, { browserId: "   ", url: "https://x.test", now: 1 })).toBe(
+  it("ignores blank id or url", () => {
+    const initial = withBookmarks([{ id: "b1" }]);
+    expect(applyAddBookmark(initial, KEY, { id: "  ", url: "https://x.test", now: 1 })).toBe(
       initial,
     );
-    expect(applyAddPin(initial, "  ", { browserId: "b2", url: "https://x.test", now: 1 })).toBe(
-      initial,
-    );
+    expect(applyAddBookmark(initial, KEY, { id: "b2", url: "   ", now: 1 })).toBe(initial);
   });
 });
 
-describe("applyRenamePin", () => {
+describe("applyRenameBookmark", () => {
   it("updates the name", () => {
-    const initial = withPins([{ browserId: "b1", name: "Old" }]);
-    const next = applyRenamePin(initial, KEY, "b1", "  New  ");
-    expect(selectWorkspacePins(next, KEY)[0]?.name).toBe("New");
+    const initial = withBookmarks([{ id: "b1", name: "Old" }]);
+    const next = applyRenameBookmark(initial, KEY, "b1", "  New  ");
+    expect(selectWorkspaceBookmarks(next, KEY)[0]?.name).toBe("New");
   });
 
-  it("returns same state when name is unchanged", () => {
-    const initial = withPins([{ browserId: "b1", name: "Same" }]);
-    expect(applyRenamePin(initial, KEY, "b1", "Same")).toBe(initial);
-  });
-
-  it("returns same state for unknown browser", () => {
-    const initial = withPins([{ browserId: "b1", name: "x" }]);
-    expect(applyRenamePin(initial, KEY, "missing", "y")).toBe(initial);
+  it("returns same state when unchanged", () => {
+    const initial = withBookmarks([{ id: "b1", name: "Same" }]);
+    expect(applyRenameBookmark(initial, KEY, "b1", "Same")).toBe(initial);
   });
 });
 
-describe("applyRemovePin", () => {
-  it("removes the pin", () => {
-    const initial = withPins([{ browserId: "b1" }, { browserId: "b2" }]);
-    const next = applyRemovePin(initial, KEY, "b1");
-    expect(selectWorkspacePins(next, KEY).map((p) => p.browserId)).toEqual(["b2"]);
+describe("applyRemoveBookmark", () => {
+  it("removes by id", () => {
+    const initial = withBookmarks([{ id: "b1" }, { id: "b2" }]);
+    const next = applyRemoveBookmark(initial, KEY, "b1");
+    expect(selectWorkspaceBookmarks(next, KEY).map((b) => b.id)).toEqual(["b2"]);
   });
 
-  it("drops the workspace key when last pin is removed", () => {
-    const initial = withPins([{ browserId: "b1" }]);
-    const next = applyRemovePin(initial, KEY, "b1");
-    expect(KEY in next.pinsByWorkspace).toBe(false);
-  });
-
-  it("returns same state for unknown browser", () => {
-    const initial = withPins([{ browserId: "b1" }]);
-    expect(applyRemovePin(initial, KEY, "missing")).toBe(initial);
+  it("drops the workspace key when last is removed", () => {
+    const initial = withBookmarks([{ id: "b1" }]);
+    const next = applyRemoveBookmark(initial, KEY, "b1");
+    expect(KEY in next.bookmarksByWorkspace).toBe(false);
   });
 });
 
-describe("applyReorderPins", () => {
+describe("applyRemoveBookmarkByUrl", () => {
+  it("removes by url", () => {
+    const initial = withBookmarks([
+      { id: "b1", url: "https://a.test" },
+      { id: "b2", url: "https://b.test" },
+    ]);
+    const next = applyRemoveBookmarkByUrl(initial, KEY, "https://a.test");
+    expect(selectWorkspaceBookmarks(next, KEY).map((b) => b.id)).toEqual(["b2"]);
+  });
+});
+
+describe("applyReorderBookmarks", () => {
   it("reorders by the provided id order", () => {
-    const initial = withPins([{ browserId: "a" }, { browserId: "b" }, { browserId: "c" }]);
-    const next = applyReorderPins(initial, KEY, ["c", "a", "b"]);
-    expect(selectWorkspacePins(next, KEY).map((p) => p.browserId)).toEqual(["c", "a", "b"]);
+    const initial = withBookmarks([{ id: "a" }, { id: "b" }, { id: "c" }]);
+    const next = applyReorderBookmarks(initial, KEY, ["c", "a", "b"]);
+    expect(selectWorkspaceBookmarks(next, KEY).map((b) => b.id)).toEqual(["c", "a", "b"]);
   });
 
-  it("appends omitted pins preserving their order", () => {
-    const initial = withPins([{ browserId: "a" }, { browserId: "b" }, { browserId: "c" }]);
-    const next = applyReorderPins(initial, KEY, ["c"]);
-    expect(selectWorkspacePins(next, KEY).map((p) => p.browserId)).toEqual(["c", "a", "b"]);
-  });
-
-  it("returns same state when order is unchanged", () => {
-    const initial = withPins([{ browserId: "a" }, { browserId: "b" }]);
-    expect(applyReorderPins(initial, KEY, ["a", "b"])).toBe(initial);
+  it("appends omitted ids preserving order", () => {
+    const initial = withBookmarks([{ id: "a" }, { id: "b" }, { id: "c" }]);
+    const next = applyReorderBookmarks(initial, KEY, ["c"]);
+    expect(selectWorkspaceBookmarks(next, KEY).map((b) => b.id)).toEqual(["c", "a", "b"]);
   });
 });
 
-describe("applyPurgeWorkspacePins", () => {
-  it("removes all pins for the workspace", () => {
-    const initial = withPins([{ browserId: "a" }]);
-    const next = applyPurgeWorkspacePins(initial, KEY);
-    expect(next.pinsByWorkspace).toEqual({});
-  });
-
-  it("returns same state for an unknown workspace", () => {
-    const initial = withPins([{ browserId: "a" }]);
-    expect(applyPurgeWorkspacePins(initial, "other:ws")).toBe(initial);
+describe("selectIsUrlBookmarked", () => {
+  it("reports membership by url", () => {
+    const initial = withBookmarks([{ id: "b1", url: "https://a.test" }]);
+    expect(selectIsUrlBookmarked(initial, KEY, "https://a.test")).toBe(true);
+    expect(selectIsUrlBookmarked(initial, KEY, "https://b.test")).toBe(false);
+    expect(selectIsUrlBookmarked(initial, null, "https://a.test")).toBe(false);
   });
 });
 
-describe("selectIsBrowserPinned", () => {
-  it("reports membership", () => {
-    const initial = withPins([{ browserId: "a" }]);
-    expect(selectIsBrowserPinned(initial, KEY, "a")).toBe(true);
-    expect(selectIsBrowserPinned(initial, KEY, "b")).toBe(false);
-    expect(selectIsBrowserPinned(initial, null, "a")).toBe(false);
+describe("applyPurgeWorkspaceBookmarks", () => {
+  it("removes all bookmarks for the workspace", () => {
+    const initial = withBookmarks([{ id: "a" }]);
+    expect(applyPurgeWorkspaceBookmarks(initial, KEY).bookmarksByWorkspace).toEqual({});
   });
 });
 
-describe("sanitizeWorkspacePinsForPersist", () => {
-  it("drops blank ids and normalizes fields", () => {
-    const state: WorkspacePinsIndexState = {
-      pinsByWorkspace: {
+describe("sanitizeWorkspaceBookmarksForPersist", () => {
+  it("drops entries missing id or url", () => {
+    const state: WorkspaceBookmarksIndexState = {
+      bookmarksByWorkspace: {
         [KEY]: [
-          { browserId: "a", url: "https://a.test", name: "  A  ", createdAt: 3 },
-          { browserId: "   ", url: "https://bad.test", name: "bad", createdAt: 1 },
+          { id: "a", url: "https://a.test", name: "  A  ", faviconUrl: "  ", createdAt: 3 },
+          { id: "   ", url: "https://bad.test", name: "bad", faviconUrl: null, createdAt: 1 },
         ],
       },
     };
-    const next = sanitizeWorkspacePinsForPersist(state);
-    expect(next.pinsByWorkspace[KEY]).toEqual([
-      { browserId: "a", url: "https://a.test", name: "A", createdAt: 3 },
+    const next = sanitizeWorkspaceBookmarksForPersist(state);
+    expect(next.bookmarksByWorkspace[KEY]).toEqual([
+      { id: "a", url: "https://a.test", name: "A", faviconUrl: null, createdAt: 3 },
     ]);
+  });
+});
+
+describe("migrateLegacyPins", () => {
+  it("converts legacy browserId pins to url bookmarks", () => {
+    const legacy = {
+      pinsByWorkspace: {
+        [KEY]: [
+          { browserId: "br1", url: "https://a.test", name: "A", createdAt: 2 },
+          { browserId: "br2", url: "https://a.test", name: "dup", createdAt: 3 },
+          { browserId: "br3", url: "https://b.test", name: "B", createdAt: 4 },
+        ],
+      },
+    };
+    const next = migrateLegacyPins(legacy);
+    expect(next.bookmarksByWorkspace[KEY]).toEqual([
+      { id: "br1", url: "https://a.test", name: "A", faviconUrl: null, createdAt: 2 },
+      { id: "br3", url: "https://b.test", name: "B", faviconUrl: null, createdAt: 4 },
+    ]);
+  });
+
+  it("passes through already-migrated bookmark shape", () => {
+    const next = migrateLegacyPins({
+      bookmarksByWorkspace: {
+        [KEY]: [{ id: "b1", url: "https://a.test", name: "A", faviconUrl: null, createdAt: 1 }],
+      },
+    });
+    expect(next.bookmarksByWorkspace[KEY]?.[0]?.id).toBe("b1");
+  });
+
+  it("returns empty for unknown shapes", () => {
+    expect(migrateLegacyPins(null).bookmarksByWorkspace).toEqual({});
+    expect(migrateLegacyPins({ foo: 1 }).bookmarksByWorkspace).toEqual({});
   });
 });
