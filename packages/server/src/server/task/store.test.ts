@@ -106,6 +106,20 @@ describe("TaskStore", () => {
     expect(await store.listProjects()).toEqual(expect.arrayContaining(["alpha", "beta"]));
   });
 
+  it("queryAll finds tasks under project keys that contain slashes", async () => {
+    // Real projectIds are git-remote/path based and nest into subdirectories.
+    const gitProject = "remote:github.com/jtalborough/paseo";
+    const pathProject = "Users/jta/git-projects/maveneer";
+    const created = await store.create({ project: gitProject, title: "Nested task" });
+    await store.create({ project: pathProject, title: "Path task" });
+
+    const all = await store.queryAll();
+    expect(all).toHaveLength(2);
+    expect(all.map((t) => t.metadata.title).sort()).toEqual(["Nested task", "Path task"]);
+    // The slashed project survives a per-project round-trip too.
+    expect(await store.get(gitProject, created.metadata.id)).not.toBeNull();
+  });
+
   it("returns an empty list for a project with no tasks", async () => {
     expect(await store.list("never-seen")).toEqual([]);
   });

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import type { Dirent } from "node:fs";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -102,24 +103,47 @@ export class TaskStore {
     await mkdir(this.projectDir(project), { recursive: true });
   }
 
-  /** List the project folders present in the vault. */
+  /**
+   * All tasks across every project in the vault — powers cross-project views.
+   * Walks the vault recursively because project keys can contain slashes (e.g.
+   * `remote:github.com/jtalborough/paseo`, or a filesystem path for non-git
+   * projects), which nest into subdirectories. Each task's `project` is read
+   * from its frontmatter, so the on-disk depth doesn't matter.
+   */
+  async queryAll(): Promise<StoredTask[]> {
+    const files = await this.collectMarkdownFiles(this.vaultRoot);
+    const tasks = await Promise.all(files.map((file) => this.readFile(file)));
+    return tasks.sort((left, right) =>
+      left.metadata.createdAt.localeCompare(right.metadata.createdAt),
+    );
+  }
+
+  /** Distinct project keys present in the vault (from task frontmatter). */
   async listProjects(): Promise<string[]> {
+    const tasks = await this.queryAll();
+    return Array.from(new Set(tasks.map((task) => task.metadata.project)));
+  }
+
+  private async collectMarkdownFiles(dir: string): Promise<string[]> {
+    let entries: Dirent[];
     try {
-      const entries = await readdir(this.vaultRoot, { withFileTypes: true });
-      return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+      entries = await readdir(dir, { withFileTypes: true });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return [];
       }
       throw error;
     }
-  }
-
-  /** All tasks across every project in the vault — powers cross-project views. */
-  async queryAll(): Promise<StoredTask[]> {
-    const projects = await this.listProjects();
-    const perProject = await Promise.all(projects.map((project) => this.list(project)));
-    return perProject.flat();
+    const files: string[] = [];
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...(await this.collectMarkdownFiles(full)));
+      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+        files.push(full);
+      }
+    }
+    return files;
   }
 
   async list(project: string): Promise<StoredTask[]> {
