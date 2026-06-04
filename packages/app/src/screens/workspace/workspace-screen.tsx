@@ -104,6 +104,7 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { createWorkspaceBrowser, useBrowserStore } from "@/stores/browser-store";
+import { selectIsBrowserPinned, useWorkspacePinsStore } from "@/stores/workspace-pins";
 import { getDesktopHost } from "@/desktop/host";
 import { buildProviderCommand } from "@/utils/provider-command-templates";
 import { generateDraftId } from "@/stores/draft-keys";
@@ -191,6 +192,31 @@ function getWorkspaceScripts(
   workspaceDescriptor: WorkspaceDescriptor | null | undefined,
 ): WorkspaceDescriptor["scripts"] {
   return workspaceDescriptor?.scripts ?? EMPTY_WORKSPACE_SCRIPTS;
+}
+
+interface WorkspaceFileLocationFields {
+  path: string | null;
+  lineStart?: number;
+  lineEnd?: number;
+}
+
+function getWorkspaceFileLocationFields(
+  tab: WorkspaceTabDescriptor | null,
+): WorkspaceFileLocationFields {
+  const target = tab?.target;
+  if (target?.kind !== "file") {
+    return { path: null };
+  }
+  return { path: target.path, lineStart: target.lineStart, lineEnd: target.lineEnd };
+}
+
+function buildWorkspaceFileLocation(
+  fields: WorkspaceFileLocationFields,
+): WorkspaceFileLocation | null {
+  if (fields.path === null) {
+    return null;
+  }
+  return { path: fields.path, lineStart: fields.lineStart, lineEnd: fields.lineEnd };
 }
 
 const ThemedActivityIndicator = withUnistyles(ActivityIndicator);
@@ -1816,8 +1842,17 @@ function WorkspaceScreenContent({
       }
       if (input.target?.kind === "browser") {
         const { browserId } = input.target;
-        useBrowserStore.getState().removeBrowser(browserId);
-        void getDesktopHost()?.browser?.clearPartition?.(browserId);
+        // A pinned browser owns a persistent session that must survive tab close;
+        // only tear down the record and partition for unpinned (ad-hoc) browsers.
+        const isPinned = selectIsBrowserPinned(
+          useWorkspacePinsStore.getState(),
+          persistenceKey,
+          browserId,
+        );
+        if (!isPinned) {
+          useBrowserStore.getState().removeBrowser(browserId);
+          void getDesktopHost()?.browser?.clearPartition?.(browserId);
+        }
       }
       closeWorkspaceTab(persistenceKey, normalizedTabId);
     },
@@ -2870,6 +2905,19 @@ function WorkspaceScreenContent({
   });
 
   const activeTabDescriptor = useMemo(() => activeTab?.descriptor ?? null, [activeTab]);
+  const activeFileFields = getWorkspaceFileLocationFields(activeTabDescriptor);
+  const activeFilePath = activeFileFields.path;
+  const activeFileLineStart = activeFileFields.lineStart;
+  const activeFileLineEnd = activeFileFields.lineEnd;
+  const activeFileLocation = useMemo<WorkspaceFileLocation | null>(
+    () =>
+      buildWorkspaceFileLocation({
+        path: activeFilePath,
+        lineStart: activeFileLineStart,
+        lineEnd: activeFileLineEnd,
+      }),
+    [activeFileLineEnd, activeFileLineStart, activeFilePath],
+  );
   const canRenderDesktopPaneSplits = supportsDesktopPaneSplits();
   const shouldRenderDesktopPaneFallback = useMemo(
     () => !isMobile && !canRenderDesktopPaneSplits,
@@ -3102,10 +3150,11 @@ function WorkspaceScreenContent({
             hideLabels={showCompactButtonLabels}
           />
         ) : null}
-        {!isMobile ? (
+        {!isMobile && workspaceDirectory ? (
           <WorkspaceOpenInEditorButton
             serverId={normalizedServerId}
-            cwd={normalizedWorkspaceId}
+            cwd={workspaceDirectory}
+            activeFile={activeFileLocation}
             hideLabels={showCompactButtonLabels}
           />
         ) : null}
@@ -3212,6 +3261,8 @@ function WorkspaceScreenContent({
       workspaceDescriptor,
       normalizedServerId,
       normalizedWorkspaceId,
+      workspaceDirectory,
+      activeFileLocation,
       liveTerminalIds,
       handleScriptTerminalStarted,
       handleViewScriptTerminal,

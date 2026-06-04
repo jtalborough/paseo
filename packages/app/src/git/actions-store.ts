@@ -9,6 +9,13 @@ import {
 import { useSessionStore } from "@/stores/session-store";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
 import { useWorkspaceTabsStore } from "@/stores/workspace-tabs-store";
+import { useBrowserStore } from "@/stores/browser-store";
+import {
+  buildWorkspacePinsKey,
+  selectWorkspacePins,
+  useWorkspacePinsStore,
+} from "@/stores/workspace-pins";
+import { getDesktopHost } from "@/desktop/host";
 import {
   clearWorkspaceArchivePending,
   markWorkspaceArchivePending,
@@ -203,6 +210,17 @@ function purgeArchivedWorkspaceState(input: { serverId: string; worktreePath: st
   const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
   if (workspaceKey) {
     useWorkspaceLayoutStore.getState().purgeWorkspace(workspaceKey);
+    // Tear down the persistent browser sessions owned by this workspace's pins,
+    // then drop the pins themselves (ad-hoc browsers are already cleaned on tab close).
+    const pinsKey = buildWorkspacePinsKey({ serverId, workspaceId });
+    if (pinsKey) {
+      const pins = selectWorkspacePins(useWorkspacePinsStore.getState(), pinsKey);
+      for (const pin of pins) {
+        useBrowserStore.getState().removeBrowser(pin.browserId);
+        void getDesktopHost()?.browser?.clearPartition?.(pin.browserId);
+      }
+      useWorkspacePinsStore.getState().purgeWorkspacePins(pinsKey);
+    }
   }
   useWorkspaceTabsStore.getState().purgeWorkspace({ serverId, workspaceId });
 }

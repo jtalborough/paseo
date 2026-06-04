@@ -57,6 +57,7 @@ describe("createBrowserRecord", () => {
       canGoForward: false,
       faviconUrl: null,
       lastError: null,
+      pendingUrl: null,
       createdAt: 1000,
     });
   });

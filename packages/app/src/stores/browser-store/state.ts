@@ -7,6 +7,10 @@ export interface BrowserRecord {
   canGoForward: boolean;
   faviconUrl: string | null;
   lastError: string | null;
+  // Transient one-shot navigation request. Set by external callers (e.g. the
+  // bookmarks sidebar "return home") and cleared by the pane once it navigates.
+  // Never persisted.
+  pendingUrl: string | null;
   createdAt: number;
 }
 
@@ -55,6 +59,7 @@ export function createBrowserRecord(input: {
     canGoForward: false,
     faviconUrl: null,
     lastError: null,
+    pendingUrl: null,
     createdAt: input.now,
   };
 }
@@ -86,7 +91,8 @@ export function applyBrowserPatch<S extends BrowserIndexState>(
     nextRecord.canGoBack === existing.canGoBack &&
     nextRecord.canGoForward === existing.canGoForward &&
     nextRecord.faviconUrl === existing.faviconUrl &&
-    nextRecord.lastError === existing.lastError
+    nextRecord.lastError === existing.lastError &&
+    nextRecord.pendingUrl === existing.pendingUrl
   ) {
     return state;
   }
@@ -123,7 +129,7 @@ export function sanitizeBrowsersForPersist(state: BrowserIndexState): {
     browsersById: Object.fromEntries(
       Object.entries(state.browsersById).map(([browserId, browser]) => [
         browserId,
-        { ...browser, isLoading: false, lastError: null },
+        { ...browser, isLoading: false, lastError: null, pendingUrl: null },
       ]),
     ),
   };

@@ -25,6 +25,14 @@ export function checkoutPrStatusQueryKey(serverId: string, cwd: string) {
   return ["checkoutPrStatus", serverId, cwd] as const;
 }
 
+export function gitLogQueryKey(serverId: string, cwd: string) {
+  return ["gitLog", serverId, cwd] as const;
+}
+
+export function commitDiffQueryKey(serverId: string, cwd: string, sha: string) {
+  return ["commitDiff", serverId, cwd, sha] as const;
+}
+
 export function prPaneTimelineQueryKey({
   serverId,
   cwd,

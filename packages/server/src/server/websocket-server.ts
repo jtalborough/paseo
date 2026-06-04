@@ -125,6 +125,8 @@ function createFallbackWorkspaceGitService(): WorkspaceGitService {
     hasLocalBranch: async () => false,
     suggestBranchesForCwd: async () => [],
     listStashes: async () => [],
+    listGitLog: async () => ({ commits: [], hasMore: false }),
+    getCommitDiff: async () => ({ diff: "" }),
     listWorktrees: async () => [],
     getWorkspaceGitMetadata: async (cwd: string, options) => {
       const snapshot = createFallbackWorkspaceGitSnapshot(cwd);
@@ -1065,6 +1067,8 @@ export class VoiceAssistantWebSocketServer {
         "fs-write": true,
         // COMPAT(tasks): added in v0.1.89, remove gate after 2026-12-15.
         tasks: true,
+        // COMPAT(gitLog): added in v0.1.X, remove gate after 2026-12-01.
+        gitLog: true,
       },
     };
   }

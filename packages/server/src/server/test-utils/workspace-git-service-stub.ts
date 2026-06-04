@@ -55,6 +55,8 @@ export function createNoopWorkspaceGitService(
     hasLocalBranch: async () => false,
     suggestBranchesForCwd: async () => [],
     listStashes: async () => [],
+    listGitLog: async () => ({ commits: [], hasMore: false }),
+    getCommitDiff: async (): Promise<CheckoutDiffResult> => ({ diff: "" }),
     listWorktrees: async () => [],
     getWorkspaceGitMetadata: async (cwd: string, options): Promise<WorkspaceGitMetadata> => {
       const snapshot = createNoGitWorkspaceRuntimeSnapshot(cwd);

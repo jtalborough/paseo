@@ -793,7 +793,7 @@ function SplitDiffColumn({
   );
 }
 
-const DiffFileHeader = memo(function DiffFileHeader({
+export const DiffFileHeader = memo(function DiffFileHeader({
   file,
   isExpanded,
   onToggle,
@@ -892,7 +892,7 @@ const DiffFileHeader = memo(function DiffFileHeader({
   );
 });
 
-function DiffFileBody({
+export function DiffFileBody({
   file,
   layout,
   wrapLines,

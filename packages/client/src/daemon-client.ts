@@ -51,8 +51,6 @@ import type {
   PaseoWorktreeListResponse,
   PaseoWorktreeArchiveResponse,
   ProjectIconResponse,
-  ListAvailableEditorsResponseMessage,
-  OpenInEditorResponseMessage,
   OpenProjectResponseMessage,
   ArchiveWorkspaceResponseMessage,
   WorkspaceSetupStatusResponseMessage,
@@ -78,7 +76,6 @@ import type {
   SessionInboundMessage,
   SessionOutboundMessage,
   SendAgentMessageRequest,
-  EditorTargetId,
   PaseoConfigRaw,
   PaseoConfigRevision,
 } from "@getpaseo/protocol/messages";
@@ -650,12 +647,9 @@ export interface RenameTerminalInput {
   title: string;
   requestId?: string;
 }
-type ListAvailableEditorsPayload = ListAvailableEditorsResponseMessage["payload"];
-type OpenInEditorPayload = OpenInEditorResponseMessage["payload"];
 type OpenProjectPayload = OpenProjectResponseMessage["payload"];
 type ArchiveWorkspacePayload = ArchiveWorkspaceResponseMessage["payload"];
 type WorkspaceSetupStatusPayload = WorkspaceSetupStatusResponseMessage["payload"];
-export type EditorTargetDescriptor = ListAvailableEditorsPayload["editors"][number];
 
 export interface FetchAgentResult {
   agent: AgentSnapshotPayload;
@@ -1783,34 +1777,6 @@ export class DaemonClient {
         scriptName,
       },
       responseType: "start_workspace_script_response",
-      timeout: 10000,
-    });
-  }
-
-  async listAvailableEditors(requestId?: string): Promise<ListAvailableEditorsPayload> {
-    return this.sendCorrelatedSessionRequest({
-      requestId,
-      message: {
-        type: "list_available_editors_request",
-      },
-      responseType: "list_available_editors_response",
-      timeout: 10000,
-    });
-  }
-
-  async openInEditor(
-    path: string,
-    editorId: EditorTargetId,
-    requestId?: string,
-  ): Promise<OpenInEditorPayload> {
-    return this.sendCorrelatedSessionRequest({
-      requestId,
-      message: {
-        type: "open_in_editor_request",
-        path,
-        editorId,
-      },
-      responseType: "open_in_editor_response",
       timeout: 10000,
     });
   }
@@ -3126,6 +3092,37 @@ export class DaemonClient {
       message: { type: "task.config.update.request", project, config },
       timeout: 15000,
       selectPayload: (payload) => payload.config,
+    });
+  }
+
+  async listGitLog(
+    cwd: string,
+    input: { limit: number; skip: number; ref?: string; allBranches?: boolean },
+    requestId?: string,
+  ) {
+    return this.sendNamespacedCorrelatedSessionRequest<"git.log.list.response">({
+      requestId,
+      message: {
+        type: "git.log.list.request",
+        cwd,
+        limit: input.limit,
+        skip: input.skip,
+        ...(input.ref ? { ref: input.ref } : {}),
+        ...(input.allBranches ? { allBranches: true } : {}),
+      },
+      timeout: 30000,
+    });
+  }
+
+  async getCommitDiff(cwd: string, sha: string, requestId?: string) {
+    return this.sendNamespacedCorrelatedSessionRequest<"git.log.commit_diff.response">({
+      requestId,
+      message: {
+        type: "git.log.commit_diff.request",
+        cwd,
+        sha,
+      },
+      timeout: 30000,
     });
   }
 
