@@ -104,7 +104,6 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { createWorkspaceBrowser, useBrowserStore } from "@/stores/browser-store";
-import { selectIsBrowserPinned, useWorkspacePinsStore } from "@/stores/workspace-pins";
 import { getDesktopHost } from "@/desktop/host";
 import { buildProviderCommand } from "@/utils/provider-command-templates";
 import { generateDraftId } from "@/stores/draft-keys";
@@ -1717,6 +1716,7 @@ function WorkspaceScreenContent({
   const toggleFileExplorerForCheckout = usePanelStore(
     (state) => state.toggleFileExplorerForCheckout,
   );
+  const setExplorerTabForCheckout = usePanelStore((state) => state.setExplorerTabForCheckout);
   const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
 
   const activeExplorerCheckout = useMemo<ExplorerCheckoutContext | null>(() => {
@@ -1837,17 +1837,8 @@ function WorkspaceScreenContent({
       }
       if (input.target?.kind === "browser") {
         const { browserId } = input.target;
-        // A pinned browser owns a persistent session that must survive tab close;
-        // only tear down the record and partition for unpinned (ad-hoc) browsers.
-        const isPinned = selectIsBrowserPinned(
-          useWorkspacePinsStore.getState(),
-          persistenceKey,
-          browserId,
-        );
-        if (!isPinned) {
-          useBrowserStore.getState().removeBrowser(browserId);
-          void getDesktopHost()?.browser?.clearPartition?.(browserId);
-        }
+        useBrowserStore.getState().removeBrowser(browserId);
+        void getDesktopHost()?.browser?.clearPartition?.(browserId);
       }
       closeWorkspaceTab(persistenceKey, normalizedTabId);
     },
@@ -1870,6 +1861,13 @@ function WorkspaceScreenContent({
     }
     return target.agentId;
   }, [focusedPaneTabState.activeTab]);
+  const focusedPaneBrowserId = useMemo(() => {
+    const target = focusedPaneTabState.activeTab?.descriptor.target;
+    return target?.kind === "browser" ? target.browserId : null;
+  }, [focusedPaneTabState.activeTab]);
+  const focusedBrowserUrl = useBrowserStore((state) =>
+    focusedPaneBrowserId ? (state.browsersById[focusedPaneBrowserId]?.url ?? null) : null,
+  );
 
   useEffect(() => {
     if (!isRouteFocused) {
@@ -1987,6 +1985,28 @@ function WorkspaceScreenContent({
       }
     },
     [navigateToTabId, openWorkspaceTabFocused, persistenceKey],
+  );
+
+  // Open a bookmark: navigate the focused browser tab to its url (opening a new
+  // browser tab if none is focused).
+  const handleSwitchBookmark = useCallback(
+    (input: { url: string }) => {
+      if (!persistenceKey) {
+        return;
+      }
+      if (focusedPaneBrowserId) {
+        useBrowserStore
+          .getState()
+          .updateBrowser(focusedPaneBrowserId, { url: input.url, pendingUrl: input.url });
+        return;
+      }
+      const { browserId } = createWorkspaceBrowser({ initialUrl: input.url });
+      const tabId = openWorkspaceTabFocused(persistenceKey, { kind: "browser", browserId });
+      if (tabId) {
+        navigateToTabId(tabId);
+      }
+    },
+    [focusedPaneBrowserId, navigateToTabId, openWorkspaceTabFocused, persistenceKey],
   );
 
   const emptyWorkspaceSeedRef = useRef<string | null>(null);
@@ -2897,6 +2917,29 @@ function WorkspaceScreenContent({
       }),
     [activeFileLineEnd, activeFileLineStart, activeFilePath],
   );
+
+  // When a browser tab becomes active, surface the Bookmarks sidebar tab. Fires
+  // only on the transition into a browser tab so it doesn't fight a user who
+  // switches away or closes the sidebar while browsing.
+  const wasBrowserTabRef = useRef(false);
+  useEffect(() => {
+    if (isMobile) {
+      return;
+    }
+    const isBrowserTab = activeTabDescriptor?.target.kind === "browser";
+    if (isBrowserTab && !wasBrowserTabRef.current && activeExplorerCheckout) {
+      setExplorerTabForCheckout({ ...activeExplorerCheckout, tab: "bookmarks" });
+      openExplorerForWorkspace();
+    }
+    wasBrowserTabRef.current = isBrowserTab;
+  }, [
+    activeTabDescriptor,
+    activeExplorerCheckout,
+    isMobile,
+    openExplorerForWorkspace,
+    setExplorerTabForCheckout,
+  ]);
+
   const canRenderDesktopPaneSplits = supportsDesktopPaneSplits();
   const shouldRenderDesktopPaneFallback = useMemo(
     () => !isMobile && !canRenderDesktopPaneSplits,
@@ -3490,6 +3533,8 @@ function WorkspaceScreenContent({
                   workspaceRoot={workspaceDirectory}
                   isGit={isGitCheckout}
                   onOpenFile={handleOpenFileFromExplorer}
+                  activeUrl={focusedBrowserUrl}
+                  onSwitchBookmark={handleSwitchBookmark}
                 />
               ) : null}
             </View>

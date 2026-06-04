@@ -2,83 +2,97 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import {
-  applyAddPin,
-  applyPurgeWorkspacePins,
-  applyRemovePin,
-  applyRenamePin,
-  applyReorderPins,
-  buildWorkspacePinsKey,
-  sanitizeWorkspacePinsForPersist,
-  selectIsBrowserPinned,
-  selectWorkspacePins,
-  type WorkspacePin,
-  type WorkspacePinsIndexState,
+  applyAddBookmark,
+  applyPurgeWorkspaceBookmarks,
+  applyRemoveBookmark,
+  applyRemoveBookmarkByUrl,
+  applyRenameBookmark,
+  applyReorderBookmarks,
+  buildWorkspaceBookmarksKey,
+  migrateLegacyPins,
+  sanitizeWorkspaceBookmarksForPersist,
+  selectIsUrlBookmarked,
+  selectWorkspaceBookmarks,
+  type WorkspaceBookmark,
+  type WorkspaceBookmarksIndexState,
 } from "./state";
 
-export type { WorkspacePin } from "./state";
-export { buildWorkspacePinsKey } from "./state";
+export type { WorkspaceBookmark } from "./state";
+export {
+  buildWorkspaceBookmarksKey,
+  selectWorkspaceBookmarks,
+  selectIsUrlBookmarked,
+} from "./state";
 
-interface WorkspacePinsStoreState extends WorkspacePinsIndexState {
-  addPin: (key: string, input: { browserId: string; url: string; name?: string | null }) => void;
-  renamePin: (key: string, browserId: string, name: string) => void;
-  removePin: (key: string, browserId: string) => void;
-  reorderPins: (key: string, browserIds: string[]) => void;
-  purgeWorkspacePins: (key: string) => void;
+interface WorkspaceBookmarksStoreState extends WorkspaceBookmarksIndexState {
+  addBookmark: (
+    key: string,
+    input: { url: string; name?: string | null; faviconUrl?: string | null },
+  ) => void;
+  renameBookmark: (key: string, id: string, name: string) => void;
+  removeBookmark: (key: string, id: string) => void;
+  removeBookmarkByUrl: (key: string, url: string) => void;
+  reorderBookmarks: (key: string, ids: string[]) => void;
+  purgeWorkspaceBookmarks: (key: string) => void;
 }
 
-export const useWorkspacePinsStore = create<WorkspacePinsStoreState>()(
+function createBookmarkId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export const useWorkspaceBookmarksStore = create<WorkspaceBookmarksStoreState>()(
   persist(
     (set) => ({
-      pinsByWorkspace: {},
-      addPin: (key, input) => {
+      bookmarksByWorkspace: {},
+      addBookmark: (key, input) => {
         set((state) =>
-          applyAddPin(state, key, {
-            browserId: input.browserId,
+          applyAddBookmark(state, key, {
+            id: createBookmarkId(),
             url: input.url,
             name: input.name,
+            faviconUrl: input.faviconUrl,
             now: Date.now(),
           }),
         );
       },
-      renamePin: (key, browserId, name) => {
-        set((state) => applyRenamePin(state, key, browserId, name));
+      renameBookmark: (key, id, name) => {
+        set((state) => applyRenameBookmark(state, key, id, name));
       },
-      removePin: (key, browserId) => {
-        set((state) => applyRemovePin(state, key, browserId));
+      removeBookmark: (key, id) => {
+        set((state) => applyRemoveBookmark(state, key, id));
       },
-      reorderPins: (key, browserIds) => {
-        set((state) => applyReorderPins(state, key, browserIds));
+      removeBookmarkByUrl: (key, url) => {
+        set((state) => applyRemoveBookmarkByUrl(state, key, url));
       },
-      purgeWorkspacePins: (key) => {
-        set((state) => applyPurgeWorkspacePins(state, key));
+      reorderBookmarks: (key, ids) => {
+        set((state) => applyReorderBookmarks(state, key, ids));
+      },
+      purgeWorkspaceBookmarks: (key) => {
+        set((state) => applyPurgeWorkspaceBookmarks(state, key));
       },
     }),
     {
+      // Keep the original persist key so existing local data is migrated in place.
       name: "workspace-pins-store",
+      version: 1,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => sanitizeWorkspacePinsForPersist(state),
+      migrate: (persisted) => migrateLegacyPins(persisted),
+      partialize: (state) => sanitizeWorkspaceBookmarksForPersist(state),
     },
   ),
 );
 
-const EMPTY_PINS: WorkspacePin[] = [];
+const EMPTY_BOOKMARKS: WorkspaceBookmark[] = [];
 
-export function useWorkspacePins(key: string | null): WorkspacePin[] {
-  return useWorkspacePinsStore((state) =>
-    key ? (state.pinsByWorkspace[key] ?? EMPTY_PINS) : EMPTY_PINS,
+export function useWorkspaceBookmarks(key: string | null): WorkspaceBookmark[] {
+  return useWorkspaceBookmarksStore((state) =>
+    key ? (state.bookmarksByWorkspace[key] ?? EMPTY_BOOKMARKS) : EMPTY_BOOKMARKS,
   );
 }
 
-export function useIsBrowserPinned(key: string | null, browserId: string): boolean {
-  return useWorkspacePinsStore((state) => selectIsBrowserPinned(state, key, browserId));
+export function useIsUrlBookmarked(key: string | null, url: string): boolean {
+  return useWorkspaceBookmarksStore((state) => selectIsUrlBookmarked(state, key, url));
 }
-
-export function isBrowserPinned(
-  input: { serverId: string; workspaceId: string },
-  browserId: string,
-): boolean {
-  const key = buildWorkspacePinsKey(input);
-  return selectIsBrowserPinned(useWorkspacePinsStore.getState(), key, browserId);
-}
-
-export { selectWorkspacePins, selectIsBrowserPinned };

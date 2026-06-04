@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text, View } from "react-native";
 import { Globe } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
@@ -9,22 +9,15 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AdaptiveRenameModal } from "@/components/rename-modal";
 import { SortableInlineList } from "@/components/sortable-inline-list";
 import type { DraggableRenderItemInfo } from "@/components/draggable-list.types";
 import type { Theme } from "@/styles/theme";
-import { useBrowserStore } from "@/stores/browser-store";
-import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import {
-  buildWorkspaceTabPersistenceKey,
-  useWorkspaceTabsStore,
-} from "@/stores/workspace-tabs-store";
-import {
-  buildWorkspacePinsKey,
-  useWorkspacePins,
-  useWorkspacePinsStore,
-  type WorkspacePin,
+  buildWorkspaceBookmarksKey,
+  useWorkspaceBookmarks,
+  useWorkspaceBookmarksStore,
+  type WorkspaceBookmark,
 } from "@/stores/workspace-pins";
 
 const CONTEXT_MENU_WIDTH = 180;
@@ -32,10 +25,7 @@ const CONTEXT_MENU_WIDTH = 180;
 const ThemedGlobe = withUnistyles(Globe);
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-function hostnameForUrl(url: string | undefined): string {
-  if (!url) {
-    return "";
-  }
+function hostnameForUrl(url: string): string {
   try {
     return new URL(url).hostname || url;
   } catch {
@@ -47,29 +37,41 @@ function faviconImageSource(uri: string) {
   return { uri };
 }
 
+// Prefer the favicon snapshotted when the page was bookmarked; fall back to the
+// site's well-known /favicon.ico so rows show the real icon even if the snapshot
+// was empty at save time.
+function deriveFaviconUri(bookmark: WorkspaceBookmark): string | null {
+  if (bookmark.faviconUrl) {
+    return bookmark.faviconUrl;
+  }
+  try {
+    return `${new URL(bookmark.url).origin}/favicon.ico`;
+  } catch {
+    return null;
+  }
+}
+
 function BookmarkRow({
-  pin,
+  bookmark,
   isActive,
-  onResume,
-  onReturnHome,
+  onOpen,
   onRename,
   onRemove,
 }: {
-  pin: WorkspacePin;
+  bookmark: WorkspaceBookmark;
   isActive: boolean;
-  onResume: (browserId: string) => void;
-  onReturnHome: (pin: WorkspacePin) => void;
-  onRename: (pin: WorkspacePin) => void;
-  onRemove: (browserId: string) => void;
+  onOpen: (bookmark: WorkspaceBookmark) => void;
+  onRename: (bookmark: WorkspaceBookmark) => void;
+  onRemove: (id: string) => void;
 }) {
-  const browser = useBrowserStore((state) => state.browsersById[pin.browserId] ?? null);
-  const label = pin.name.trim() || browser?.title?.trim() || hostnameForUrl(pin.url) || "Bookmark";
-  const faviconUrl = browser?.faviconUrl ?? null;
+  const label = bookmark.name.trim() || hostnameForUrl(bookmark.url) || "Bookmark";
+  const [faviconBroken, setFaviconBroken] = useState(false);
+  const faviconUri = faviconBroken ? null : deriveFaviconUri(bookmark);
+  const handleFaviconError = useCallback(() => setFaviconBroken(true), []);
 
-  const handleResume = useCallback(() => onResume(pin.browserId), [onResume, pin.browserId]);
-  const handleReturnHome = useCallback(() => onReturnHome(pin), [onReturnHome, pin]);
-  const handleRename = useCallback(() => onRename(pin), [onRename, pin]);
-  const handleRemove = useCallback(() => onRemove(pin.browserId), [onRemove, pin.browserId]);
+  const handleOpen = useCallback(() => onOpen(bookmark), [onOpen, bookmark]);
+  const handleRename = useCallback(() => onRename(bookmark), [onRename, bookmark]);
+  const handleRemove = useCallback(() => onRemove(bookmark.id), [onRemove, bookmark.id]);
 
   const rowStyle = useCallback(
     ({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
@@ -80,66 +82,39 @@ function BookmarkRow({
     [isActive],
   );
 
-  const faviconButtonStyle = useCallback(
-    ({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
-      styles.faviconButton,
-      (hovered || pressed) && styles.faviconButtonHovered,
-    ],
-    [],
-  );
-
   return (
     <ContextMenu>
       <ContextMenuTrigger
         enabledOnMobile={false}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${label}`}
+        onPress={handleOpen}
         style={rowStyle}
-        testID={`bookmark-${pin.browserId}`}
+        testID={`bookmark-${bookmark.id}`}
       >
-        {/* Favicon press → return to the saved page */}
-        <Tooltip delayDuration={500} enabledOnDesktop enabledOnMobile={false}>
-          <TooltipTrigger asChild triggerRefProp="triggerRef">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Return to saved page: ${label}`}
-              onPress={handleReturnHome}
-              style={faviconButtonStyle}
-              testID={`bookmark-home-${pin.browserId}`}
-            >
-              {faviconUrl ? (
-                <Image
-                  accessibilityIgnoresInvertColors
-                  source={faviconImageSource(faviconUrl)}
-                  style={styles.favicon}
-                />
-              ) : (
-                <ThemedGlobe size={15} uniProps={mutedColorMapping} />
-              )}
-            </Pressable>
-          </TooltipTrigger>
-          <TooltipContent side="left" align="center" offset={6}>
-            Return to saved page
-          </TooltipContent>
-        </Tooltip>
-        {/* Name press → resume the live session */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open ${label}`}
-          onPress={handleResume}
-          style={styles.nameButton}
-          testID={`bookmark-open-${pin.browserId}`}
-        >
-          <Text numberOfLines={1} style={isActive ? styles.nameTextActive : styles.nameText}>
-            {label}
-          </Text>
-        </Pressable>
+        <View style={styles.favicon}>
+          {faviconUri ? (
+            <Image
+              accessibilityIgnoresInvertColors
+              source={faviconImageSource(faviconUri)}
+              style={styles.faviconImage}
+              onError={handleFaviconError}
+            />
+          ) : (
+            <ThemedGlobe size={15} uniProps={mutedColorMapping} />
+          )}
+        </View>
+        <Text numberOfLines={1} style={isActive ? styles.nameTextActive : styles.nameText}>
+          {label}
+        </Text>
       </ContextMenuTrigger>
       <ContextMenuContent align="start" width={CONTEXT_MENU_WIDTH}>
-        <ContextMenuItem testID={`bookmark-rename-${pin.browserId}`} onSelect={handleRename}>
+        <ContextMenuItem testID={`bookmark-rename-${bookmark.id}`} onSelect={handleRename}>
           Rename
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
-          testID={`bookmark-remove-${pin.browserId}`}
+          testID={`bookmark-remove-${bookmark.id}`}
           destructive
           onSelect={handleRemove}
         >
@@ -153,123 +128,102 @@ function BookmarkRow({
 export function BrowserBookmarksPane({
   serverId,
   workspaceId,
+  activeUrl,
+  onSwitchBookmark,
 }: {
   serverId: string;
   workspaceId: string;
+  activeUrl: string | null;
+  onSwitchBookmark?: (input: { url: string }) => void;
 }) {
-  const pinsKey = useMemo(
-    () => buildWorkspacePinsKey({ serverId, workspaceId }),
+  const bookmarksKey = useMemo(
+    () => buildWorkspaceBookmarksKey({ serverId, workspaceId }),
     [serverId, workspaceId],
   );
-  const workspaceKey = useMemo(
-    () => buildWorkspaceTabPersistenceKey({ serverId, workspaceId }),
-    [serverId, workspaceId],
-  );
-  const pins = useWorkspacePins(pinsKey);
-  const renamePin = useWorkspacePinsStore((state) => state.renamePin);
-  const removePin = useWorkspacePinsStore((state) => state.removePin);
-  const reorderPins = useWorkspacePinsStore((state) => state.reorderPins);
-  const openTabFocused = useWorkspaceLayoutStore((state) => state.openTabFocused);
-  const focusedTabId = useWorkspaceTabsStore((state) =>
-    workspaceKey ? (state.focusedTabIdByWorkspace[workspaceKey] ?? null) : null,
-  );
-  const [renamingPin, setRenamingPin] = useState<WorkspacePin | null>(null);
+  const bookmarks = useWorkspaceBookmarks(bookmarksKey);
+  const renameBookmark = useWorkspaceBookmarksStore((state) => state.renameBookmark);
+  const removeBookmark = useWorkspaceBookmarksStore((state) => state.removeBookmark);
+  const reorderBookmarks = useWorkspaceBookmarksStore((state) => state.reorderBookmarks);
+  const [renaming, setRenaming] = useState<WorkspaceBookmark | null>(null);
 
-  const handleResume = useCallback(
-    (browserId: string) => {
-      if (workspaceKey) {
-        openTabFocused(workspaceKey, { kind: "browser", browserId });
-      }
-    },
-    [openTabFocused, workspaceKey],
-  );
-
-  const handleReturnHome = useCallback(
-    (pin: WorkspacePin) => {
-      if (!workspaceKey) {
-        return;
-      }
-      openTabFocused(workspaceKey, { kind: "browser", browserId: pin.browserId });
-      // Point the session home: set both the persisted location (covers a fresh
-      // mount) and the one-shot pendingUrl (covers an already-open pane).
-      useBrowserStore
-        .getState()
-        .updateBrowser(pin.browserId, { url: pin.url, pendingUrl: pin.url });
-    },
-    [openTabFocused, workspaceKey],
+  const handleOpen = useCallback(
+    (bookmark: WorkspaceBookmark) => onSwitchBookmark?.({ url: bookmark.url }),
+    [onSwitchBookmark],
   );
 
   const handleRemove = useCallback(
-    (browserId: string) => {
-      if (pinsKey) {
-        removePin(pinsKey, browserId);
+    (id: string) => {
+      if (bookmarksKey) {
+        removeBookmark(bookmarksKey, id);
       }
     },
-    [pinsKey, removePin],
+    [bookmarksKey, removeBookmark],
   );
 
   const handleRenameSubmit = useCallback(
     (value: string) => {
-      if (pinsKey && renamingPin) {
-        renamePin(pinsKey, renamingPin.browserId, value);
+      if (bookmarksKey && renaming) {
+        renameBookmark(bookmarksKey, renaming.id, value);
       }
     },
-    [pinsKey, renamePin, renamingPin],
+    [bookmarksKey, renameBookmark, renaming],
   );
 
-  const handleRenameClose = useCallback(() => setRenamingPin(null), []);
+  const handleRenameClose = useCallback(() => setRenaming(null), []);
 
   const handleDragEnd = useCallback(
-    (next: WorkspacePin[]) => {
-      if (pinsKey) {
-        reorderPins(
-          pinsKey,
-          next.map((pin) => pin.browserId),
+    (next: WorkspaceBookmark[]) => {
+      if (bookmarksKey) {
+        reorderBookmarks(
+          bookmarksKey,
+          next.map((bookmark) => bookmark.id),
         );
       }
     },
-    [pinsKey, reorderPins],
+    [bookmarksKey, reorderBookmarks],
   );
 
   const renderRow = useCallback(
-    ({ item }: DraggableRenderItemInfo<WorkspacePin>) => (
+    ({ item }: DraggableRenderItemInfo<WorkspaceBookmark>) => (
       <BookmarkRow
-        pin={item}
-        isActive={focusedTabId === `browser_${item.browserId}`}
-        onResume={handleResume}
-        onReturnHome={handleReturnHome}
-        onRename={setRenamingPin}
+        bookmark={item}
+        isActive={activeUrl !== null && item.url === activeUrl}
+        onOpen={handleOpen}
+        onRename={setRenaming}
         onRemove={handleRemove}
       />
     ),
-    [focusedTabId, handleRemove, handleResume, handleReturnHome],
+    [activeUrl, handleOpen, handleRemove],
   );
 
-  if (pins.length === 0) {
-    return (
-      <View style={styles.emptyState} testID="browser-bookmarks-empty">
-        <Text style={styles.emptyTitle}>No bookmarks yet</Text>
-        <Text style={styles.emptySubtitle}>
-          Open a browser tab and tap the bookmark icon to pin a page here.
-        </Text>
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.list} testID="browser-bookmarks-pane">
-      <SortableInlineList
-        data={pins}
-        keyExtractor={bookmarkKeyExtractor}
-        useDragHandle={false}
-        disabled={pins.length < 2}
-        onDragEnd={handleDragEnd}
-        renderItem={renderRow}
-      />
+    <View style={styles.container} testID="browser-bookmarks-pane">
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Bookmarks</Text>
+      </View>
+      {bookmarks.length === 0 ? (
+        <View style={styles.emptyState} testID="browser-bookmarks-empty">
+          <Text style={styles.emptyTitle}>No bookmarks yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Tap the bookmark icon in the browser toolbar to save the current page.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.list}>
+          <SortableInlineList
+            data={bookmarks}
+            keyExtractor={bookmarkKeyExtractor}
+            useDragHandle={false}
+            disabled={bookmarks.length < 2}
+            onDragEnd={handleDragEnd}
+            renderItem={renderRow}
+          />
+        </View>
+      )}
       <AdaptiveRenameModal
-        visible={renamingPin !== null}
+        visible={renaming !== null}
         title="Rename bookmark"
-        initialValue={renamingPin?.name.trim() || ""}
+        initialValue={renaming?.name.trim() || (renaming ? hostnameForUrl(renaming.url) : "")}
         submitLabel="Rename"
         maxLength={120}
         onClose={handleRenameClose}
@@ -280,16 +234,33 @@ export function BrowserBookmarksPane({
   );
 }
 
-function bookmarkKeyExtractor(pin: WorkspacePin) {
-  return pin.browserId;
+function bookmarkKeyExtractor(bookmark: WorkspaceBookmark) {
+  return bookmark.id;
 }
 
 const styles = StyleSheet.create((theme) => ({
+  container: {
+    flex: 1,
+    minHeight: 0,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+  },
+  headerTitle: {
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foregroundMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   list: {
     flex: 1,
     minHeight: 0,
     paddingHorizontal: theme.spacing[2],
-    paddingVertical: theme.spacing[2],
+    paddingBottom: theme.spacing[2],
     gap: theme.spacing[1],
   },
   row: {
@@ -297,7 +268,8 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[2],
     borderRadius: theme.borderRadius.md,
-    paddingRight: theme.spacing[2],
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2],
   },
   rowHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,
@@ -305,31 +277,27 @@ const styles = StyleSheet.create((theme) => ({
   rowActive: {
     backgroundColor: theme.colors.surfaceSidebarHover,
   },
-  faviconButton: {
-    width: 30,
-    height: 30,
+  favicon: {
+    width: 18,
+    height: 18,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: theme.borderRadius.md,
+    flexShrink: 0,
   },
-  faviconButtonHovered: {
-    backgroundColor: theme.colors.surface2,
-  },
-  favicon: {
+  faviconImage: {
     width: 16,
     height: 16,
     borderRadius: 3,
   },
-  nameButton: {
+  nameText: {
     flex: 1,
     minWidth: 0,
-    paddingVertical: theme.spacing[2],
-  },
-  nameText: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
   },
   nameTextActive: {
+    flex: 1,
+    minWidth: 0,
     fontSize: theme.fontSize.sm,
     color: theme.colors.foreground,
     fontWeight: theme.fontWeight.medium,

@@ -1,20 +1,18 @@
-// Per-workspace pinned browser sessions (Arc-style). A pin references a live
-// BrowserRecord by id; the pin owns that session and survives tab close. The
-// `name` is a user-set label, independent of the page <title>; an empty name
-// falls back to the page title / hostname at render time.
+// Per-workspace URL bookmarks (classic browser bookmarks). A bookmark stores a
+// url + display name + a snapshot favicon; it is NOT tied to a live browser
+// session. Bookmarking the current page adds one (deduped by url); clicking a
+// bookmark navigates the focused browser tab to its url.
 
-export interface WorkspacePin {
-  browserId: string;
-  // The saved "home" URL — clicking a bookmark's favicon returns the live
-  // session here regardless of where it surfed. Distinct from the session's
-  // current location (which lives on the BrowserRecord).
+export interface WorkspaceBookmark {
+  id: string;
   url: string;
   name: string;
+  faviconUrl: string | null;
   createdAt: number;
 }
 
-export interface WorkspacePinsIndexState {
-  pinsByWorkspace: Record<string, WorkspacePin[]>;
+export interface WorkspaceBookmarksIndexState {
+  bookmarksByWorkspace: Record<string, WorkspaceBookmark[]>;
 }
 
 export function trimNonEmpty(value: string | null | undefined): string | null {
@@ -25,7 +23,7 @@ export function trimNonEmpty(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function buildWorkspacePinsKey(input: {
+export function buildWorkspaceBookmarksKey(input: {
   serverId: string;
   workspaceId: string;
 }): string | null {
@@ -37,207 +35,299 @@ export function buildWorkspacePinsKey(input: {
   return `${serverId}:${workspaceId}`;
 }
 
-function normalizePinName(value: string | null | undefined): string {
+function normalizeName(value: string | null | undefined): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export interface AddPinInput {
-  browserId: string;
+function normalizeUrl(value: string | null | undefined): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export interface AddBookmarkInput {
+  id: string;
   url: string;
   name?: string | null;
+  faviconUrl?: string | null;
   now: number;
 }
 
-export function applyAddPin<S extends WorkspacePinsIndexState>(
+export function applyAddBookmark<S extends WorkspaceBookmarksIndexState>(
   state: S,
   key: string,
-  input: AddPinInput,
+  input: AddBookmarkInput,
 ): S {
   const normalizedKey = trimNonEmpty(key);
-  const browserId = trimNonEmpty(input.browserId);
-  if (!normalizedKey || !browserId) {
+  const id = trimNonEmpty(input.id);
+  const url = normalizeUrl(input.url);
+  if (!normalizedKey || !id || !url) {
     return state;
   }
-  const current = state.pinsByWorkspace[normalizedKey] ?? [];
-  if (current.some((pin) => pin.browserId === browserId)) {
+  const current = state.bookmarksByWorkspace[normalizedKey] ?? [];
+  // Deduplicate by url so the star toggle is idempotent.
+  if (current.some((bookmark) => bookmark.url === url)) {
     return state;
   }
   const next = [
     ...current,
     {
-      browserId,
-      url: typeof input.url === "string" ? input.url : "",
-      name: normalizePinName(input.name),
+      id,
+      url,
+      name: normalizeName(input.name),
+      faviconUrl: trimNonEmpty(input.faviconUrl) ?? null,
       createdAt: input.now,
     },
   ];
   return {
     ...state,
-    pinsByWorkspace: { ...state.pinsByWorkspace, [normalizedKey]: next },
+    bookmarksByWorkspace: { ...state.bookmarksByWorkspace, [normalizedKey]: next },
   };
 }
 
-export function applyRenamePin<S extends WorkspacePinsIndexState>(
+export function applyRenameBookmark<S extends WorkspaceBookmarksIndexState>(
   state: S,
   key: string,
-  browserId: string,
+  id: string,
   name: string,
 ): S {
   const normalizedKey = trimNonEmpty(key);
-  const normalizedBrowserId = trimNonEmpty(browserId);
-  if (!normalizedKey || !normalizedBrowserId) {
+  const normalizedId = trimNonEmpty(id);
+  if (!normalizedKey || !normalizedId) {
     return state;
   }
-  const current = state.pinsByWorkspace[normalizedKey];
+  const current = state.bookmarksByWorkspace[normalizedKey];
   if (!current) {
     return state;
   }
-  const nextName = normalizePinName(name);
+  const nextName = normalizeName(name);
   let changed = false;
-  const next = current.map((pin) => {
-    if (pin.browserId !== normalizedBrowserId || pin.name === nextName) {
-      return pin;
+  const next = current.map((bookmark) => {
+    if (bookmark.id !== normalizedId || bookmark.name === nextName) {
+      return bookmark;
     }
     changed = true;
-    return Object.assign({}, pin, { name: nextName });
+    return Object.assign({}, bookmark, { name: nextName });
   });
   if (!changed) {
     return state;
   }
   return {
     ...state,
-    pinsByWorkspace: { ...state.pinsByWorkspace, [normalizedKey]: next },
+    bookmarksByWorkspace: { ...state.bookmarksByWorkspace, [normalizedKey]: next },
   };
 }
 
-export function applyRemovePin<S extends WorkspacePinsIndexState>(
+function removeBookmarkWhere<S extends WorkspaceBookmarksIndexState>(
   state: S,
   key: string,
-  browserId: string,
-): S {
-  const normalizedKey = trimNonEmpty(key);
-  const normalizedBrowserId = trimNonEmpty(browserId);
-  if (!normalizedKey || !normalizedBrowserId) {
-    return state;
-  }
-  const current = state.pinsByWorkspace[normalizedKey];
-  if (!current) {
-    return state;
-  }
-  const next = current.filter((pin) => pin.browserId !== normalizedBrowserId);
-  if (next.length === current.length) {
-    return state;
-  }
-  if (next.length === 0) {
-    const { [normalizedKey]: _removed, ...rest } = state.pinsByWorkspace;
-    return { ...state, pinsByWorkspace: rest };
-  }
-  return {
-    ...state,
-    pinsByWorkspace: { ...state.pinsByWorkspace, [normalizedKey]: next },
-  };
-}
-
-export function applyReorderPins<S extends WorkspacePinsIndexState>(
-  state: S,
-  key: string,
-  browserIds: string[],
+  predicate: (bookmark: WorkspaceBookmark) => boolean,
 ): S {
   const normalizedKey = trimNonEmpty(key);
   if (!normalizedKey) {
     return state;
   }
-  const current = state.pinsByWorkspace[normalizedKey];
+  const current = state.bookmarksByWorkspace[normalizedKey];
+  if (!current) {
+    return state;
+  }
+  const next = current.filter((bookmark) => !predicate(bookmark));
+  if (next.length === current.length) {
+    return state;
+  }
+  if (next.length === 0) {
+    const { [normalizedKey]: _removed, ...rest } = state.bookmarksByWorkspace;
+    return { ...state, bookmarksByWorkspace: rest };
+  }
+  return {
+    ...state,
+    bookmarksByWorkspace: { ...state.bookmarksByWorkspace, [normalizedKey]: next },
+  };
+}
+
+export function applyRemoveBookmark<S extends WorkspaceBookmarksIndexState>(
+  state: S,
+  key: string,
+  id: string,
+): S {
+  const normalizedId = trimNonEmpty(id);
+  if (!normalizedId) {
+    return state;
+  }
+  return removeBookmarkWhere(state, key, (bookmark) => bookmark.id === normalizedId);
+}
+
+export function applyRemoveBookmarkByUrl<S extends WorkspaceBookmarksIndexState>(
+  state: S,
+  key: string,
+  url: string,
+): S {
+  const normalizedUrl = normalizeUrl(url);
+  if (!normalizedUrl) {
+    return state;
+  }
+  return removeBookmarkWhere(state, key, (bookmark) => bookmark.url === normalizedUrl);
+}
+
+export function applyReorderBookmarks<S extends WorkspaceBookmarksIndexState>(
+  state: S,
+  key: string,
+  ids: string[],
+): S {
+  const normalizedKey = trimNonEmpty(key);
+  if (!normalizedKey) {
+    return state;
+  }
+  const current = state.bookmarksByWorkspace[normalizedKey];
   if (!current || current.length < 2) {
     return state;
   }
-  const byId = new Map(current.map((pin) => [pin.browserId, pin]));
-  const next: WorkspacePin[] = [];
+  const byId = new Map(current.map((bookmark) => [bookmark.id, bookmark]));
+  const next: WorkspaceBookmark[] = [];
   const used = new Set<string>();
-  for (const rawId of browserIds) {
-    const browserId = trimNonEmpty(rawId);
-    if (!browserId || used.has(browserId)) {
+  for (const rawId of ids) {
+    const id = trimNonEmpty(rawId);
+    if (!id || used.has(id)) {
       continue;
     }
-    const pin = byId.get(browserId);
-    if (pin) {
-      next.push(pin);
-      used.add(browserId);
+    const bookmark = byId.get(id);
+    if (bookmark) {
+      next.push(bookmark);
+      used.add(id);
     }
   }
-  // Preserve any pins the caller omitted, keeping their relative order.
-  for (const pin of current) {
-    if (!used.has(pin.browserId)) {
-      next.push(pin);
+  for (const bookmark of current) {
+    if (!used.has(bookmark.id)) {
+      next.push(bookmark);
     }
   }
-  const unchanged = next.every((pin, index) => pin === current[index]);
+  const unchanged = next.every((bookmark, index) => bookmark === current[index]);
   if (unchanged) {
     return state;
   }
   return {
     ...state,
-    pinsByWorkspace: { ...state.pinsByWorkspace, [normalizedKey]: next },
+    bookmarksByWorkspace: { ...state.bookmarksByWorkspace, [normalizedKey]: next },
   };
 }
 
-export function applyPurgeWorkspacePins<S extends WorkspacePinsIndexState>(
+export function applyPurgeWorkspaceBookmarks<S extends WorkspaceBookmarksIndexState>(
   state: S,
   key: string,
 ): S {
   const normalizedKey = trimNonEmpty(key);
-  if (!normalizedKey || !(normalizedKey in state.pinsByWorkspace)) {
+  if (!normalizedKey || !(normalizedKey in state.bookmarksByWorkspace)) {
     return state;
   }
-  const { [normalizedKey]: _removed, ...rest } = state.pinsByWorkspace;
-  return { ...state, pinsByWorkspace: rest };
+  const { [normalizedKey]: _removed, ...rest } = state.bookmarksByWorkspace;
+  return { ...state, bookmarksByWorkspace: rest };
 }
 
-export function selectWorkspacePins(
-  state: WorkspacePinsIndexState,
+export function selectWorkspaceBookmarks(
+  state: WorkspaceBookmarksIndexState,
   key: string | null,
-): WorkspacePin[] {
+): WorkspaceBookmark[] {
   const normalizedKey = trimNonEmpty(key ?? null);
   if (!normalizedKey) {
     return [];
   }
-  return state.pinsByWorkspace[normalizedKey] ?? [];
+  return state.bookmarksByWorkspace[normalizedKey] ?? [];
 }
 
-export function selectIsBrowserPinned(
-  state: WorkspacePinsIndexState,
+export function selectIsUrlBookmarked(
+  state: WorkspaceBookmarksIndexState,
   key: string | null,
-  browserId: string,
+  url: string,
 ): boolean {
-  const normalizedBrowserId = trimNonEmpty(browserId);
-  if (!normalizedBrowserId) {
+  const normalizedUrl = normalizeUrl(url);
+  if (!normalizedUrl) {
     return false;
   }
-  return selectWorkspacePins(state, key).some((pin) => pin.browserId === normalizedBrowserId);
+  return selectWorkspaceBookmarks(state, key).some((bookmark) => bookmark.url === normalizedUrl);
 }
 
-export function sanitizeWorkspacePinsForPersist(
-  state: WorkspacePinsIndexState,
-): WorkspacePinsIndexState {
-  const pinsByWorkspace: Record<string, WorkspacePin[]> = {};
-  for (const key in state.pinsByWorkspace) {
-    const pins = (state.pinsByWorkspace[key] ?? [])
-      .map((pin) => {
-        const browserId = trimNonEmpty(pin.browserId);
-        if (!browserId) {
+export function sanitizeWorkspaceBookmarksForPersist(
+  state: WorkspaceBookmarksIndexState,
+): WorkspaceBookmarksIndexState {
+  const bookmarksByWorkspace: Record<string, WorkspaceBookmark[]> = {};
+  for (const key in state.bookmarksByWorkspace) {
+    const bookmarks = (state.bookmarksByWorkspace[key] ?? [])
+      .map((bookmark) => {
+        const id = trimNonEmpty(bookmark.id);
+        const url = normalizeUrl(bookmark.url);
+        if (!id || !url) {
           return null;
         }
         return {
-          browserId,
-          url: typeof pin.url === "string" ? pin.url : "",
-          name: normalizePinName(pin.name),
-          createdAt: typeof pin.createdAt === "number" ? pin.createdAt : 0,
-        } satisfies WorkspacePin;
+          id,
+          url,
+          name: normalizeName(bookmark.name),
+          faviconUrl: trimNonEmpty(bookmark.faviconUrl) ?? null,
+          createdAt: typeof bookmark.createdAt === "number" ? bookmark.createdAt : 0,
+        } satisfies WorkspaceBookmark;
       })
-      .filter((pin): pin is WorkspacePin => pin !== null);
-    if (pins.length > 0) {
-      pinsByWorkspace[key] = pins;
+      .filter((bookmark): bookmark is WorkspaceBookmark => bookmark !== null);
+    if (bookmarks.length > 0) {
+      bookmarksByWorkspace[key] = bookmarks;
     }
   }
-  return { pinsByWorkspace };
+  return { bookmarksByWorkspace };
+}
+
+// Convert the legacy session-backed pin shape ({ browserId, url, name }) to the
+// URL-based bookmark shape so previously saved bookmarks survive the change.
+export function migrateLegacyPins(persisted: unknown): WorkspaceBookmarksIndexState {
+  const empty: WorkspaceBookmarksIndexState = { bookmarksByWorkspace: {} };
+  if (!persisted || typeof persisted !== "object") {
+    return empty;
+  }
+  const record = persisted as {
+    bookmarksByWorkspace?: unknown;
+    pinsByWorkspace?: unknown;
+  };
+  const directBookmarks = record.bookmarksByWorkspace;
+  if (directBookmarks && typeof directBookmarks === "object") {
+    return sanitizeWorkspaceBookmarksForPersist({
+      bookmarksByWorkspace: directBookmarks as Record<string, WorkspaceBookmark[]>,
+    });
+  }
+  const legacyPins = record.pinsByWorkspace;
+  if (!legacyPins || typeof legacyPins !== "object") {
+    return empty;
+  }
+  const bookmarksByWorkspace: Record<string, WorkspaceBookmark[]> = {};
+  for (const key in legacyPins as Record<string, unknown>) {
+    const list = (legacyPins as Record<string, unknown>)[key];
+    if (!Array.isArray(list)) {
+      continue;
+    }
+    const bookmarks: WorkspaceBookmark[] = [];
+    const seenUrls = new Set<string>();
+    for (const raw of list) {
+      if (!raw || typeof raw !== "object") {
+        continue;
+      }
+      const pin = raw as {
+        browserId?: unknown;
+        url?: unknown;
+        name?: unknown;
+        createdAt?: unknown;
+      };
+      const url = normalizeUrl(typeof pin.url === "string" ? pin.url : "");
+      const id = trimNonEmpty(typeof pin.browserId === "string" ? pin.browserId : null);
+      if (!url || !id || seenUrls.has(url)) {
+        continue;
+      }
+      seenUrls.add(url);
+      bookmarks.push({
+        id,
+        url,
+        name: normalizeName(typeof pin.name === "string" ? pin.name : ""),
+        faviconUrl: null,
+        createdAt: typeof pin.createdAt === "number" ? pin.createdAt : 0,
+      });
+    }
+    if (bookmarks.length > 0) {
+      bookmarksByWorkspace[key] = bookmarks;
+    }
+  }
+  return { bookmarksByWorkspace };
 }
