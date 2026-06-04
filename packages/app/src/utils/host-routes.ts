@@ -355,6 +355,14 @@ export function buildHostOpenProjectRoute(serverId: string) {
   return `${base}/open-project` as const;
 }
 
+export function buildHostTasksRoute(serverId: string) {
+  const base = buildHostRootRoute(serverId);
+  if (base === "/") {
+    return "/" as const;
+  }
+  return `${base}/tasks` as const;
+}
+
 export function buildHostNewWorkspaceRoute(
   serverId: string,
   sourceDirectory: string,

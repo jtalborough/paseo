@@ -1,5 +1,5 @@
 import { router, usePathname } from "expo-router";
-import { FolderPlus, Home, MessagesSquare, Settings, X } from "lucide-react-native";
+import { FolderPlus, Home, ListTodo, MessagesSquare, Settings, X } from "lucide-react-native";
 import {
   type Dispatch,
   memo,
@@ -60,6 +60,7 @@ import { useWindowControlsPadding } from "@/utils/desktop-window";
 import {
   buildHostOpenProjectRoute,
   buildHostSessionsRoute,
+  buildHostTasksRoute,
   buildSettingsRoute,
   mapPathnameToServer,
 } from "@/utils/host-routes";
@@ -97,6 +98,7 @@ interface SidebarSharedProps {
   handleOpenProject: () => void;
   handleHome: () => void;
   handleSettings: () => void;
+  handleViewTasks: () => void;
   renderHostOption: (input: {
     option: ComboboxOption;
     selected: boolean;
@@ -243,6 +245,17 @@ export const LeftSidebar = memo(function LeftSidebar({
     router.push(buildHostSessionsRoute(activeServerId));
   }, [activeServerId]);
 
+  const handleViewTasksMobile = useCallback(() => {
+    if (!activeServerId) return;
+    showMobileAgent();
+    router.push(buildHostTasksRoute(activeServerId));
+  }, [activeServerId, showMobileAgent]);
+
+  const handleViewTasksDesktop = useCallback(() => {
+    if (!activeServerId) return;
+    router.push(buildHostTasksRoute(activeServerId));
+  }, [activeServerId]);
+
   const handleHostSelect = useCallback(
     (nextServerId: string) => {
       if (!nextServerId) {
@@ -287,6 +300,7 @@ export const LeftSidebar = memo(function LeftSidebar({
         handleOpenProject={handleOpenProjectMobile}
         handleHome={handleHomeMobile}
         handleSettings={handleSettingsMobile}
+        handleViewTasks={handleViewTasksMobile}
         handleViewMoreNavigate={handleViewMoreNavigate}
       />
     );
@@ -300,6 +314,7 @@ export const LeftSidebar = memo(function LeftSidebar({
       handleOpenProject={handleOpenProjectDesktop}
       handleHome={handleHomeDesktop}
       handleSettings={handleSettingsDesktop}
+      handleViewTasks={handleViewTasksDesktop}
       handleViewMore={handleViewMoreNavigate}
     />
   );
@@ -431,6 +446,7 @@ function SidebarFooter({
   handleOpenProject,
   handleHome,
   handleSettings,
+  handleViewTasks,
 }: {
   theme: SidebarTheme;
   activeServerId: string | null;
@@ -445,6 +461,7 @@ function SidebarFooter({
   handleOpenProject: () => void;
   handleHome: () => void;
   handleSettings: () => void;
+  handleViewTasks: () => void;
 }) {
   const newAgentKeys = useShortcutKeys("new-agent");
   return (
@@ -478,6 +495,13 @@ function SidebarFooter({
           testID="sidebar-home"
           accessibilityLabel="Home"
           icon={Home}
+          theme={theme}
+        />
+        <FooterIconButton
+          onPress={handleViewTasks}
+          testID="sidebar-tasks"
+          accessibilityLabel="Tasks"
+          icon={ListTodo}
           theme={theme}
         />
         <FooterIconButton
@@ -532,9 +556,11 @@ function MobileSidebar({
   isOpen,
   closeToAgent,
   handleViewMoreNavigate,
+  handleViewTasks,
 }: MobileSidebarProps) {
   const pathname = usePathname();
   const isSessionsActive = pathname.includes("/sessions");
+  const isTasksActive = pathname.includes("/tasks");
   const {
     translateX,
     backdropOpacity,
@@ -705,6 +731,13 @@ function MobileSidebar({
               isActive={isSessionsActive}
               testID="sidebar-sessions"
             />
+            <SidebarHeaderRow
+              icon={ListTodo}
+              label="Tasks"
+              onPress={handleViewTasks}
+              isActive={isTasksActive}
+              testID="sidebar-tasks"
+            />
             <Pressable
               style={styles.mobileCloseButton}
               onPress={closeToAgent}
@@ -756,6 +789,7 @@ function MobileSidebar({
               handleOpenProject={handleOpenProject}
               handleHome={handleHome}
               handleSettings={handleSettings}
+              handleViewTasks={handleViewTasks}
             />
           </View>
         </Animated.View>
@@ -789,6 +823,7 @@ function DesktopSidebar({
   insetsTop,
   isOpen,
   handleViewMore,
+  handleViewTasks,
 }: DesktopSidebarProps) {
   const pathname = usePathname();
   const isSessionsActive = pathname.includes("/sessions");
@@ -900,6 +935,7 @@ function DesktopSidebar({
           handleOpenProject={handleOpenProject}
           handleHome={handleHome}
           handleSettings={handleSettings}
+          handleViewTasks={handleViewTasks}
         />
 
         {/* Resize handle - absolutely positioned over right border */}
