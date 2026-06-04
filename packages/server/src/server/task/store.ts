@@ -272,6 +272,26 @@ export class TaskStore {
     await rm(this.filePath(projectId, id), { force: true });
   }
 
+  /** Move a task to a different project (vault folder), preserving its content. */
+  async move(projectId: string, id: string, newProjectId: string): Promise<StoredTask> {
+    const existing = await this.get(projectId, id);
+    if (!existing) {
+      throw new Error(`Task not found: ${projectId}/${id}`);
+    }
+    if (newProjectId === projectId) {
+      return existing;
+    }
+    const metadata: TaskFrontmatter = TaskFrontmatterSchema.parse({
+      ...existing.metadata,
+      project: newProjectId,
+      updatedAt: new Date().toISOString(),
+    });
+    const moved: StoredTask = { metadata, body: existing.body };
+    await this.write(moved);
+    await rm(this.filePath(projectId, id), { force: true });
+    return moved;
+  }
+
   private configPath(projectId: string): string {
     return path.join(this.projectDir(projectId), "task-config.json");
   }

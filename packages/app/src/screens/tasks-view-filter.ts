@@ -1,4 +1,4 @@
-import type { StoredTask } from "@getpaseo/protocol/task/types";
+import type { ActionState, StoredTask } from "@getpaseo/protocol/task/types";
 
 /** The cross-project views, in display order. */
 export const TASK_VIEWS = [
@@ -59,6 +59,27 @@ function matchesView(task: StoredTask, view: TaskView, todayIso: string): boolea
       return actionState === "done";
     case "all":
       return actionState !== "dropped";
+  }
+}
+
+/**
+ * Defaults a freshly-added task should inherit from the view it's created in, so
+ * a task added in "Today" is actually due today, "Waiting"/"Someday" take that
+ * state, etc. Inbox/Upcoming/All/Done capture a plain undated ToDo.
+ */
+export function createDefaultsForView(
+  view: TaskView,
+  todayIso: string,
+): { actionState?: ActionState; doDate?: string } {
+  switch (view) {
+    case "today":
+      return { doDate: todayIso };
+    case "waiting":
+      return { actionState: "waiting" };
+    case "someday":
+      return { actionState: "someday" };
+    default:
+      return {};
   }
 }
 

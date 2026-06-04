@@ -212,6 +212,23 @@ describe("TaskStore", () => {
     expect(plainDone.metadata.actionState).toBe("done");
   });
 
+  it("moves a task to another project, preserving content", async () => {
+    const created = await store.create({
+      project: "inbox",
+      title: "Triage me",
+      body: "notes\n",
+      priority: "high",
+    });
+    const moved = await store.move("inbox", created.metadata.id, "real-project");
+
+    expect(moved.metadata.project).toBe("real-project");
+    expect(moved.metadata.priority).toBe("high");
+    expect(moved.body).toBe("notes\n");
+    // Gone from the old folder, present in the new one.
+    expect(await store.get("inbox", created.metadata.id)).toBeNull();
+    expect(await store.get("real-project", created.metadata.id)).not.toBeNull();
+  });
+
   it("deletes a task", async () => {
     const created = await store.create({ project: "proj-1", title: "Temporary" });
     await store.delete("proj-1", created.metadata.id);

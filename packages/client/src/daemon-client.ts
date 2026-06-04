@@ -3048,6 +3048,20 @@ export class DaemonClient {
     });
   }
 
+  async taskMove(
+    project: string,
+    id: string,
+    newProject: string,
+    requestId?: string,
+  ): Promise<StoredTask> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.move.response", StoredTask>({
+      requestId,
+      message: { type: "task.move.request", project, id, newProject },
+      timeout: 15000,
+      selectPayload: (payload) => payload.task,
+    });
+  }
+
   async taskDelete(project: string, id: string, requestId?: string): Promise<void> {
     await this.sendNamespacedCorrelatedSessionRequest<"task.delete.response">({
       requestId,

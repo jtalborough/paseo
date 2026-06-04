@@ -4,13 +4,16 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { StyleSheet } from "react-native-unistyles";
-import type { ActionState, StoredTask } from "@getpaseo/protocol/task/types";
+import type { ActionState, StoredTask, TaskConfig } from "@getpaseo/protocol/task/types";
+import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
 import { MenuHeader } from "@/components/headers/menu-header";
-import { type SelectOption, TaskSelect } from "@/components/task-select";
+import { TaskEditor } from "@/components/task-editor";
+import type { SelectOption } from "@/components/task-select";
 import { useToast } from "@/contexts/toast-context";
 import { useSessionStore } from "@/stores/session-store";
 import {
   countTasksByView,
+  createDefaultsForView,
   filterTasksForView,
   TASK_VIEW_LABEL,
   TASK_VIEWS,
@@ -25,6 +28,9 @@ const ACTION_STATE_LABEL: Record<ActionState, string> = {
   dropped: "Dropped",
   done: "Done",
 };
+
+/** New tasks captured from the global screen land here until triaged. */
+const CAPTURE_PROJECT = "inbox";
 
 export function TasksScreen({ serverId }: { serverId: string }) {
   const isFocused = useIsFocused();
@@ -49,7 +55,7 @@ function TasksScreenContent({ serverId }: { serverId: string }) {
 
   const [view, setView] = useState<TaskView>("today");
   const [newTitle, setNewTitle] = useState("");
-  const [project, setProject] = useState<string | null>(null);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const queryKey = useMemo(() => ["tasks-all", serverId], [serverId]);
   const invalidate = useCallback(
@@ -64,10 +70,15 @@ function TasksScreenContent({ serverId }: { serverId: string }) {
     staleTime: 2_000,
   });
 
+  const today = todayIso();
   const createTask = useMutation({
-    mutationFn: async (input: { project: string; title: string }) => {
+    mutationFn: async (title: string) => {
       if (!client) throw new Error("Host is not connected");
-      return client.taskCreate(input);
+      return client.taskCreate({
+        project: CAPTURE_PROJECT,
+        title,
+        ...createDefaultsForView(view, today),
+      });
     },
     onSuccess: () => {
       setNewTitle("");
@@ -88,22 +99,23 @@ function TasksScreenContent({ serverId }: { serverId: string }) {
   });
 
   const allTasks = tasksQuery.data ?? EMPTY;
-  const today = todayIso();
   const counts = useMemo(() => countTasksByView(allTasks, today), [allTasks, today]);
   const visible = useMemo(() => filterTasksForView(allTasks, view, today), [allTasks, view, today]);
   const projectOptions = useMemo<SelectOption[]>(() => {
-    const names = Array.from(new Set(allTasks.map((t) => t.metadata.project))).sort();
-    return names.map((name) => ({ value: name, label: name }));
+    const names = new Set(allTasks.map((t) => t.metadata.project));
+    names.add(CAPTURE_PROJECT);
+    return Array.from(names)
+      .sort()
+      .map((name) => ({ value: name, label: name }));
   }, [allTasks]);
 
-  const resolvedProject = project ?? projectOptions[0]?.value ?? null;
   const createMutate = createTask.mutate;
   const handleAdd = useCallback(() => {
     const title = newTitle.trim();
-    if (title.length > 0 && resolvedProject) {
-      createMutate({ project: resolvedProject, title });
+    if (title.length > 0) {
+      createMutate(title);
     }
-  }, [createMutate, newTitle, resolvedProject]);
+  }, [createMutate, newTitle]);
 
   const toggleMutate = toggleDone.mutate;
   const handleToggle = useCallback(
@@ -113,8 +125,12 @@ function TasksScreenContent({ serverId }: { serverId: string }) {
     },
     [toggleMutate],
   );
+  const handleToggleExpand = useCallback(
+    (key: string) => setExpandedKey((current) => (current === key ? null : key)),
+    [],
+  );
 
-  const addDisabled = newTitle.trim().length === 0 || !resolvedProject || createTask.isPending;
+  const addDisabled = newTitle.trim().length === 0 || createTask.isPending;
   const addButtonStyle = useCallback(
     ({ pressed }: PressableStateCallbackType) => [
       styles.addButton,
@@ -162,7 +178,7 @@ function TasksScreenContent({ serverId }: { serverId: string }) {
           style={styles.input}
           value={newTitle}
           onChangeText={setNewTitle}
-          placeholder="New task…"
+          placeholder={`New task in ${TASK_VIEW_LABEL[view]}…`}
           placeholderTextColor={PLACEHOLDER_COLOR}
           onSubmitEditing={handleAdd}
           returnKeyType="done"
@@ -176,39 +192,46 @@ function TasksScreenContent({ serverId }: { serverId: string }) {
           <Text style={styles.addButtonText}>Add</Text>
         </Pressable>
       </View>
-      <View style={styles.projectPickerRow}>
-        <TaskSelect
-          label="Project"
-          options={projectOptions}
-          value={resolvedProject}
-          onSelect={setProject}
-          clearable={false}
-          editable
-          onAddOption={setProject}
-          placeholder="Pick or add a project"
-        />
-      </View>
 
       <TasksBody
         pending={tasksQuery.isPending}
         tasks={visible}
         emptyLabel={TASK_VIEW_LABEL[view]}
+        serverId={serverId}
+        projectOptions={projectOptions}
+        expandedKey={expandedKey}
         onToggle={handleToggle}
+        onToggleExpand={handleToggleExpand}
+        onChanged={invalidate}
       />
     </View>
   );
+}
+
+function rowKey(task: StoredTask): string {
+  return `${task.metadata.project}/${task.metadata.id}`;
 }
 
 function TasksBody({
   pending,
   tasks,
   emptyLabel,
+  serverId,
+  projectOptions,
+  expandedKey,
   onToggle,
+  onToggleExpand,
+  onChanged,
 }: {
   pending: boolean;
   tasks: StoredTask[];
   emptyLabel: string;
+  serverId: string;
+  projectOptions: SelectOption[];
+  expandedKey: string | null;
   onToggle: (task: StoredTask) => void;
+  onToggleExpand: (key: string) => void;
+  onChanged: () => void;
 }) {
   if (pending) {
     return (
@@ -228,9 +251,14 @@ function TasksBody({
     <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
       {tasks.map((task) => (
         <TaskRow
-          key={`${task.metadata.project}/${task.metadata.id}`}
+          key={rowKey(task)}
           task={task}
+          serverId={serverId}
+          projectOptions={projectOptions}
+          expanded={expandedKey === rowKey(task)}
           onToggle={onToggle}
+          onToggleExpand={onToggleExpand}
+          onChanged={onChanged}
         />
       ))}
     </ScrollView>
@@ -266,28 +294,170 @@ function ViewTab({
   );
 }
 
-function TaskRow({ task, onToggle }: { task: StoredTask; onToggle: (task: StoredTask) => void }) {
+function TaskRow({
+  task,
+  serverId,
+  projectOptions,
+  expanded,
+  onToggle,
+  onToggleExpand,
+  onChanged,
+}: {
+  task: StoredTask;
+  serverId: string;
+  projectOptions: SelectOption[];
+  expanded: boolean;
+  onToggle: (task: StoredTask) => void;
+  onToggleExpand: (key: string) => void;
+  onChanged: () => void;
+}) {
   const { actionState, title, project, doDate, priority } = task.metadata;
   const done = actionState === "done";
   const handleToggle = useCallback(() => onToggle(task), [onToggle, task]);
+  const handleExpand = useCallback(() => onToggleExpand(rowKey(task)), [onToggleExpand, task]);
   const checkStyle = useMemo(() => [styles.check, done ? styles.checkDone : null], [done]);
   const titleStyle = useMemo(() => [styles.rowTitle, done ? styles.rowTitleDone : null], [done]);
   const subtitle = [project, doDate, priority ? `!${priority}` : null].filter(Boolean).join(" · ");
+
   return (
-    <View style={styles.row}>
-      <Pressable accessibilityRole="button" onPress={handleToggle} style={checkStyle}>
-        {done ? <Text style={styles.checkMark}>✓</Text> : null}
-      </Pressable>
-      <View style={styles.rowBody}>
-        <Text style={titleStyle} numberOfLines={2}>
-          {title}
-        </Text>
-        <Text style={styles.rowSubtitle} numberOfLines={1}>
-          {subtitle}
-        </Text>
+    <View style={styles.rowOuter}>
+      <View style={styles.row}>
+        <Pressable accessibilityRole="button" onPress={handleToggle} style={checkStyle}>
+          {done ? <Text style={styles.checkMark}>✓</Text> : null}
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={handleExpand} style={styles.rowBody}>
+          <Text style={titleStyle} numberOfLines={2}>
+            {title}
+          </Text>
+          <Text style={styles.rowSubtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </Pressable>
+        <Text style={styles.rowState}>{ACTION_STATE_LABEL[actionState]}</Text>
       </View>
-      <Text style={styles.rowState}>{ACTION_STATE_LABEL[actionState]}</Text>
+      {expanded ? (
+        <TaskRowEditor
+          task={task}
+          serverId={serverId}
+          projectOptions={projectOptions}
+          onChanged={onChanged}
+        />
+      ) : null}
     </View>
+  );
+}
+
+const EMPTY_CONFIG: TaskConfig = { types: [], people: [], contexts: [] };
+
+function TaskRowEditor({
+  task,
+  serverId,
+  projectOptions,
+  onChanged,
+}: {
+  task: StoredTask;
+  serverId: string;
+  projectOptions: SelectOption[];
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
+  const project = task.metadata.project;
+
+  const configKey = useMemo(() => ["task-config", serverId, project], [serverId, project]);
+  const configQuery = useQuery({
+    queryKey: configKey,
+    enabled: Boolean(client),
+    queryFn: async () => (client ? client.taskConfigGet(project) : EMPTY_CONFIG),
+    staleTime: 30_000,
+  });
+  const config = configQuery.data ?? EMPTY_CONFIG;
+
+  const onError = useCallback(
+    (error: unknown) => toast.error(error instanceof Error ? error.message : "Failed"),
+    [toast],
+  );
+
+  const patch = useMutation({
+    mutationFn: async (input: { id: string; patch: TaskUpdateRpcPatch }) => {
+      if (!client) throw new Error("Host is not connected");
+      return client.taskUpdate(project, input.id, input.patch);
+    },
+    onSuccess: onChanged,
+    onError,
+  });
+  const move = useMutation({
+    mutationFn: async (newProject: string) => {
+      if (!client) throw new Error("Host is not connected");
+      return client.taskMove(project, task.metadata.id, newProject);
+    },
+    onSuccess: onChanged,
+    onError,
+  });
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      if (!client) throw new Error("Host is not connected");
+      await client.taskDelete(project, id);
+    },
+    onSuccess: onChanged,
+    onError,
+  });
+  const updateConfig = useMutation({
+    mutationFn: async (next: TaskConfig) => {
+      if (!client) throw new Error("Host is not connected");
+      return client.taskConfigUpdate(project, next);
+    },
+    onSuccess: (next) => queryClient.setQueryData(configKey, next),
+    onError,
+  });
+
+  const patchMutate = patch.mutate;
+  const handlePatch = useCallback(
+    (id: string, p: TaskUpdateRpcPatch) => patchMutate({ id, patch: p }),
+    [patchMutate],
+  );
+  const moveMutate = move.mutate;
+  const handleChangeProject = useCallback((next: string) => moveMutate(next), [moveMutate]);
+  const removeMutate = remove.mutate;
+  const handleDelete = useCallback((id: string) => removeMutate(id), [removeMutate]);
+
+  const updateConfigMutate = updateConfig.mutate;
+  const addTo = useCallback(
+    (key: "types" | "people" | "contexts", value: string) => {
+      if (!config[key].includes(value)) {
+        updateConfigMutate({ ...config, [key]: [...config[key], value] });
+      }
+    },
+    [config, updateConfigMutate],
+  );
+  const removeFrom = useCallback(
+    (key: "types" | "people" | "contexts", value: string) =>
+      updateConfigMutate({ ...config, [key]: config[key].filter((v) => v !== value) }),
+    [config, updateConfigMutate],
+  );
+  const onAddType = useCallback((v: string) => addTo("types", v), [addTo]);
+  const onRemoveType = useCallback((v: string) => removeFrom("types", v), [removeFrom]);
+  const onAddPerson = useCallback((v: string) => addTo("people", v), [addTo]);
+  const onRemovePerson = useCallback((v: string) => removeFrom("people", v), [removeFrom]);
+  const onAddContext = useCallback((v: string) => addTo("contexts", v), [addTo]);
+  const onRemoveContext = useCallback((v: string) => removeFrom("contexts", v), [removeFrom]);
+
+  return (
+    <TaskEditor
+      task={task}
+      config={config}
+      onPatch={handlePatch}
+      onDelete={handleDelete}
+      onAddType={onAddType}
+      onAddPerson={onAddPerson}
+      onRemoveType={onRemoveType}
+      onRemovePerson={onRemovePerson}
+      onAddContext={onAddContext}
+      onRemoveContext={onRemoveContext}
+      projectOptions={projectOptions}
+      onChangeProject={handleChangeProject}
+    />
   );
 }
 
@@ -310,8 +480,7 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    paddingTop: theme.spacing[3],
+    padding: theme.spacing[3],
   },
   input: {
     flex: 1,
@@ -333,16 +502,18 @@ const styles = StyleSheet.create((theme) => ({
   addButtonDisabled: { opacity: 0.5 },
   addButtonPressed: { opacity: 0.8 },
   addButtonText: { color: theme.colors.accentForeground, fontWeight: theme.fontWeight.medium },
-  projectPickerRow: { paddingHorizontal: theme.spacing[3], paddingVertical: theme.spacing[2] },
   list: { flex: 1, minHeight: 0 },
   listContent: { padding: theme.spacing[3], gap: theme.spacing[2] },
+  rowOuter: {
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surface1,
+    overflow: "hidden",
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[3],
     padding: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
-    backgroundColor: theme.colors.surface1,
   },
   check: {
     width: 22,

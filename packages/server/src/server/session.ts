@@ -1905,6 +1905,13 @@ export class Session {
         return this.handleReadProjectConfigRequest(msg);
       case "write_project_config_request":
         return this.handleWriteProjectConfigRequest(msg);
+      default:
+        return this.dispatchTaskMessage(msg);
+    }
+  }
+
+  private dispatchTaskMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
       case "task.list.request":
         return this.handleTaskListRequest(msg);
       case "tasks.query.request":
@@ -1915,6 +1922,8 @@ export class Session {
         return this.handleTaskCreateRequest(msg);
       case "task.update.request":
         return this.handleTaskUpdateRequest(msg);
+      case "task.move.request":
+        return this.handleTaskMoveRequest(msg);
       case "task.delete.request":
         return this.handleTaskDeleteRequest(msg);
       case "task.run.request":
@@ -1978,6 +1987,16 @@ export class Session {
     const task = await this.taskStore.update(msg.project, msg.id, msg.patch);
     this.emit({
       type: "task.update.response",
+      payload: { requestId: msg.requestId, task },
+    });
+  }
+
+  private async handleTaskMoveRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.move.request" }>,
+  ): Promise<void> {
+    const task = await this.taskStore.move(msg.project, msg.id, msg.newProject);
+    this.emit({
+      type: "task.move.response",
       payload: { requestId: msg.requestId, task },
     });
   }

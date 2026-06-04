@@ -116,6 +116,22 @@ export const TaskUpdateResponseSchema = z.object({
   }),
 });
 
+// --- task.move --- (reassign a task to a different project / vault folder)
+export const TaskMoveRequestSchema = z.object({
+  type: z.literal("task.move.request"),
+  requestId: z.string(),
+  project: z.string().min(1),
+  id: z.string().min(1),
+  newProject: z.string().min(1),
+});
+export const TaskMoveResponseSchema = z.object({
+  type: z.literal("task.move.response"),
+  payload: z.object({
+    requestId: z.string(),
+    task: TaskWireSchema,
+  }),
+});
+
 // --- task.delete ---
 export const TaskDeleteRequestSchema = z.object({
   type: z.literal("task.delete.request"),
@@ -192,6 +208,7 @@ export const TaskRequestSchemas = [
   TaskGetRequestSchema,
   TaskCreateRequestSchema,
   TaskUpdateRequestSchema,
+  TaskMoveRequestSchema,
   TaskDeleteRequestSchema,
   TaskRunRequestSchema,
   TaskConfigGetRequestSchema,
@@ -204,6 +221,7 @@ export const TaskResponseSchemas = [
   TaskGetResponseSchema,
   TaskCreateResponseSchema,
   TaskUpdateResponseSchema,
+  TaskMoveResponseSchema,
   TaskDeleteResponseSchema,
   TaskRunResponseSchema,
   TaskConfigGetResponseSchema,

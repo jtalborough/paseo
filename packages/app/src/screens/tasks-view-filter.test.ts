@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { StoredTask } from "@getpaseo/protocol/task/types";
-import { filterTasksForView } from "./tasks-view-filter.js";
+import { createDefaultsForView, filterTasksForView } from "./tasks-view-filter.js";
 
 const TODAY = "2026-06-04";
 
@@ -74,5 +74,20 @@ describe("filterTasksForView", () => {
   it("All excludes dropped", () => {
     expect(ids("all")).not.toContain("dropped-1");
     expect(ids("all")).toHaveLength(7);
+  });
+});
+
+describe("createDefaultsForView", () => {
+  it("Today seeds today's do-date", () => {
+    expect(createDefaultsForView("today", TODAY)).toEqual({ doDate: TODAY });
+  });
+  it("Waiting and Someday seed their action state", () => {
+    expect(createDefaultsForView("waiting", TODAY)).toEqual({ actionState: "waiting" });
+    expect(createDefaultsForView("someday", TODAY)).toEqual({ actionState: "someday" });
+  });
+  it("Inbox / Upcoming / All capture a plain undated todo", () => {
+    expect(createDefaultsForView("inbox", TODAY)).toEqual({});
+    expect(createDefaultsForView("upcoming", TODAY)).toEqual({});
+    expect(createDefaultsForView("all", TODAY)).toEqual({});
   });
 });
