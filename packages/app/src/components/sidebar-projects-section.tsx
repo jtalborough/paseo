@@ -60,9 +60,50 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
     await createGroup({ displayName: name });
   }, [newGroupName, createGroup]);
 
-  // Flat fallback: capability off or no groups yet → unchanged behavior.
-  if (!supported || groups.length === 0) {
+  // Capability off entirely → unchanged flat list, no grouping affordances.
+  if (!supported) {
     return <SidebarWorkspaceList {...props} />;
+  }
+
+  const createAffordance = isAddingGroup ? (
+    <View style={styles.addGroupRow}>
+      <TextInput
+        style={styles.addGroupInput}
+        value={newGroupName}
+        onChangeText={setNewGroupName}
+        placeholder="Project name"
+        autoFocus
+        onSubmitEditing={submitNewGroup}
+        onBlur={submitNewGroup}
+        returnKeyType="done"
+        testID="sidebar-new-group-input"
+      />
+    </View>
+  ) : (
+    <Pressable
+      style={styles.newGroupButton}
+      onPress={handleStartAddGroup}
+      testID="sidebar-new-group-button"
+    >
+      <ThemedFolderPlus size={16} uniProps={mutedColorMapping} />
+      <Text style={styles.newGroupLabel}>New Project</Text>
+    </Pressable>
+  );
+
+  // Supported but no groups yet → keep the full flat, draggable list and surface
+  // the create affordance as its footer (otherwise the first group is unreachable).
+  if (groups.length === 0) {
+    return (
+      <SidebarWorkspaceList
+        {...props}
+        listFooterComponent={
+          <>
+            {createAffordance}
+            {props.listFooterComponent}
+          </>
+        }
+      />
+    );
   }
 
   return (
@@ -93,30 +134,7 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
         />
       ))}
 
-      {isAddingGroup ? (
-        <View style={styles.addGroupRow}>
-          <TextInput
-            style={styles.addGroupInput}
-            value={newGroupName}
-            onChangeText={setNewGroupName}
-            placeholder="Project name"
-            autoFocus
-            onSubmitEditing={submitNewGroup}
-            onBlur={submitNewGroup}
-            returnKeyType="done"
-            testID="sidebar-new-group-input"
-          />
-        </View>
-      ) : (
-        <Pressable
-          style={styles.newGroupButton}
-          onPress={handleStartAddGroup}
-          testID="sidebar-new-group-button"
-        >
-          <ThemedFolderPlus size={16} uniProps={mutedColorMapping} />
-          <Text style={styles.newGroupLabel}>New Project</Text>
-        </Pressable>
-      )}
+      {createAffordance}
 
       {props.listFooterComponent}
     </ScrollView>
