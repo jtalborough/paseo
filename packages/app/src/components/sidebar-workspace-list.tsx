@@ -220,7 +220,7 @@ function selectionForSelectedWorkspace(
   return selected ? { serverId: workspace.serverId, workspaceId: workspace.workspaceId } : null;
 }
 
-interface SidebarWorkspaceListProps {
+export interface SidebarWorkspaceListProps {
   projects: SidebarProjectEntry[];
   serverId: string | null;
   collapsedProjectKeys: ReadonlySet<string>;
@@ -234,7 +234,17 @@ interface SidebarWorkspaceListProps {
   listFooterComponent?: ReactElement | null;
   /** Gesture ref for coordinating with parent gestures (e.g., sidebar close) */
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
+  // COMPAT(projectGroups): when rendered as one section per group, project DnD is
+  // disabled (the global project-order store can't be shared across instances) and
+  // the per-section list does not wrap itself in a scroll container — the grouped
+  // wrapper provides a single outer scroll. Cross-group/within-group folder
+  // reorder is deferred (see Plan 02 Step 5).
+  disableProjectReorder?: boolean;
+  hideEmptyState?: boolean;
+  scrollable?: boolean;
 }
+
+const noopDrag = () => {};
 
 interface ProjectHeaderRowProps {
   project: SidebarProjectEntry;
@@ -2375,6 +2385,9 @@ export function SidebarWorkspaceList({
   onAddProject,
   listFooterComponent,
   parentGestureRef,
+  disableProjectReorder = false,
+  hideEmptyState = false,
+  scrollable = true,
 }: SidebarWorkspaceListProps) {
   const pathname = usePathname();
 
@@ -2648,34 +2661,78 @@ function ProjectModeList({
     ],
   );
 
+  let projectsBody: ReactElement | null;
+  if (projects.length === 0) {
+    projectsBody = hideEmptyState ? null : (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>No projects yet</Text>
+        <Text style={styles.emptyText}>Add a project to get started</Text>
+        <Button variant="ghost" size="sm" leftIcon={Plus} onPress={onAddProject}>
+          Add project
+        </Button>
+      </View>
+    );
+  } else if (disableProjectReorder) {
+    // COMPAT(projectGroups): grouped sections render statically — folder DnD is
+    // deferred so the global project-order store isn't fought over by multiple
+    // per-group list instances. Workspace reorder (keyed per folder) still works.
+    projectsBody = (
+      <View style={styles.projectListContainer}>
+        {projects.map((project) => (
+          <MemoProjectBlock
+            key={project.projectKey}
+            project={project}
+            collapsed={collapsedProjectKeys.has(project.projectKey)}
+            displayName={project.projectName}
+            iconDataUri={projectIconByProjectKey.get(project.projectKey) ?? null}
+            serverId={serverId}
+            selectionEnabled={selectionEnabled}
+            showShortcutBadges={showShortcutBadges}
+            shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
+            parentGestureRef={parentGestureRef}
+            onToggleCollapsed={onToggleProjectCollapsed}
+            onWorkspacePress={onWorkspacePress}
+            onWorkspaceReorder={handleWorkspaceReorder}
+            onWorktreeCreated={handleWorktreeCreated}
+            drag={noopDrag}
+            isDragging={false}
+            useNestable={platformIsNative}
+            creatingWorkspaceIds={creatingWorkspaceIds}
+            activeWorkspaceSelection={activeWorkspaceSelection}
+          />
+        ))}
+      </View>
+    );
+  } else {
+    projectsBody = (
+      <DraggableList
+        testID="sidebar-project-list"
+        data={projects}
+        keyExtractor={projectKeyExtractor}
+        renderItem={renderProject}
+        onDragEnd={handleProjectDragEnd}
+        extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
+        scrollEnabled={false}
+        useDragHandle
+        nestable={platformIsNative}
+        simultaneousGestureRef={parentGestureRef}
+        containerStyle={styles.projectListContainer}
+      />
+    );
+  }
+
   const content = (
     <>
-      {projects.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>No projects yet</Text>
-          <Text style={styles.emptyText}>Add a project to get started</Text>
-          <Button variant="ghost" size="sm" leftIcon={Plus} onPress={onAddProject}>
-            Add project
-          </Button>
-        </View>
-      ) : (
-        <DraggableList
-          testID="sidebar-project-list"
-          data={projects}
-          keyExtractor={projectKeyExtractor}
-          renderItem={renderProject}
-          onDragEnd={handleProjectDragEnd}
-          extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
-          scrollEnabled={false}
-          useDragHandle
-          nestable={platformIsNative}
-          simultaneousGestureRef={parentGestureRef}
-          containerStyle={styles.projectListContainer}
-        />
-      )}
+      {projectsBody}
       {listFooterComponent}
     </>
   );
+
+  // COMPAT(projectGroups): a non-scrollable section defers to the grouped wrapper's
+  // single outer scroll container instead of nesting its own.
+  if (!scrollable) {
+    return <View style={styles.container}>{content}</View>;
+  }
 
   return (
     <View style={styles.container}>

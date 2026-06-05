@@ -73,7 +73,7 @@ import {
 } from "@/utils/host-routes";
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
-import { SidebarWorkspaceList } from "./sidebar-workspace-list";
+import { SidebarProjectsSection } from "./sidebar-projects-section";
 
 const MIN_CHAT_WIDTH = 400;
 
@@ -769,7 +769,7 @@ function MobileSidebar({
             {isInitialLoad ? (
               <SidebarAgentListSkeleton />
             ) : (
-              <SidebarWorkspaceList
+              <SidebarProjectsSection
                 serverId={activeServerId}
                 collapsedProjectKeys={collapsedProjectKeys}
                 onToggleProjectCollapsed={toggleProjectCollapsed}
@@ -918,7 +918,7 @@ function DesktopSidebar({
         {isInitialLoad ? (
           <SidebarAgentListSkeleton />
         ) : (
-          <SidebarWorkspaceList
+          <SidebarProjectsSection
             serverId={activeServerId}
             collapsedProjectKeys={collapsedProjectKeys}
             onToggleProjectCollapsed={toggleProjectCollapsed}
