@@ -1,11 +1,12 @@
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { ChevronDown, ChevronRight, FolderPlus } from "lucide-react-native";
+import { ChevronDown, ChevronRight, FolderPlus, Plus } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
 import {
   groupSidebarProjects,
   type SidebarGroupEntry,
+  type SidebarProjectEntry,
 } from "@/hooks/sidebar-workspaces-view-model";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import {
@@ -24,9 +25,10 @@ const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMut
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedChevronRight = withUnistyles(ChevronRight);
 const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedPlus = withUnistyles(Plus);
 
 export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
-  const { groups, supported, createGroup } = useProjectGroups(props.serverId);
+  const { groups, supported, createGroup, setFolderGroup } = useProjectGroups(props.serverId);
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
@@ -131,6 +133,8 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
           collapsed={collapsedGroupIds.has(group.groupId)}
           onToggle={toggleGroupCollapsed}
           listProps={props}
+          assignableFolders={grouped.ungrouped}
+          onAssignFolder={setFolderGroup}
         />
       ))}
 
@@ -146,13 +150,26 @@ function GroupSection({
   collapsed,
   onToggle,
   listProps,
+  assignableFolders,
+  onAssignFolder,
 }: {
   group: SidebarGroupEntry;
   collapsed: boolean;
   onToggle: (groupId: string) => void;
   listProps: SidebarWorkspaceListProps;
+  assignableFolders: SidebarProjectEntry[];
+  onAssignFolder: (projectId: string, groupId: string | null) => Promise<void>;
 }) {
+  const [isPicking, setIsPicking] = useState(false);
   const handlePress = useCallback(() => onToggle(group.groupId), [onToggle, group.groupId]);
+  const handleTogglePicker = useCallback(() => setIsPicking((current) => !current), []);
+  const handlePick = useCallback(
+    async (projectId: string) => {
+      setIsPicking(false);
+      await onAssignFolder(projectId, group.groupId);
+    },
+    [onAssignFolder, group.groupId],
+  );
   const colorDotStyle = useMemo(
     () => [styles.groupColorDot, { backgroundColor: group.color ?? "transparent" }],
     [group.color],
@@ -177,25 +194,64 @@ function GroupSection({
 
   return (
     <View style={styles.groupSection}>
-      <Pressable
-        style={styles.groupHeader}
-        onPress={handlePress}
-        testID={`sidebar-group-header-${group.groupId}`}
-      >
-        {collapsed ? (
-          <ThemedChevronRight size={14} uniProps={mutedColorMapping} />
-        ) : (
-          <ThemedChevronDown size={14} uniProps={mutedColorMapping} />
-        )}
-        {group.color ? <View style={colorDotStyle} /> : null}
-        <Text style={styles.groupName} numberOfLines={1}>
-          {group.displayName}
-        </Text>
-        <Text style={styles.groupCount}>{group.projects.length}</Text>
-      </Pressable>
+      <View style={styles.groupHeader}>
+        <Pressable
+          style={styles.groupHeaderMain}
+          onPress={handlePress}
+          testID={`sidebar-group-header-${group.groupId}`}
+        >
+          {collapsed ? (
+            <ThemedChevronRight size={14} uniProps={mutedColorMapping} />
+          ) : (
+            <ThemedChevronDown size={14} uniProps={mutedColorMapping} />
+          )}
+          {group.color ? <View style={colorDotStyle} /> : null}
+          <Text style={styles.groupName} numberOfLines={1}>
+            {group.displayName}
+          </Text>
+          <Text style={styles.groupCount}>{group.projects.length}</Text>
+        </Pressable>
+        <Pressable
+          style={styles.groupAddButton}
+          onPress={handleTogglePicker}
+          hitSlop={8}
+          testID={`sidebar-group-add-${group.groupId}`}
+        >
+          <ThemedPlus size={14} uniProps={mutedColorMapping} />
+        </Pressable>
+      </View>
+
+      {isPicking ? (
+        <View style={styles.pickerContainer}>
+          {assignableFolders.length === 0 ? (
+            <Text style={styles.groupEmpty}>No ungrouped folders to add</Text>
+          ) : (
+            assignableFolders.map((folder) => (
+              <FolderPickRow key={folder.projectKey} folder={folder} onPick={handlePick} />
+            ))
+          )}
+        </View>
+      ) : null}
 
       {body}
     </View>
+  );
+}
+
+function FolderPickRow({
+  folder,
+  onPick,
+}: {
+  folder: SidebarProjectEntry;
+  onPick: (projectId: string) => void;
+}) {
+  const handlePress = useCallback(() => onPick(folder.projectKey), [onPick, folder.projectKey]);
+  return (
+    <Pressable style={styles.pickerRow} onPress={handlePress}>
+      <Text style={styles.pickerRowLabel} numberOfLines={1}>
+        {folder.projectName}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -212,9 +268,32 @@ const styles = StyleSheet.create((theme) => ({
   groupHeader: {
     flexDirection: "row",
     alignItems: "center",
+    paddingRight: theme.spacing[2],
+  },
+  groupHeaderMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
     gap: theme.spacing[1],
+  },
+  groupAddButton: {
+    padding: theme.spacing[1],
+  },
+  pickerContainer: {
+    paddingLeft: theme.spacing[4],
+    paddingRight: theme.spacing[2],
+    paddingBottom: theme.spacing[1],
+  },
+  pickerRow: {
+    paddingVertical: theme.spacing[1],
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.sm,
+  },
+  pickerRowLabel: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
   },
   groupColorDot: {
     width: 8,
