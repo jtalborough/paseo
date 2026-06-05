@@ -6,6 +6,7 @@ import {
   buildSidebarProjectsFromStructure,
   computeSidebarOrderUpdates,
   deriveSidebarLoadingState,
+  groupSidebarProjects,
   type SidebarProjectEntry,
 } from "./sidebar-workspaces-view-model";
 
@@ -244,5 +245,52 @@ describe("deriveSidebarLoadingState", () => {
         hasProjects: false,
       }),
     ).toEqual({ isLoading: false, isInitialLoad: false, isRevalidating: false });
+  });
+});
+
+describe("groupSidebarProjects", () => {
+  function grouped(projectKey: string, groupId: string | null): SidebarProjectEntry {
+    return {
+      ...sidebarProject({ projectKey, workspaceKeys: [`${projectKey}-ws`] }),
+      projectGroupId: groupId,
+    };
+  }
+
+  it("partitions folders into groups and ungrouped, sorted by order", () => {
+    const result = groupSidebarProjects({
+      projects: [grouped("a", "g2"), grouped("b", "g1"), grouped("c", null), grouped("d", "gone")],
+      groups: [
+        { groupId: "g1", displayName: "Work", color: null, order: 1 },
+        { groupId: "g2", displayName: "Personal", color: "#fff", order: 2 },
+      ],
+    });
+
+    expect(result.groups.map((group) => group.groupId)).toEqual(["g1", "g2"]);
+    expect(result.groups[0]?.projects.map((p) => p.projectKey)).toEqual(["b"]);
+    expect(result.groups[1]?.projects.map((p) => p.projectKey)).toEqual(["a"]);
+    // null membership and an unknown groupId both fall through to ungrouped.
+    expect(result.ungrouped.map((p) => p.projectKey)).toEqual(["c", "d"]);
+  });
+
+  it("retains empty groups and breaks order ties by display name", () => {
+    const result = groupSidebarProjects({
+      projects: [],
+      groups: [
+        { groupId: "g1", displayName: "Beta", color: null, order: null },
+        { groupId: "g2", displayName: "Alpha", color: null, order: null },
+      ],
+    });
+
+    expect(result.groups.map((group) => group.displayName)).toEqual(["Alpha", "Beta"]);
+    expect(result.groups.every((group) => group.projects.length === 0)).toBe(true);
+  });
+
+  it("preserves incoming folder order within a group", () => {
+    const result = groupSidebarProjects({
+      projects: [grouped("z", "g1"), grouped("a", "g1")],
+      groups: [{ groupId: "g1", displayName: "G", color: null, order: 0 }],
+    });
+
+    expect(result.groups[0]?.projects.map((p) => p.projectKey)).toEqual(["z", "a"]);
   });
 });

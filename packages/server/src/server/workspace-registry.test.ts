@@ -6,8 +6,10 @@ import { beforeEach, afterEach, describe, expect, test } from "vitest";
 
 import { createTestLogger } from "../test-utils/test-logger.js";
 import {
+  createPersistedGroupRecord,
   createPersistedProjectRecord,
   createPersistedWorkspaceRecord,
+  FileBackedGroupRegistry,
   FileBackedProjectRegistry,
   FileBackedWorkspaceRegistry,
 } from "./workspace-registry.js";
@@ -16,6 +18,7 @@ describe("workspace registries", () => {
   let tmpDir: string;
   let projectRegistry: FileBackedProjectRegistry;
   let workspaceRegistry: FileBackedWorkspaceRegistry;
+  let groupRegistry: FileBackedGroupRegistry;
   const logger = createTestLogger();
 
   beforeEach(() => {
@@ -26,6 +29,10 @@ describe("workspace registries", () => {
     );
     workspaceRegistry = new FileBackedWorkspaceRegistry(
       path.join(tmpDir, "projects", "workspaces.json"),
+      logger,
+    );
+    groupRegistry = new FileBackedGroupRegistry(
+      path.join(tmpDir, "projects", "groups.json"),
       logger,
     );
   });
@@ -143,6 +150,92 @@ describe("workspace registries", () => {
     const record = await projectRegistry.get("remote:github.com/acme/repo");
     expect(record?.customName).toBe("Acme (work)");
     expect(record?.displayName).toBe("acme/repo");
+  });
+
+  test("project record schema defaults groupId to null (legacy + ungrouped records)", async () => {
+    await projectRegistry.initialize();
+
+    await projectRegistry.upsert(
+      createPersistedProjectRecord({
+        projectId: "remote:github.com/acme/repo",
+        rootPath: "/tmp/repo",
+        kind: "git",
+        displayName: "acme/repo",
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }),
+    );
+
+    const record = await projectRegistry.get("remote:github.com/acme/repo");
+    expect(record?.groupId).toBeNull();
+  });
+
+  test("project record persists and clears a groupId assignment", async () => {
+    await projectRegistry.initialize();
+
+    const base = {
+      projectId: "remote:github.com/acme/repo",
+      rootPath: "/home/me/work/repo",
+      kind: "git" as const,
+      displayName: "acme/repo",
+      createdAt: "2026-03-01T00:00:00.000Z",
+    };
+
+    await projectRegistry.upsert(
+      createPersistedProjectRecord({
+        ...base,
+        groupId: "grp_work",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }),
+    );
+    expect((await projectRegistry.get(base.projectId))?.groupId).toBe("grp_work");
+
+    // Re-assign to null (folder leaves the group, record survives).
+    await projectRegistry.upsert(
+      createPersistedProjectRecord({
+        ...base,
+        groupId: null,
+        updatedAt: "2026-03-02T00:00:00.000Z",
+      }),
+    );
+    expect((await projectRegistry.get(base.projectId))?.groupId).toBeNull();
+  });
+
+  test("creates, updates, archives, deletes, and lists group records", async () => {
+    await groupRegistry.initialize();
+    await groupRegistry.upsert(
+      createPersistedGroupRecord({
+        groupId: "grp_work",
+        displayName: "Work",
+        color: "#3b82f6",
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }),
+    );
+
+    await groupRegistry.upsert(
+      createPersistedGroupRecord({
+        groupId: "grp_work",
+        displayName: "Work (renamed)",
+        color: "#3b82f6",
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-02T00:00:00.000Z",
+      }),
+    );
+
+    const updated = await groupRegistry.get("grp_work");
+    expect(updated?.displayName).toBe("Work (renamed)");
+    expect(updated?.icon).toBeNull();
+    expect(updated?.order).toBeNull();
+
+    await groupRegistry.archive("grp_work", "2026-03-03T00:00:00.000Z");
+    const archived = await groupRegistry.get("grp_work");
+    expect(archived?.archivedAt).toBe("2026-03-03T00:00:00.000Z");
+    expect(await groupRegistry.list()).toHaveLength(1);
+
+    await groupRegistry.remove("grp_work");
+    expect(await groupRegistry.get("grp_work")).toBeNull();
+    expect(await groupRegistry.list()).toEqual([]);
   });
 
   test("creates, updates, archives, deletes, and lists workspace records", async () => {

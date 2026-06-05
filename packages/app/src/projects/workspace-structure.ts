@@ -6,6 +6,8 @@ export interface WorkspaceStructureProject {
   projectName: string;
   projectKind: WorkspaceDescriptor["projectKind"];
   iconWorkingDir: string;
+  // COMPAT(projectGroups): folder's group membership (null/absent = ungrouped).
+  projectGroupId?: string | null;
   workspaceKeys: string[];
 }
 
@@ -67,6 +69,7 @@ export function buildWorkspaceStructureProjects(input: {
           workspace.projectDisplayName || projectDisplayNameFromProjectId(workspace.projectId),
         projectKind: workspace.projectKind,
         iconWorkingDir: workspace.projectRootPath,
+        projectGroupId: workspace.projectGroupId ?? null,
         workspaceKeys: [],
         workspaces: [],
       } satisfies WorkspaceStructureProject & {

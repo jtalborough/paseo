@@ -18,6 +18,39 @@ const PersistedProjectRecordSchema = z.object({
     .nullable()
     .optional()
     .transform((value) => value ?? null),
+  // Membership in a user-authored Group (Plan 02). Null/absent = ungrouped.
+  // Additive + back-compat: old daemons/clients ignore it, the field defaults to
+  // null. Group metadata + ordering live in groups.json (see GroupRegistry).
+  groupId: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  archivedAt: z.string().nullable(),
+});
+
+// A user-authored grouping above folder records (the existing project records).
+// Renders as the top level of the sidebar tree: Group → Folder → Workspace.
+const PersistedGroupRecordSchema = z.object({
+  groupId: z.string(),
+  displayName: z.string(),
+  color: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  icon: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  order: z
+    .number()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
   createdAt: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().nullable(),
@@ -36,6 +69,17 @@ const PersistedWorkspaceRecordSchema = z.object({
 
 export type PersistedProjectRecord = z.infer<typeof PersistedProjectRecordSchema>;
 export type PersistedWorkspaceRecord = z.infer<typeof PersistedWorkspaceRecordSchema>;
+export type PersistedGroupRecord = z.infer<typeof PersistedGroupRecordSchema>;
+
+export interface GroupRegistry {
+  initialize(): Promise<void>;
+  existsOnDisk(): Promise<boolean>;
+  list(): Promise<PersistedGroupRecord[]>;
+  get(groupId: string): Promise<PersistedGroupRecord | null>;
+  upsert(record: PersistedGroupRecord): Promise<void>;
+  archive(groupId: string, archivedAt: string): Promise<void>;
+  remove(groupId: string): Promise<void>;
+}
 
 export interface ProjectRegistry {
   initialize(): Promise<void>;
@@ -57,7 +101,7 @@ export interface WorkspaceRegistry {
   remove(workspaceId: string): Promise<void>;
 }
 
-type RegistryRecord = PersistedProjectRecord | PersistedWorkspaceRecord;
+type RegistryRecord = PersistedProjectRecord | PersistedWorkspaceRecord | PersistedGroupRecord;
 
 class FileBackedRegistry<TRecord extends RegistryRecord> {
   private readonly filePath: string;
@@ -200,12 +244,59 @@ export class FileBackedWorkspaceRegistry
   }
 }
 
+export class FileBackedGroupRegistry
+  extends FileBackedRegistry<PersistedGroupRecord>
+  implements GroupRegistry
+{
+  constructor(filePath: string, logger: Logger) {
+    super({
+      filePath,
+      logger,
+      schema: PersistedGroupRecordSchema,
+      getId: (record) => record.groupId,
+      component: "groups",
+    });
+  }
+}
+
+export function createNoopGroupRegistry(): GroupRegistry {
+  return {
+    initialize: async () => {},
+    existsOnDisk: async () => true,
+    list: async () => [],
+    get: async () => null,
+    upsert: async () => {},
+    archive: async () => {},
+    remove: async () => {},
+  };
+}
+
+export function createPersistedGroupRecord(input: {
+  groupId: string;
+  displayName: string;
+  color?: string | null;
+  icon?: string | null;
+  order?: number | null;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string | null;
+}): PersistedGroupRecord {
+  return PersistedGroupRecordSchema.parse({
+    ...input,
+    color: input.color ?? null,
+    icon: input.icon ?? null,
+    order: input.order ?? null,
+    archivedAt: input.archivedAt ?? null,
+  });
+}
+
 export function createPersistedProjectRecord(input: {
   projectId: string;
   rootPath: string;
   kind: PersistedProjectKind;
   displayName: string;
   customName?: string | null;
+  groupId?: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;
@@ -213,6 +304,7 @@ export function createPersistedProjectRecord(input: {
   return PersistedProjectRecordSchema.parse({
     ...input,
     customName: input.customName ?? null,
+    groupId: input.groupId ?? null,
     archivedAt: input.archivedAt ?? null,
   });
 }

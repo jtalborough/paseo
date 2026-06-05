@@ -1300,6 +1300,107 @@ export const ProjectRenameResponseSchema = z.object({
   payload: ProjectRenameResponsePayloadSchema,
 });
 
+// COMPAT(projectGroups): added in v0.1.90, remove gate after 2026-12-15.
+// User-authored groups above folder (project) records — the top level of the
+// sidebar tree. Membership lives as `groupId` on the project record.
+export const ProjectGroupPayloadSchema = z.object({
+  groupId: z.string(),
+  displayName: z.string(),
+  color: z.string().nullable(),
+  icon: z.string().nullable(),
+  order: z.number().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  archivedAt: z.string().nullable(),
+});
+
+export const ProjectGroupListRequestSchema = z.object({
+  type: z.literal("project.group.list.request"),
+  requestId: z.string(),
+});
+
+export const ProjectGroupListResponseSchema = z.object({
+  type: z.literal("project.group.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    groups: z.array(ProjectGroupPayloadSchema),
+  }),
+});
+
+export const ProjectGroupCreateRequestSchema = z.object({
+  type: z.literal("project.group.create.request"),
+  displayName: z.string(),
+  color: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  requestId: z.string(),
+});
+
+export const ProjectGroupCreateResponseSchema = z.object({
+  type: z.literal("project.group.create.response"),
+  payload: z.object({
+    requestId: z.string(),
+    accepted: z.boolean(),
+    group: ProjectGroupPayloadSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ProjectGroupUpdateRequestSchema = z.object({
+  type: z.literal("project.group.update.request"),
+  groupId: z.string(),
+  // Absent = unchanged. For color/icon/order, null = clear, value = set.
+  displayName: z.string().optional(),
+  color: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  order: z.number().nullable().optional(),
+  requestId: z.string(),
+});
+
+export const ProjectGroupUpdateResponseSchema = z.object({
+  type: z.literal("project.group.update.response"),
+  payload: z.object({
+    requestId: z.string(),
+    accepted: z.boolean(),
+    group: ProjectGroupPayloadSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ProjectGroupDeleteRequestSchema = z.object({
+  type: z.literal("project.group.delete.request"),
+  groupId: z.string(),
+  requestId: z.string(),
+});
+
+export const ProjectGroupDeleteResponseSchema = z.object({
+  type: z.literal("project.group.delete.response"),
+  payload: z.object({
+    requestId: z.string(),
+    accepted: z.boolean(),
+    groupId: z.string(),
+    error: z.string().nullable(),
+  }),
+});
+
+// Assign or clear a folder's group membership. groupId null = ungroup.
+export const ProjectFolderSetGroupRequestSchema = z.object({
+  type: z.literal("project.folder.set_group.request"),
+  projectId: z.string(),
+  groupId: z.string().nullable(),
+  requestId: z.string(),
+});
+
+export const ProjectFolderSetGroupResponseSchema = z.object({
+  type: z.literal("project.folder.set_group.response"),
+  payload: z.object({
+    requestId: z.string(),
+    accepted: z.boolean(),
+    projectId: z.string(),
+    groupId: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const SetVoiceModeResponseMessageSchema = z.object({
   type: z.literal("set_voice_mode_response"),
   payload: z.object({
@@ -1886,6 +1987,11 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   CloseItemsRequestMessageSchema,
   UpdateAgentRequestMessageSchema,
   ProjectRenameRequestSchema,
+  ProjectGroupListRequestSchema,
+  ProjectGroupCreateRequestSchema,
+  ProjectGroupUpdateRequestSchema,
+  ProjectGroupDeleteRequestSchema,
+  ProjectFolderSetGroupRequestSchema,
   SetVoiceModeMessageSchema,
   SendAgentMessageRequestSchema,
   WaitForFinishRequestSchema,
@@ -2173,6 +2279,8 @@ export const ServerInfoStatusPayloadSchema = z
         "fs-write": z.boolean().optional(),
         // COMPAT(gitLog): added in v0.1.X, remove gate after 2026-12-01.
         gitLog: z.boolean().optional(),
+        // COMPAT(projectGroups): added in v0.1.90, remove gate after 2026-12-15.
+        projectGroups: z.boolean().optional(),
       })
       .optional(),
   })
@@ -2438,6 +2546,10 @@ export const WorkspaceDescriptorPayloadSchema = z
     // value (customName) and projectCustomName mirrors the raw override so the
     // settings UI can prefill its input and offer a "reset" action.
     projectCustomName: z.string().nullable().optional(),
+    // COMPAT(projectGroups): added in v0.1.90, drop the optional gate when floor >= v0.1.90.
+    // The folder's group membership (null/absent = ungrouped). Group metadata is
+    // fetched separately via project.group.list.
+    projectGroupId: z.string().nullable().optional(),
     projectRootPath: z.string(),
     workspaceDirectory: z.string().optional(),
     projectKind: z.enum(["git", "non_git", "directory"]),
@@ -3813,6 +3925,11 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
+  ProjectGroupListResponseSchema,
+  ProjectGroupCreateResponseSchema,
+  ProjectGroupUpdateResponseSchema,
+  ProjectGroupDeleteResponseSchema,
+  ProjectFolderSetGroupResponseSchema,
   WaitForFinishResponseMessageSchema,
   AgentPermissionRequestMessageSchema,
   AgentPermissionResolvedMessageSchema,
@@ -3955,6 +4072,17 @@ export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureRespo
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
 export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessageSchema>;
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
+export type ProjectGroupPayload = z.infer<typeof ProjectGroupPayloadSchema>;
+export type ProjectGroupListRequest = z.infer<typeof ProjectGroupListRequestSchema>;
+export type ProjectGroupListResponse = z.infer<typeof ProjectGroupListResponseSchema>;
+export type ProjectGroupCreateRequest = z.infer<typeof ProjectGroupCreateRequestSchema>;
+export type ProjectGroupCreateResponse = z.infer<typeof ProjectGroupCreateResponseSchema>;
+export type ProjectGroupUpdateRequest = z.infer<typeof ProjectGroupUpdateRequestSchema>;
+export type ProjectGroupUpdateResponse = z.infer<typeof ProjectGroupUpdateResponseSchema>;
+export type ProjectGroupDeleteRequest = z.infer<typeof ProjectGroupDeleteRequestSchema>;
+export type ProjectGroupDeleteResponse = z.infer<typeof ProjectGroupDeleteResponseSchema>;
+export type ProjectFolderSetGroupRequest = z.infer<typeof ProjectFolderSetGroupRequestSchema>;
+export type ProjectFolderSetGroupResponse = z.infer<typeof ProjectFolderSetGroupResponseSchema>;
 export type ProjectRenameResponsePayload = z.infer<typeof ProjectRenameResponsePayloadSchema>;
 export type WaitForFinishResponseMessage = z.infer<typeof WaitForFinishResponseMessageSchema>;
 export type AgentPermissionRequestMessage = z.infer<typeof AgentPermissionRequestMessageSchema>;

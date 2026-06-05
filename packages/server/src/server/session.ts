@@ -157,9 +157,13 @@ import {
   deriveWorkspaceDisplayName,
 } from "./workspace-registry-model.js";
 import {
+  createNoopGroupRegistry,
+  createPersistedGroupRecord,
   createPersistedProjectRecord,
   createPersistedWorkspaceRecord,
   resolveProjectDisplayName,
+  type GroupRegistry,
+  type PersistedGroupRecord,
   type PersistedProjectRecord,
   type PersistedWorkspaceRecord,
   type ProjectRegistry,
@@ -563,6 +567,9 @@ export interface SessionOptions {
   agentStorage: AgentStorage;
   projectRegistry: ProjectRegistry;
   workspaceRegistry: WorkspaceRegistry;
+  // Optional with a noop fallback so existing tests need not supply it; real
+  // wiring (bootstrap → websocket-server → session) always provides one.
+  groupRegistry?: GroupRegistry;
   chatService: FileBackedChatService;
   scheduleService: ScheduleService;
   loopService: LoopService;
@@ -769,6 +776,7 @@ export class Session {
   private readonly agentStorage: AgentStorage;
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
+  private readonly groupRegistry: GroupRegistry;
   private readonly chatService: FileBackedChatService;
   private readonly scheduleService: ScheduleService;
   private readonly loopService: LoopService;
@@ -842,6 +850,7 @@ export class Session {
       agentStorage,
       projectRegistry,
       workspaceRegistry,
+      groupRegistry,
       chatService,
       scheduleService,
       loopService,
@@ -890,6 +899,7 @@ export class Session {
     this.agentStorage = agentStorage;
     this.projectRegistry = projectRegistry;
     this.workspaceRegistry = workspaceRegistry;
+    this.groupRegistry = groupRegistry ?? createNoopGroupRegistry();
     this.chatService = chatService;
     this.scheduleService = scheduleService;
     this.loopService = loopService;
@@ -1731,6 +1741,7 @@ export class Session {
       this.dispatchAgentConfigMessage(msg) ??
       this.dispatchCheckoutMessage(msg) ??
       this.dispatchWorkspaceAndProjectMessage(msg) ??
+      this.dispatchProjectGroupMessage(msg) ??
       this.dispatchProviderMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
       this.dispatchChatScheduleLoopMessage(msg) ??
@@ -2592,6 +2603,302 @@ export class Session {
         },
       });
     }
+  }
+
+  // COMPAT(projectGroups): added in v0.1.90. User-authored groups above folder
+  // (project) records. Membership = `groupId` on the project record; group
+  // metadata lives in groups.json (GroupRegistry).
+  private dispatchProjectGroupMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "project.group.list.request":
+        return this.handleProjectGroupListRequest(msg.requestId);
+      case "project.group.create.request":
+        return this.handleProjectGroupCreateRequest(
+          msg.displayName,
+          msg.color ?? null,
+          msg.icon ?? null,
+          msg.requestId,
+        );
+      case "project.group.update.request":
+        return this.handleProjectGroupUpdateRequest({
+          groupId: msg.groupId,
+          displayName: msg.displayName,
+          color: msg.color,
+          icon: msg.icon,
+          order: msg.order,
+          requestId: msg.requestId,
+        });
+      case "project.group.delete.request":
+        return this.handleProjectGroupDeleteRequest(msg.groupId, msg.requestId);
+      case "project.folder.set_group.request":
+        return this.handleProjectFolderSetGroupRequest(msg.projectId, msg.groupId, msg.requestId);
+      default:
+        return undefined;
+    }
+  }
+
+  private async handleProjectGroupListRequest(requestId: string): Promise<void> {
+    const groups = (await this.groupRegistry.list())
+      .filter((group) => !group.archivedAt)
+      .map((group) => this.projectGroupRecordToPayload(group));
+    this.emit({
+      type: "project.group.list.response",
+      payload: { requestId, groups },
+    });
+  }
+
+  private async handleProjectGroupCreateRequest(
+    displayName: string,
+    color: string | null,
+    icon: string | null,
+    requestId: string,
+  ): Promise<void> {
+    try {
+      const trimmed = displayName.trim();
+      if (trimmed.length === 0) {
+        this.emit({
+          type: "project.group.create.response",
+          payload: { requestId, accepted: false, group: null, error: "Group name is required" },
+        });
+        return;
+      }
+      const now = new Date().toISOString();
+      const record = createPersistedGroupRecord({
+        groupId: `grp_${uuidv4()}`,
+        displayName: trimmed,
+        color,
+        icon,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await this.groupRegistry.upsert(record);
+      this.emit({
+        type: "project.group.create.response",
+        payload: {
+          requestId,
+          accepted: true,
+          group: this.projectGroupRecordToPayload(record),
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error({ err: error, requestId }, "session: project.group.create error");
+      this.emit({
+        type: "project.group.create.response",
+        payload: {
+          requestId,
+          accepted: false,
+          group: null,
+          error: getErrorMessageOr(error, "Failed to create group"),
+        },
+      });
+    }
+  }
+
+  private async handleProjectGroupUpdateRequest(input: {
+    groupId: string;
+    displayName?: string;
+    color?: string | null;
+    icon?: string | null;
+    order?: number | null;
+    requestId: string;
+  }): Promise<void> {
+    const { groupId, requestId } = input;
+    try {
+      const existing = await this.groupRegistry.get(groupId);
+      if (!existing) {
+        this.emit({
+          type: "project.group.update.response",
+          payload: { requestId, accepted: false, group: null, error: "Group not found" },
+        });
+        return;
+      }
+      // Absent field = unchanged; explicit null clears (color/icon/order).
+      const nextDisplayName =
+        input.displayName === undefined ? existing.displayName : input.displayName.trim();
+      if (nextDisplayName.length === 0) {
+        this.emit({
+          type: "project.group.update.response",
+          payload: { requestId, accepted: false, group: null, error: "Group name is required" },
+        });
+        return;
+      }
+      const next = createPersistedGroupRecord({
+        groupId: existing.groupId,
+        displayName: nextDisplayName,
+        color: input.color === undefined ? existing.color : input.color,
+        icon: input.icon === undefined ? existing.icon : input.icon,
+        order: input.order === undefined ? existing.order : input.order,
+        createdAt: existing.createdAt,
+        updatedAt: new Date().toISOString(),
+        archivedAt: existing.archivedAt,
+      });
+      await this.groupRegistry.upsert(next);
+      this.emit({
+        type: "project.group.update.response",
+        payload: {
+          requestId,
+          accepted: true,
+          group: this.projectGroupRecordToPayload(next),
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, groupId, requestId },
+        "session: project.group.update error",
+      );
+      this.emit({
+        type: "project.group.update.response",
+        payload: {
+          requestId,
+          accepted: false,
+          group: null,
+          error: getErrorMessageOr(error, "Failed to update group"),
+        },
+      });
+    }
+  }
+
+  private async handleProjectGroupDeleteRequest(groupId: string, requestId: string): Promise<void> {
+    try {
+      // Removing a group ungroups its member folders (the folders survive).
+      const projects = await this.projectRegistry.list();
+      const members = projects.filter((project) => project.groupId === groupId);
+      const now = new Date().toISOString();
+      for (const member of members) {
+        await this.projectRegistry.upsert({ ...member, groupId: null, updatedAt: now });
+      }
+      await this.groupRegistry.remove(groupId);
+      this.emit({
+        type: "project.group.delete.response",
+        payload: { requestId, accepted: true, groupId, error: null },
+      });
+      const affectedWorkspaceIds = await this.workspaceIdsForProjectIds(
+        members.map((member) => member.projectId),
+      );
+      if (affectedWorkspaceIds.length > 0) {
+        await this.emitWorkspaceUpdatesForWorkspaceIds(affectedWorkspaceIds, {
+          skipReconcile: true,
+        });
+      }
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, groupId, requestId },
+        "session: project.group.delete error",
+      );
+      this.emit({
+        type: "project.group.delete.response",
+        payload: {
+          requestId,
+          accepted: false,
+          groupId,
+          error: getErrorMessageOr(error, "Failed to delete group"),
+        },
+      });
+    }
+  }
+
+  private async handleProjectFolderSetGroupRequest(
+    projectId: string,
+    groupId: string | null,
+    requestId: string,
+  ): Promise<void> {
+    try {
+      const existing = await this.projectRegistry.get(projectId);
+      if (!existing) {
+        this.emit({
+          type: "project.folder.set_group.response",
+          payload: {
+            requestId,
+            accepted: false,
+            projectId,
+            groupId: null,
+            error: "Project not found",
+          },
+        });
+        return;
+      }
+      if (groupId !== null) {
+        const group = await this.groupRegistry.get(groupId);
+        if (!group || group.archivedAt) {
+          this.emit({
+            type: "project.folder.set_group.response",
+            payload: {
+              requestId,
+              accepted: false,
+              projectId,
+              groupId: null,
+              error: "Group not found",
+            },
+          });
+          return;
+        }
+      }
+      await this.projectRegistry.upsert({
+        ...existing,
+        groupId,
+        updatedAt: new Date().toISOString(),
+      });
+      this.emit({
+        type: "project.folder.set_group.response",
+        payload: { requestId, accepted: true, projectId, groupId, error: null },
+      });
+      const affectedWorkspaceIds = await this.workspaceIdsForProjectIds([projectId]);
+      if (affectedWorkspaceIds.length > 0) {
+        await this.emitWorkspaceUpdatesForWorkspaceIds(affectedWorkspaceIds, {
+          skipReconcile: true,
+        });
+      }
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, projectId, requestId },
+        "session: project.folder.set_group error",
+      );
+      this.emit({
+        type: "project.folder.set_group.response",
+        payload: {
+          requestId,
+          accepted: false,
+          projectId,
+          groupId: null,
+          error: getErrorMessageOr(error, "Failed to set folder group"),
+        },
+      });
+    }
+  }
+
+  private projectGroupRecordToPayload(record: PersistedGroupRecord): {
+    groupId: string;
+    displayName: string;
+    color: string | null;
+    icon: string | null;
+    order: number | null;
+    createdAt: string;
+    updatedAt: string;
+    archivedAt: string | null;
+  } {
+    return {
+      groupId: record.groupId,
+      displayName: record.displayName,
+      color: record.color,
+      icon: record.icon,
+      order: record.order,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      archivedAt: record.archivedAt,
+    };
+  }
+
+  private async workspaceIdsForProjectIds(projectIds: string[]): Promise<string[]> {
+    if (projectIds.length === 0) {
+      return [];
+    }
+    const wanted = new Set(projectIds);
+    const workspaces = await this.workspaceRegistry.list();
+    return workspaces
+      .filter((workspace) => wanted.has(workspace.projectId))
+      .map((workspace) => workspace.workspaceId);
   }
 
   private toVoiceFeatureUnavailableContext(
@@ -6401,6 +6708,7 @@ export class Session {
         ? resolveProjectDisplayName(resolvedProjectRecord)
         : workspace.projectId,
       projectCustomName: resolvedProjectRecord?.customName ?? null,
+      projectGroupId: resolvedProjectRecord?.groupId ?? null,
       projectRootPath: resolvedProjectRecord?.rootPath ?? workspace.cwd,
       workspaceDirectory: workspace.cwd,
       projectKind: (resolvedProjectRecord?.kind ?? "directory") === "git" ? "git" : "non_git",
@@ -6494,6 +6802,7 @@ export class Session {
         ? resolveProjectDisplayName(projectRecord)
         : result.workspace.projectId,
       projectCustomName: projectRecord?.customName ?? null,
+      projectGroupId: projectRecord?.groupId ?? null,
       projectRootPath: projectRecord?.rootPath ?? result.repoRoot,
       workspaceDirectory: result.workspace.cwd,
       projectKind: "git",

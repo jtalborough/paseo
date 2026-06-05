@@ -7,7 +7,7 @@ import type { AgentStorage } from "./agent/agent-storage.js";
 import type { DownloadTokenStore } from "./file-download/token-store.js";
 import type { TerminalManager } from "../terminal/terminal-manager.js";
 import type pino from "pino";
-import type { ProjectRegistry, WorkspaceRegistry } from "./workspace-registry.js";
+import type { GroupRegistry, ProjectRegistry, WorkspaceRegistry } from "./workspace-registry.js";
 import type { FileBackedChatService } from "./chat/chat-service.js";
 import type { LoopService } from "./loop-service.js";
 import type { ScheduleService } from "./schedule/service.js";
@@ -166,6 +166,18 @@ function createNoopProjectRegistry(): ProjectRegistry {
 }
 
 function createNoopWorkspaceRegistry(): WorkspaceRegistry {
+  return {
+    initialize: async () => {},
+    existsOnDisk: async () => true,
+    list: async () => [],
+    get: async () => null,
+    upsert: async () => {},
+    archive: async () => {},
+    remove: async () => {},
+  };
+}
+
+function createNoopGroupRegistry(): GroupRegistry {
   return {
     initialize: async () => {},
     existsOnDisk: async () => true,
@@ -344,6 +356,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly agentStorage: AgentStorage;
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
+  private readonly groupRegistry: GroupRegistry;
   private readonly chatService: FileBackedChatService;
   private readonly loopService: LoopService;
   private readonly scheduleService: ScheduleService;
@@ -433,6 +446,7 @@ export class VoiceAssistantWebSocketServer {
       };
     },
     serviceProxyPublicBaseUrl?: string | null,
+    groupRegistry?: GroupRegistry,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.serverId = serverId;
@@ -445,6 +459,7 @@ export class VoiceAssistantWebSocketServer {
     this.agentStorage = agentStorage;
     this.projectRegistry = projectRegistry ?? createNoopProjectRegistry();
     this.workspaceRegistry = workspaceRegistry ?? createNoopWorkspaceRegistry();
+    this.groupRegistry = groupRegistry ?? createNoopGroupRegistry();
     const requiredServices = requireWebSocketServices({
       chatService,
       loopService,
@@ -873,6 +888,7 @@ export class VoiceAssistantWebSocketServer {
       agentStorage: this.agentStorage,
       projectRegistry: this.projectRegistry,
       workspaceRegistry: this.workspaceRegistry,
+      groupRegistry: this.groupRegistry,
       chatService: this.chatService,
       loopService: this.loopService,
       scheduleService: this.scheduleService,
@@ -1067,6 +1083,8 @@ export class VoiceAssistantWebSocketServer {
         "fs-write": true,
         // COMPAT(gitLog): added in v0.1.X, remove gate after 2026-12-01.
         gitLog: true,
+        // COMPAT(projectGroups): added in v0.1.90, remove gate after 2026-12-15.
+        projectGroups: true,
       },
     };
   }

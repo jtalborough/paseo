@@ -40,6 +40,7 @@ import {
   findByType,
 } from "./test-utils/session-stubs.js";
 import {
+  FileBackedGroupRegistry,
   FileBackedProjectRegistry,
   FileBackedWorkspaceRegistry,
   createPersistedProjectRecord,
@@ -461,6 +462,9 @@ function createSessionForWorkspaceTests(
     appVersion?: string | null;
     onMessage?: (message: SessionOutboundMessage) => void;
     workspaceGitService?: ReturnType<typeof createNoopWorkspaceGitService>;
+    projectRegistry?: ConstructorParameters<typeof Session>[0]["projectRegistry"];
+    workspaceRegistry?: ConstructorParameters<typeof Session>[0]["workspaceRegistry"];
+    groupRegistry?: ConstructorParameters<typeof Session>[0]["groupRegistry"];
   } = {},
 ): TestSession {
   const logger = {
@@ -495,7 +499,7 @@ function createSessionForWorkspaceTests(
         get: async () => null,
         upsert: async () => {},
       }),
-      projectRegistry: {
+      projectRegistry: options.projectRegistry ?? {
         initialize: async () => {},
         existsOnDisk: async () => true,
         list: async () => [],
@@ -504,7 +508,7 @@ function createSessionForWorkspaceTests(
         archive: async () => {},
         remove: async () => {},
       },
-      workspaceRegistry: {
+      workspaceRegistry: options.workspaceRegistry ?? {
         initialize: async () => {},
         existsOnDisk: async () => true,
         list: async () => [],
@@ -513,6 +517,7 @@ function createSessionForWorkspaceTests(
         archive: async () => {},
         remove: async () => {},
       },
+      groupRegistry: options.groupRegistry,
       chatService: asChatService(),
       scheduleService: asScheduleService(),
       loopService: asLoopService(),
@@ -5047,4 +5052,213 @@ test("resolveRegisteredWorkspaceIdForCwd does not match home directory as a pref
 
   expect(session.resolveRegisteredWorkspaceIdForCwd(childCwd, [homeWorkspace])).toBe(childCwd);
   expect(session.resolveRegisteredWorkspaceIdForCwd(home, [homeWorkspace])).toBe(home);
+});
+
+// COMPAT(projectGroups): project.group.* / project.folder.set_group RPCs.
+function createProjectGroupHarness() {
+  const logger = {
+    child: () => logger,
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-project-groups-"));
+  const projectRegistry = new FileBackedProjectRegistry(
+    path.join(workdir, "projects.json"),
+    asSessionLogger(logger),
+  );
+  const workspaceRegistry = new FileBackedWorkspaceRegistry(
+    path.join(workdir, "workspaces.json"),
+    asSessionLogger(logger),
+  );
+  const groupRegistry = new FileBackedGroupRegistry(
+    path.join(workdir, "groups.json"),
+    asSessionLogger(logger),
+  );
+  const emitted: SessionOutboundMessage[] = [];
+  const session = createSessionForWorkspaceTests({
+    onMessage: (message) => emitted.push(message),
+    projectRegistry,
+    workspaceRegistry,
+    groupRegistry,
+  });
+  return { workdir, projectRegistry, workspaceRegistry, groupRegistry, emitted, session };
+}
+
+function lastPayloadOfType(
+  emitted: SessionOutboundMessage[],
+  type: string,
+): Record<string, unknown> {
+  const match = emitted.findLast((message) => message.type === type);
+  if (!match) {
+    throw new Error(`no emitted message of type ${type}`);
+  }
+  return (match as { payload: Record<string, unknown> }).payload;
+}
+
+test("project groups: create then list round-trips and persists to disk", async () => {
+  const h = createProjectGroupHarness();
+  try {
+    await h.session.handleMessage({
+      type: "project.group.create.request",
+      displayName: "Work",
+      color: "#3b82f6",
+      requestId: "c1",
+    });
+    const created = lastPayloadOfType(h.emitted, "project.group.create.response");
+    expect(created).toMatchObject({ requestId: "c1", accepted: true });
+    const groupId = (created.group as { groupId: string }).groupId;
+    expect(groupId).toMatch(/^grp_/);
+
+    await h.session.handleMessage({ type: "project.group.list.request", requestId: "l1" });
+    const listed = lastPayloadOfType(h.emitted, "project.group.list.response");
+    expect((listed.groups as unknown[]).length).toBe(1);
+
+    expect((await h.groupRegistry.get(groupId))?.displayName).toBe("Work");
+  } finally {
+    rmSync(h.workdir, { recursive: true, force: true });
+  }
+});
+
+test("project groups: create rejects an empty name", async () => {
+  const h = createProjectGroupHarness();
+  try {
+    await h.session.handleMessage({
+      type: "project.group.create.request",
+      displayName: "   ",
+      requestId: "c1",
+    });
+    expect(lastPayloadOfType(h.emitted, "project.group.create.response")).toMatchObject({
+      accepted: false,
+      group: null,
+    });
+    expect(await h.groupRegistry.list()).toHaveLength(0);
+  } finally {
+    rmSync(h.workdir, { recursive: true, force: true });
+  }
+});
+
+test("project groups: set_group assigns a folder and rejects an unknown group", async () => {
+  const h = createProjectGroupHarness();
+  try {
+    await h.projectRegistry.upsert(
+      createPersistedProjectRecord({
+        projectId: "p1",
+        rootPath: "/tmp/p1",
+        kind: "non_git",
+        displayName: "p1",
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }),
+    );
+    await h.session.handleMessage({
+      type: "project.group.create.request",
+      displayName: "Work",
+      requestId: "c1",
+    });
+    const groupId = (
+      lastPayloadOfType(h.emitted, "project.group.create.response").group as { groupId: string }
+    ).groupId;
+
+    await h.session.handleMessage({
+      type: "project.folder.set_group.request",
+      projectId: "p1",
+      groupId,
+      requestId: "s1",
+    });
+    expect(lastPayloadOfType(h.emitted, "project.folder.set_group.response")).toMatchObject({
+      accepted: true,
+      projectId: "p1",
+      groupId,
+    });
+    expect((await h.projectRegistry.get("p1"))?.groupId).toBe(groupId);
+
+    await h.session.handleMessage({
+      type: "project.folder.set_group.request",
+      projectId: "p1",
+      groupId: "grp_does_not_exist",
+      requestId: "s2",
+    });
+    expect(lastPayloadOfType(h.emitted, "project.folder.set_group.response")).toMatchObject({
+      accepted: false,
+      error: "Group not found",
+    });
+    // Assignment unchanged after the rejected request.
+    expect((await h.projectRegistry.get("p1"))?.groupId).toBe(groupId);
+  } finally {
+    rmSync(h.workdir, { recursive: true, force: true });
+  }
+});
+
+test("project groups: deleting a group ungroups its member folders", async () => {
+  const h = createProjectGroupHarness();
+  try {
+    await h.session.handleMessage({
+      type: "project.group.create.request",
+      displayName: "Work",
+      requestId: "c1",
+    });
+    const groupId = (
+      lastPayloadOfType(h.emitted, "project.group.create.response").group as { groupId: string }
+    ).groupId;
+    await h.projectRegistry.upsert(
+      createPersistedProjectRecord({
+        projectId: "p1",
+        rootPath: "/tmp/p1",
+        kind: "non_git",
+        displayName: "p1",
+        groupId,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }),
+    );
+
+    await h.session.handleMessage({
+      type: "project.group.delete.request",
+      groupId,
+      requestId: "d1",
+    });
+    expect(lastPayloadOfType(h.emitted, "project.group.delete.response")).toMatchObject({
+      accepted: true,
+      groupId,
+    });
+    expect(await h.groupRegistry.get(groupId)).toBeNull();
+    // Member folder survives, just ungrouped.
+    expect((await h.projectRegistry.get("p1"))?.groupId).toBeNull();
+  } finally {
+    rmSync(h.workdir, { recursive: true, force: true });
+  }
+});
+
+test("project groups: update renames and clears color", async () => {
+  const h = createProjectGroupHarness();
+  try {
+    await h.session.handleMessage({
+      type: "project.group.create.request",
+      displayName: "Work",
+      color: "#3b82f6",
+      requestId: "c1",
+    });
+    const groupId = (
+      lastPayloadOfType(h.emitted, "project.group.create.response").group as { groupId: string }
+    ).groupId;
+
+    await h.session.handleMessage({
+      type: "project.group.update.request",
+      groupId,
+      displayName: "Personal",
+      color: null,
+      requestId: "u1",
+    });
+    expect(lastPayloadOfType(h.emitted, "project.group.update.response")).toMatchObject({
+      accepted: true,
+    });
+    const record = await h.groupRegistry.get(groupId);
+    expect(record?.displayName).toBe("Personal");
+    expect(record?.color).toBeNull();
+  } finally {
+    rmSync(h.workdir, { recursive: true, force: true });
+  }
 });

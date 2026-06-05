@@ -37,7 +37,24 @@ export interface SidebarProjectEntry {
   projectKind: WorkspaceDescriptor["projectKind"];
   iconWorkingDir: string;
   canCreateWorktree: boolean;
+  // COMPAT(projectGroups): folder's group membership (null/absent = ungrouped).
+  projectGroupId?: string | null;
   workspaces: SidebarWorkspaceEntry[];
+}
+
+// COMPAT(projectGroups): a user-authored group with its member folders, for the
+// Group → Folder → Workspace sidebar tree.
+export interface SidebarGroupEntry {
+  groupId: string;
+  displayName: string;
+  color: string | null;
+  order: number | null;
+  projects: SidebarProjectEntry[];
+}
+
+export interface GroupedSidebarProjects {
+  groups: SidebarGroupEntry[];
+  ungrouped: SidebarProjectEntry[];
 }
 
 function createStructuralWorkspaceEntry(input: {
@@ -97,6 +114,7 @@ export function buildSidebarProjectsFromHostProjects(input: {
     projectKind: project.projectKind,
     iconWorkingDir: project.iconWorkingDir,
     canCreateWorktree: project.canCreateWorktree,
+    projectGroupId: project.projectGroupId ?? null,
     workspaces: project.workspaceKeys.map((workspaceId) =>
       createStructuralWorkspaceEntry({
         serverId: project.serverId,
@@ -105,6 +123,58 @@ export function buildSidebarProjectsFromHostProjects(input: {
       }),
     ),
   }));
+}
+
+// Partition the flat sidebar project list into a Group → Folder tree. Pure +
+// deterministic: groups sorted by (order ?? Infinity, displayName); folders keep
+// their incoming order within each group. Folders whose groupId is null or points
+// at an unknown/archived group fall into `ungrouped`. Empty groups are retained
+// so the user can drop folders into them.
+export function groupSidebarProjects(input: {
+  projects: SidebarProjectEntry[];
+  groups: ReadonlyArray<{
+    groupId: string;
+    displayName: string;
+    color: string | null;
+    order: number | null;
+  }>;
+}): GroupedSidebarProjects {
+  const knownGroupIds = new Set(input.groups.map((group) => group.groupId));
+  const projectsByGroup = new Map<string, SidebarProjectEntry[]>();
+  const ungrouped: SidebarProjectEntry[] = [];
+
+  for (const project of input.projects) {
+    const groupId = project.projectGroupId;
+    if (groupId && knownGroupIds.has(groupId)) {
+      const bucket = projectsByGroup.get(groupId);
+      if (bucket) {
+        bucket.push(project);
+      } else {
+        projectsByGroup.set(groupId, [project]);
+      }
+    } else {
+      ungrouped.push(project);
+    }
+  }
+
+  const groups = [...input.groups]
+    .sort((a, b) => {
+      const orderA = a.order ?? Number.POSITIVE_INFINITY;
+      const orderB = b.order ?? Number.POSITIVE_INFINITY;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return a.displayName.localeCompare(b.displayName);
+    })
+    .map((group) => ({
+      groupId: group.groupId,
+      displayName: group.displayName,
+      color: group.color,
+      order: group.order,
+      projects: projectsByGroup.get(group.groupId) ?? [],
+    }));
+
+  return { groups, ungrouped };
 }
 
 export function applyStoredOrdering<T>(input: {

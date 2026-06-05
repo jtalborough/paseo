@@ -1781,6 +1781,81 @@ export class DaemonClient {
     });
   }
 
+  // COMPAT(projectGroups): user-authored groups above folder (project) records.
+  async listProjectGroups(
+    requestId?: string,
+  ): Promise<Extract<SessionOutboundMessage, { type: "project.group.list.response" }>["payload"]> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "project.group.list.request" },
+      timeout: 10000,
+    });
+  }
+
+  async createProjectGroup(
+    input: { displayName: string; color?: string | null; icon?: string | null },
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "project.group.create.response" }>["payload"]
+  > {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "project.group.create.request",
+        displayName: input.displayName,
+        color: input.color ?? null,
+        icon: input.icon ?? null,
+      },
+      timeout: 10000,
+    });
+  }
+
+  async updateProjectGroup(
+    input: {
+      groupId: string;
+      displayName?: string;
+      color?: string | null;
+      icon?: string | null;
+      order?: number | null;
+    },
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "project.group.update.response" }>["payload"]
+  > {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "project.group.update.request", ...input },
+      timeout: 10000,
+    });
+  }
+
+  async deleteProjectGroup(
+    groupId: string,
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "project.group.delete.response" }>["payload"]
+  > {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "project.group.delete.request", groupId },
+      timeout: 10000,
+    });
+  }
+
+  async setProjectFolderGroup(
+    projectId: string,
+    groupId: string | null,
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "project.folder.set_group.response" }>["payload"]
+  > {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "project.folder.set_group.request", projectId, groupId },
+      timeout: 10000,
+    });
+  }
+
   async startWorkspaceScript(
     workspaceId: string,
     scriptName: string,

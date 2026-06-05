@@ -102,7 +102,11 @@ import { createAgentMcpServer } from "./agent/mcp-server.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import { bootstrapWorkspaceRegistries } from "./workspace-registry-bootstrap.js";
 import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
-import { FileBackedProjectRegistry, FileBackedWorkspaceRegistry } from "./workspace-registry.js";
+import {
+  FileBackedGroupRegistry,
+  FileBackedProjectRegistry,
+  FileBackedWorkspaceRegistry,
+} from "./workspace-registry.js";
 import { FileBackedChatService } from "./chat/chat-service.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { LoopService } from "./loop-service.js";
@@ -516,6 +520,10 @@ export async function createPaseoDaemon(
   );
   workspaceRegistry = new FileBackedWorkspaceRegistry(
     path.join(config.paseoHome, "projects", "workspaces.json"),
+    logger,
+  );
+  const groupRegistry = new FileBackedGroupRegistry(
+    path.join(config.paseoHome, "projects", "groups.json"),
     logger,
   );
   const chatService = new FileBackedChatService({
@@ -1009,6 +1017,7 @@ export async function createPaseoDaemon(
                 },
               },
               serviceProxyPublicBaseUrl,
+              groupRegistry,
             );
 
             if (relayEnabled) {
