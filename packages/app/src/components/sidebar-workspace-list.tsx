@@ -2412,6 +2412,9 @@ export function SidebarWorkspaceList({
       onAddProject={onAddProject}
       listFooterComponent={listFooterComponent}
       parentGestureRef={parentGestureRef}
+      disableProjectReorder={disableProjectReorder}
+      hideEmptyState={hideEmptyState}
+      scrollable={scrollable}
       pathname={pathname}
     />
   );
@@ -2452,6 +2455,9 @@ function ProjectModeList({
   onAddProject,
   listFooterComponent,
   parentGestureRef,
+  disableProjectReorder = false,
+  hideEmptyState = false,
+  scrollable = true,
   pathname,
 }: Omit<SidebarWorkspaceListProps, "groupMode" | "isRefreshing" | "onRefresh"> & {
   pathname: string;

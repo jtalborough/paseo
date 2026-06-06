@@ -9,6 +9,8 @@ export interface HostProjectListItem {
   iconWorkingDir: string;
   workspaceKeys: string[];
   canCreateWorktree: boolean;
+  // COMPAT(projectGroups): folder's group membership (null/absent = ungrouped).
+  projectGroupId?: string | null;
 }
 
 export interface HostProjectRouteContext {
@@ -41,6 +43,7 @@ export function buildHostProjectList(input: {
     iconWorkingDir: project.iconWorkingDir,
     workspaceKeys: project.workspaceKeys,
     canCreateWorktree: canCreateWorktreeForProjectKind(project.projectKind),
+    projectGroupId: project.projectGroupId ?? null,
   }));
 }
 
@@ -81,6 +84,7 @@ export function hostProjectFromWorkspace(input: {
     iconWorkingDir,
     workspaceKeys: [input.workspace.id],
     canCreateWorktree: canCreateWorktreeForProjectKind(input.workspace.projectKind),
+    projectGroupId: input.workspace.projectGroupId ?? null,
   };
 }
 

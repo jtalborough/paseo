@@ -98,6 +98,7 @@ describe("host project list", () => {
         iconWorkingDir: "/repo/b",
         workspaceKeys: ["workspace-b"],
         canCreateWorktree: false,
+        projectGroupId: null,
       },
       {
         serverId: "host-a",
@@ -107,6 +108,7 @@ describe("host project list", () => {
         iconWorkingDir: "/repo/a",
         workspaceKeys: ["workspace-a"],
         canCreateWorktree: true,
+        projectGroupId: null,
       },
     ]);
   });
@@ -193,6 +195,7 @@ describe("host project list", () => {
       iconWorkingDir: "/repo/a",
       workspaceKeys: ["workspace-a"],
       canCreateWorktree: true,
+      projectGroupId: null,
     });
 
     expect(
