@@ -421,8 +421,6 @@ function WorkspaceDocumentTitleEffect({
   return null;
 }
 
-function noop() {}
-
 function mobileTabMenuTriggerStyle({ open, pressed }: { open?: boolean; pressed?: boolean }) {
   return [
     styles.mobileTabMenuTrigger,
@@ -3097,6 +3095,22 @@ function WorkspaceScreenContent({
     [moveWorkspaceTabToPane, persistenceKey],
   );
 
+  // Split the focused pane from the single-pane (fallback) tab row, so the first
+  // split is reachable by button — not only by keyboard shortcut.
+  const handleSplitFocusedPaneRight = useCallback(() => {
+    if (!persistenceKey || !focusedPaneId) {
+      return;
+    }
+    splitWorkspacePaneEmpty(persistenceKey, { targetPaneId: focusedPaneId, position: "right" });
+  }, [persistenceKey, focusedPaneId, splitWorkspacePaneEmpty]);
+
+  const handleSplitFocusedPaneDown = useCallback(() => {
+    if (!persistenceKey || !focusedPaneId) {
+      return;
+    }
+    splitWorkspacePaneEmpty(persistenceKey, { targetPaneId: focusedPaneId, position: "bottom" });
+  }, [persistenceKey, focusedPaneId, splitWorkspacePaneEmpty]);
+
   const handleResizePaneSplit = useCallback(
     function handleResizePaneSplit(groupId: string, sizes: number[]) {
       if (!persistenceKey) {
@@ -3487,9 +3501,9 @@ function WorkspaceScreenContent({
           disableCreateTerminal={createTerminalMutation.isPending}
           isWaitingOnTerminalReadiness={pendingTerminalCreateInput !== null}
           onReorderTabs={handleReorderTabsInFocusedPane}
-          onSplitRight={noop}
-          onSplitDown={noop}
-          showPaneSplitActions={false}
+          onSplitRight={handleSplitFocusedPaneRight}
+          onSplitDown={handleSplitFocusedPaneDown}
+          showPaneSplitActions={canRenderDesktopPaneSplits}
         />
       ) : null}
 
