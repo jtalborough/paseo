@@ -8,6 +8,7 @@ import {
   type SidebarGroupEntry,
 } from "@/hooks/sidebar-workspaces-view-model";
 import { useProjectGroups } from "@/hooks/use-project-groups";
+import { useProjectSelectionStore } from "@/stores/project-selection-store";
 import { deriveProjectIconColor, PROJECT_ICON_COLORS } from "@/utils/project-icon-color";
 import {
   FolderGlyphIconContext,
@@ -37,6 +38,18 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
       void updateGroup({ groupId, color });
     },
     [updateGroup],
+  );
+
+  const serverId = props.serverId;
+  const selectedGroupId = useProjectSelectionStore((state) => state.getSelectedGroupId(serverId));
+  const selectGroup = useProjectSelectionStore((state) => state.selectGroup);
+  const handleSelect = useCallback(
+    (groupId: string) => {
+      if (serverId) {
+        selectGroup(serverId, groupId);
+      }
+    },
+    [serverId, selectGroup],
   );
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isAddingGroup, setIsAddingGroup] = useState(false);
@@ -148,6 +161,8 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
             canAddFromDisk={canAddFromDisk}
             onAddFromDisk={addFolderFromDisk}
             onSetColor={handleSetColor}
+            selected={selectedGroupId === group.groupId}
+            onSelect={handleSelect}
           />
         ))}
 
@@ -196,6 +211,8 @@ function GroupSection({
   canAddFromDisk,
   onAddFromDisk,
   onSetColor,
+  selected,
+  onSelect,
 }: {
   group: SidebarGroupEntry;
   collapsed: boolean;
@@ -204,9 +221,18 @@ function GroupSection({
   canAddFromDisk: boolean;
   onAddFromDisk: (groupId: string | null) => Promise<void>;
   onSetColor: (groupId: string, color: string) => void;
+  selected: boolean;
+  onSelect: (groupId: string) => void;
 }) {
   const [isColorPicking, setIsColorPicking] = useState(false);
   const handlePress = useCallback(() => onToggle(group.groupId), [onToggle, group.groupId]);
+  // The chevron collapses/expands; tapping the Project name selects it (makes it the
+  // active context / opens its home).
+  const handleSelect = useCallback(() => onSelect(group.groupId), [onSelect, group.groupId]);
+  const headerStyle = useMemo(
+    () => (selected ? [styles.groupHeader, styles.groupHeaderSelected] : styles.groupHeader),
+    [selected],
+  );
   // "+" is a direct disk picker: add ANY folder (git or non-git) into this Project
   // in one step. (Assigning already-registered folders is intentionally not offered.)
   const handleAddFromDisk = useCallback(() => {
@@ -244,7 +270,7 @@ function GroupSection({
 
   return (
     <View style={styles.groupSection}>
-      <View style={styles.groupHeader}>
+      <View style={headerStyle}>
         <Pressable
           style={styles.groupChevronButton}
           onPress={handlePress}
@@ -265,7 +291,11 @@ function GroupSection({
         >
           <ProjectGroupIcon group={group} />
         </Pressable>
-        <Pressable style={styles.groupHeaderMain} onPress={handlePress}>
+        <Pressable
+          style={styles.groupHeaderMain}
+          onPress={handleSelect}
+          testID={`sidebar-group-select-${group.groupId}`}
+        >
           <Text style={styles.groupName} numberOfLines={1}>
             {group.displayName}
           </Text>
@@ -318,6 +348,10 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+  },
+  groupHeaderSelected: {
+    backgroundColor: theme.colors.surface2,
   },
   groupChevronButton: {
     alignItems: "center",
