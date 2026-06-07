@@ -1,6 +1,8 @@
 import { useCallback, useEffect } from "react";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
-import { useSessionStore } from "@/stores/session-store";
+import { getDesktopHost } from "@/desktop/host";
+import { pickDirectory } from "@/desktop/pick-directory";
+import { normalizeWorkspaceDescriptor, useSessionStore } from "@/stores/session-store";
 import { type ProjectGroup, useProjectGroupsStore } from "@/stores/project-groups-store";
 
 // COMPAT(projectGroups): fetches user-authored project groups for a server and
@@ -22,6 +24,11 @@ export interface UseProjectGroupsResult {
   }) => Promise<void>;
   deleteGroup: (groupId: string) => Promise<void>;
   setFolderGroup: (projectId: string, groupId: string | null) => Promise<void>;
+  // Phase 1a: pick any local directory (git or non-git), register it, and assign
+  // it to `groupId` in one step. Only available where a desktop directory dialog
+  // exists; `canAddFromDisk` gates the affordance.
+  canAddFromDisk: boolean;
+  addFolderFromDisk: (groupId: string | null) => Promise<void>;
 }
 
 export function useProjectGroups(serverId: string | null | undefined): UseProjectGroupsResult {
@@ -121,9 +128,60 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
     [normalizedServerId, runtime, refresh],
   );
 
+  const canAddFromDisk = typeof getDesktopHost()?.dialog?.open === "function";
+
+  const addFolderFromDisk = useCallback(
+    async (groupId: string | null) => {
+      if (!normalizedServerId) {
+        return;
+      }
+      const client = runtime.getClient(normalizedServerId);
+      if (!client) {
+        return;
+      }
+      let path: string | null;
+      try {
+        path = await pickDirectory();
+      } catch (error) {
+        console.error("[project-groups] directory picker unavailable", { error });
+        return;
+      }
+      if (!path) {
+        return;
+      }
+      // Register the folder (server classifies git vs non-git) and surface it.
+      const payload = await client.openProject(path);
+      if (payload.error || !payload.workspace) {
+        console.error("[project-groups] openProject failed", { path, error: payload.error });
+        return;
+      }
+      const workspace = normalizeWorkspaceDescriptor(payload.workspace);
+      const store = useSessionStore.getState();
+      store.mergeWorkspaces(normalizedServerId, [workspace]);
+      store.setHasHydratedWorkspaces(normalizedServerId, true);
+      // Assign into the target group (null = leave ungrouped). The server emits a
+      // workspace update so the folder re-nests under the group automatically.
+      if (groupId) {
+        await client.setProjectFolderGroup(workspace.projectId, groupId);
+      }
+      await refresh();
+    },
+    [normalizedServerId, runtime, refresh],
+  );
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  return { groups, supported, refresh, createGroup, updateGroup, deleteGroup, setFolderGroup };
+  return {
+    groups,
+    supported,
+    refresh,
+    createGroup,
+    updateGroup,
+    deleteGroup,
+    setFolderGroup,
+    canAddFromDisk,
+    addFolderFromDisk,
+  };
 }

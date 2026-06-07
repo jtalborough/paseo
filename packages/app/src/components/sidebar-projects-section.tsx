@@ -28,7 +28,8 @@ const ThemedFolderPlus = withUnistyles(FolderPlus);
 const ThemedPlus = withUnistyles(Plus);
 
 export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
-  const { groups, supported, createGroup, setFolderGroup } = useProjectGroups(props.serverId);
+  const { groups, supported, createGroup, setFolderGroup, canAddFromDisk, addFolderFromDisk } =
+    useProjectGroups(props.serverId);
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
@@ -135,6 +136,8 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
           listProps={props}
           assignableFolders={grouped.ungrouped}
           onAssignFolder={setFolderGroup}
+          canAddFromDisk={canAddFromDisk}
+          onAddFromDisk={addFolderFromDisk}
         />
       ))}
 
@@ -152,6 +155,8 @@ function GroupSection({
   listProps,
   assignableFolders,
   onAssignFolder,
+  canAddFromDisk,
+  onAddFromDisk,
 }: {
   group: SidebarGroupEntry;
   collapsed: boolean;
@@ -159,6 +164,8 @@ function GroupSection({
   listProps: SidebarWorkspaceListProps;
   assignableFolders: SidebarProjectEntry[];
   onAssignFolder: (projectId: string, groupId: string | null) => Promise<void>;
+  canAddFromDisk: boolean;
+  onAddFromDisk: (groupId: string | null) => Promise<void>;
 }) {
   const [isPicking, setIsPicking] = useState(false);
   const handlePress = useCallback(() => onToggle(group.groupId), [onToggle, group.groupId]);
@@ -170,6 +177,10 @@ function GroupSection({
     },
     [onAssignFolder, group.groupId],
   );
+  const handleAddFromDisk = useCallback(async () => {
+    setIsPicking(false);
+    await onAddFromDisk(group.groupId);
+  }, [onAddFromDisk, group.groupId]);
   const colorDotStyle = useMemo(
     () => [styles.groupColorDot, { backgroundColor: group.color ?? "transparent" }],
     [group.color],
@@ -190,6 +201,29 @@ function GroupSection({
       ) : (
         <Text style={styles.groupEmpty}>No folders yet</Text>
       );
+  }
+
+  let pickerContent: ReactElement | null = null;
+  if (isPicking) {
+    const showEmptyHint = assignableFolders.length === 0 && !canAddFromDisk;
+    pickerContent = (
+      <View style={styles.pickerContainer}>
+        {canAddFromDisk ? (
+          <Pressable
+            style={styles.pickerRow}
+            onPress={handleAddFromDisk}
+            testID={`sidebar-group-add-from-disk-${group.groupId}`}
+          >
+            <ThemedFolderPlus size={14} uniProps={mutedColorMapping} />
+            <Text style={styles.pickerRowLabel}>Add folder from disk…</Text>
+          </Pressable>
+        ) : null}
+        {assignableFolders.map((folder) => (
+          <FolderPickRow key={folder.projectKey} folder={folder} onPick={handlePick} />
+        ))}
+        {showEmptyHint ? <Text style={styles.groupEmpty}>No ungrouped folders to add</Text> : null}
+      </View>
+    );
   }
 
   return (
@@ -221,17 +255,7 @@ function GroupSection({
         </Pressable>
       </View>
 
-      {isPicking ? (
-        <View style={styles.pickerContainer}>
-          {assignableFolders.length === 0 ? (
-            <Text style={styles.groupEmpty}>No ungrouped folders to add</Text>
-          ) : (
-            assignableFolders.map((folder) => (
-              <FolderPickRow key={folder.projectKey} folder={folder} onPick={handlePick} />
-            ))
-          )}
-        </View>
-      ) : null}
+      {pickerContent}
 
       {body}
     </View>
@@ -287,6 +311,9 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing[1],
   },
   pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
     paddingVertical: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
     borderRadius: theme.borderRadius.sm,
