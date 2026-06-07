@@ -221,6 +221,7 @@ async function upsertWorkspaceForWorktree(options: {
       kind: sourceProject.kind,
       displayName: sourceProject.displayName,
       customName: sourceProject.customName,
+      groupId: sourceProject.groupId,
       createdAt: sourceProject.createdAt ?? now,
       updatedAt: now,
       archivedAt: null,
@@ -248,6 +249,10 @@ interface SourceProjectForWorktree {
   kind: "git";
   displayName: string;
   customName: string | null;
+  // Folder→Project membership is a user-set override; carry it like customName so
+  // re-upserting the source folder during worktree creation does not silently
+  // ungroup it (same class as the R2 reconciliation bug).
+  groupId: string | null;
   createdAt: string | null;
 }
 
@@ -256,6 +261,7 @@ function sourceProjectFromRecord(record: {
   rootPath: string;
   displayName: string;
   customName?: string | null;
+  groupId?: string | null;
   createdAt?: string | null;
 }): SourceProjectForWorktree {
   return {
@@ -264,6 +270,7 @@ function sourceProjectFromRecord(record: {
     kind: "git",
     displayName: record.displayName,
     customName: record.customName ?? null,
+    groupId: record.groupId ?? null,
     createdAt: record.createdAt ?? null,
   };
 }
@@ -291,6 +298,7 @@ async function resolveWorkspaceProjectForWorktree(options: {
     displayName:
       sourceProject?.displayName ?? deriveProjectGroupingName(options.sourceWorkspace.projectId),
     customName: sourceProject?.customName ?? null,
+    groupId: sourceProject?.groupId ?? null,
     createdAt: sourceProject?.createdAt ?? null,
   });
 }
@@ -306,6 +314,7 @@ async function resolveFallbackProjectForWorktree(options: {
     displayName:
       existingFallbackProject?.displayName ?? deriveProjectGroupingName(options.repoRoot),
     customName: existingFallbackProject?.customName ?? null,
+    groupId: existingFallbackProject?.groupId ?? null,
     createdAt: existingFallbackProject?.createdAt ?? null,
   });
 }

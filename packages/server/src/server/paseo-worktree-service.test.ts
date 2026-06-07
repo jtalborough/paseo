@@ -66,6 +66,40 @@ test("creates a worktree and registers it in the source workspace project withou
   ]);
 });
 
+test("preserves the source folder's Project membership (groupId) when creating a worktree", async () => {
+  const { repoDir, tempDir } = createGitRepo();
+  cleanupPaths.push(tempDir);
+  const deps = createDeps();
+  const sourceProject = createPersistedProjectRecordForTest({
+    projectId: "remote:github.com/acme/repo",
+    rootPath: repoDir,
+    displayName: "acme/repo",
+    groupId: "grp_taxes",
+  });
+  const sourceWorkspace = createPersistedWorkspaceRecordForTest({
+    workspaceId: repoDir,
+    projectId: sourceProject.projectId,
+    cwd: repoDir,
+    kind: "local_checkout",
+    displayName: "main",
+  });
+  deps.projects.set(sourceProject.projectId, sourceProject);
+  deps.workspaces.set(sourceWorkspace.workspaceId, sourceWorkspace);
+
+  await createPaseoWorktree(
+    {
+      cwd: repoDir,
+      worktreeSlug: "feature-grouped",
+      runSetup: false,
+      paseoHome: path.join(tempDir, ".paseo"),
+    },
+    deps,
+  );
+
+  // Creating a worktree re-upserts the source folder record; membership must survive.
+  expect(deps.projects.get("remote:github.com/acme/repo")?.groupId).toBe("grp_taxes");
+});
+
 test("registers a new worktree in the existing root project after the main checkout workspace is removed", async () => {
   const { repoDir, tempDir } = createGitRepo();
   cleanupPaths.push(tempDir);
@@ -518,12 +552,14 @@ function createPersistedProjectRecordForTest(input: {
   projectId: string;
   rootPath: string;
   displayName: string;
+  groupId?: string | null;
 }): PersistedProjectRecord {
   return {
     projectId: input.projectId,
     rootPath: input.rootPath,
     kind: "git",
     displayName: input.displayName,
+    groupId: input.groupId ?? null,
     createdAt: "2026-04-22T00:00:00.000Z",
     updatedAt: "2026-04-22T00:00:00.000Z",
     archivedAt: null,
