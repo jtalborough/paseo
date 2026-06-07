@@ -8,7 +8,7 @@ import {
   type SidebarGroupEntry,
 } from "@/hooks/sidebar-workspaces-view-model";
 import { useProjectGroups } from "@/hooks/use-project-groups";
-import { deriveProjectIconColor } from "@/utils/project-icon-color";
+import { deriveProjectIconColor, PROJECT_ICON_COLORS } from "@/utils/project-icon-color";
 import {
   SidebarWorkspaceList,
   type SidebarWorkspaceListProps,
@@ -28,8 +28,14 @@ const ThemedFolderPlus = withUnistyles(FolderPlus);
 const ThemedPlus = withUnistyles(Plus);
 
 export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
-  const { groups, supported, createGroup, canAddFromDisk, addFolderFromDisk } = useProjectGroups(
-    props.serverId,
+  const { groups, supported, createGroup, updateGroup, canAddFromDisk, addFolderFromDisk } =
+    useProjectGroups(props.serverId);
+
+  const handleSetColor = useCallback(
+    (groupId: string, color: string) => {
+      void updateGroup({ groupId, color });
+    },
+    [updateGroup],
   );
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isAddingGroup, setIsAddingGroup] = useState(false);
@@ -137,6 +143,7 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
           listProps={props}
           canAddFromDisk={canAddFromDisk}
           onAddFromDisk={addFolderFromDisk}
+          onSetColor={handleSetColor}
         />
       ))}
 
@@ -168,6 +175,14 @@ function ProjectGroupIcon({ group }: { group: SidebarGroupEntry }) {
   );
 }
 
+function ColorSwatch({ color, onPick }: { color: string; onPick: (color: string) => void }) {
+  const handlePress = useCallback(() => onPick(color), [onPick, color]);
+  const swatchStyle = useMemo(() => [styles.colorSwatch, { backgroundColor: color }], [color]);
+  return (
+    <Pressable style={swatchStyle} onPress={handlePress} accessibilityLabel={`Color ${color}`} />
+  );
+}
+
 function GroupSection({
   group,
   collapsed,
@@ -175,6 +190,7 @@ function GroupSection({
   listProps,
   canAddFromDisk,
   onAddFromDisk,
+  onSetColor,
 }: {
   group: SidebarGroupEntry;
   collapsed: boolean;
@@ -182,26 +198,40 @@ function GroupSection({
   listProps: SidebarWorkspaceListProps;
   canAddFromDisk: boolean;
   onAddFromDisk: (groupId: string | null) => Promise<void>;
+  onSetColor: (groupId: string, color: string) => void;
 }) {
+  const [isColorPicking, setIsColorPicking] = useState(false);
   const handlePress = useCallback(() => onToggle(group.groupId), [onToggle, group.groupId]);
   // "+" is a direct disk picker: add ANY folder (git or non-git) into this Project
   // in one step. (Assigning already-registered folders is intentionally not offered.)
   const handleAddFromDisk = useCallback(() => {
     void onAddFromDisk(group.groupId);
   }, [onAddFromDisk, group.groupId]);
+  // Tap the Project icon to recolor it (the Project's "icon").
+  const handleToggleColorPicker = useCallback(() => setIsColorPicking((current) => !current), []);
+  const handlePickColor = useCallback(
+    (color: string) => {
+      setIsColorPicking(false);
+      onSetColor(group.groupId, color);
+    },
+    [onSetColor, group.groupId],
+  );
 
   let body: ReactElement | null = null;
   if (!collapsed) {
     body =
       group.projects.length > 0 ? (
-        <SidebarWorkspaceList
-          {...listProps}
-          projects={group.projects}
-          disableProjectReorder
-          hideEmptyState
-          scrollable={false}
-          listFooterComponent={null}
-        />
+        // Indent folders so they read as members of the Project above them.
+        <View style={styles.groupFolders}>
+          <SidebarWorkspaceList
+            {...listProps}
+            projects={group.projects}
+            disableProjectReorder
+            hideEmptyState
+            scrollable={false}
+            listFooterComponent={null}
+          />
+        </View>
       ) : (
         <Text style={styles.groupEmpty}>No folders yet</Text>
       );
@@ -211,8 +241,9 @@ function GroupSection({
     <View style={styles.groupSection}>
       <View style={styles.groupHeader}>
         <Pressable
-          style={styles.groupHeaderMain}
+          style={styles.groupChevronButton}
           onPress={handlePress}
+          hitSlop={6}
           testID={`sidebar-group-header-${group.groupId}`}
         >
           {collapsed ? (
@@ -220,7 +251,16 @@ function GroupSection({
           ) : (
             <ThemedChevronDown size={14} uniProps={mutedColorMapping} />
           )}
+        </Pressable>
+        <Pressable
+          onPress={handleToggleColorPicker}
+          hitSlop={6}
+          accessibilityLabel="Set Project color"
+          testID={`sidebar-group-icon-${group.groupId}`}
+        >
           <ProjectGroupIcon group={group} />
+        </Pressable>
+        <Pressable style={styles.groupHeaderMain} onPress={handlePress}>
           <Text style={styles.groupName} numberOfLines={1}>
             {group.displayName}
           </Text>
@@ -239,6 +279,14 @@ function GroupSection({
         ) : null}
       </View>
 
+      {isColorPicking ? (
+        <View style={styles.colorPickerRow}>
+          {PROJECT_ICON_COLORS.map((color) => (
+            <ColorSwatch key={color} color={color} onPick={handlePickColor} />
+          ))}
+        </View>
+      ) : null}
+
       {body}
     </View>
   );
@@ -254,18 +302,40 @@ const styles = StyleSheet.create((theme) => ({
   groupSection: {
     marginTop: theme.spacing[1],
   },
+  groupFolders: {
+    // Indent member folders so the Project → Folder hierarchy reads visually.
+    paddingLeft: theme.spacing[3],
+  },
   groupHeader: {
     flexDirection: "row",
     alignItems: "center",
+    gap: theme.spacing[1],
+    paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[2],
+  },
+  groupChevronButton: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   groupHeaderMain: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: theme.spacing[1],
-    paddingHorizontal: theme.spacing[2],
     gap: theme.spacing[1],
+  },
+  colorPickerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[1],
+    paddingLeft: theme.spacing[3],
+    paddingRight: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+  },
+  colorSwatch: {
+    width: 18,
+    height: 18,
+    borderRadius: theme.borderRadius.sm,
   },
   groupAddButton: {
     padding: theme.spacing[1],
