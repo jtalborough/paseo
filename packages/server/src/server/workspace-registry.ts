@@ -51,10 +51,19 @@ const PersistedGroupRecordSchema = z.object({
     .nullable()
     .optional()
     .transform((value) => value ?? null),
+  // Phase 1b: domain archetype — what kind of Project this is. null = unspecified.
+  // Drives life-OS treatment (a "records"/"ops" Project has no git worktrees).
+  archetype: z
+    .enum(["code", "records", "ops"])
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
   createdAt: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().nullable(),
 });
+
+export type ProjectArchetype = "code" | "records" | "ops";
 
 const PersistedWorkspaceRecordSchema = z.object({
   workspaceId: z.string(),
@@ -277,6 +286,7 @@ export function createPersistedGroupRecord(input: {
   color?: string | null;
   icon?: string | null;
   order?: number | null;
+  archetype?: ProjectArchetype | null;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;
@@ -286,6 +296,7 @@ export function createPersistedGroupRecord(input: {
     color: input.color ?? null,
     icon: input.icon ?? null,
     order: input.order ?? null,
+    archetype: input.archetype ?? null,
     archivedAt: input.archivedAt ?? null,
   });
 }

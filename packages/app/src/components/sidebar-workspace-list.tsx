@@ -2671,10 +2671,10 @@ function ProjectModeList({
   if (projects.length === 0) {
     projectsBody = hideEmptyState ? null : (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>No projects yet</Text>
-        <Text style={styles.emptyText}>Add a project to get started</Text>
+        <Text style={styles.emptyTitle}>No folders yet</Text>
+        <Text style={styles.emptyText}>Add a folder to get started</Text>
         <Button variant="ghost" size="sm" leftIcon={Plus} onPress={onAddProject}>
-          Add project
+          Add folder
         </Button>
       </View>
     );

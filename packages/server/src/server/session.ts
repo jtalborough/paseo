@@ -160,6 +160,7 @@ import {
   createNoopGroupRegistry,
   createPersistedGroupRecord,
   createPersistedProjectRecord,
+  type ProjectArchetype,
   createPersistedWorkspaceRecord,
   resolveProjectDisplayName,
   type GroupRegistry,
@@ -2613,12 +2614,13 @@ export class Session {
       case "project.group.list.request":
         return this.handleProjectGroupListRequest(msg.requestId);
       case "project.group.create.request":
-        return this.handleProjectGroupCreateRequest(
-          msg.displayName,
-          msg.color ?? null,
-          msg.icon ?? null,
-          msg.requestId,
-        );
+        return this.handleProjectGroupCreateRequest({
+          displayName: msg.displayName,
+          color: msg.color ?? null,
+          icon: msg.icon ?? null,
+          archetype: msg.archetype ?? null,
+          requestId: msg.requestId,
+        });
       case "project.group.update.request":
         return this.handleProjectGroupUpdateRequest({
           groupId: msg.groupId,
@@ -2626,6 +2628,7 @@ export class Session {
           color: msg.color,
           icon: msg.icon,
           order: msg.order,
+          archetype: msg.archetype,
           requestId: msg.requestId,
         });
       case "project.group.delete.request":
@@ -2647,14 +2650,16 @@ export class Session {
     });
   }
 
-  private async handleProjectGroupCreateRequest(
-    displayName: string,
-    color: string | null,
-    icon: string | null,
-    requestId: string,
-  ): Promise<void> {
+  private async handleProjectGroupCreateRequest(input: {
+    displayName: string;
+    color: string | null;
+    icon: string | null;
+    archetype: ProjectArchetype | null;
+    requestId: string;
+  }): Promise<void> {
+    const { requestId } = input;
     try {
-      const trimmed = displayName.trim();
+      const trimmed = input.displayName.trim();
       if (trimmed.length === 0) {
         this.emit({
           type: "project.group.create.response",
@@ -2666,8 +2671,9 @@ export class Session {
       const record = createPersistedGroupRecord({
         groupId: `grp_${uuidv4()}`,
         displayName: trimmed,
-        color,
-        icon,
+        color: input.color,
+        icon: input.icon,
+        archetype: input.archetype,
         createdAt: now,
         updatedAt: now,
       });
@@ -2701,6 +2707,7 @@ export class Session {
     color?: string | null;
     icon?: string | null;
     order?: number | null;
+    archetype?: ProjectArchetype | null;
     requestId: string;
   }): Promise<void> {
     const { groupId, requestId } = input;
@@ -2729,6 +2736,7 @@ export class Session {
         color: input.color === undefined ? existing.color : input.color,
         icon: input.icon === undefined ? existing.icon : input.icon,
         order: input.order === undefined ? existing.order : input.order,
+        archetype: input.archetype === undefined ? existing.archetype : input.archetype,
         createdAt: existing.createdAt,
         updatedAt: new Date().toISOString(),
         archivedAt: existing.archivedAt,
@@ -2874,6 +2882,7 @@ export class Session {
     color: string | null;
     icon: string | null;
     order: number | null;
+    archetype: ProjectArchetype | null;
     createdAt: string;
     updatedAt: string;
     archivedAt: string | null;
@@ -2884,6 +2893,7 @@ export class Session {
       color: record.color,
       icon: record.icon,
       order: record.order,
+      archetype: record.archetype,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       archivedAt: record.archivedAt,

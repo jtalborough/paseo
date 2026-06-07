@@ -1303,12 +1303,17 @@ export const ProjectRenameResponseSchema = z.object({
 // COMPAT(projectGroups): added in v0.1.90, remove gate after 2026-12-15.
 // User-authored groups above folder (project) records — the top level of the
 // sidebar tree. Membership lives as `groupId` on the project record.
+// Phase 1b: a Project's domain archetype. null = unspecified.
+export const ProjectArchetypeSchema = z.enum(["code", "records", "ops"]);
+export type ProjectArchetype = z.infer<typeof ProjectArchetypeSchema>;
+
 export const ProjectGroupPayloadSchema = z.object({
   groupId: z.string(),
   displayName: z.string(),
   color: z.string().nullable(),
   icon: z.string().nullable(),
   order: z.number().nullable(),
+  archetype: ProjectArchetypeSchema.nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().nullable(),
@@ -1332,6 +1337,7 @@ export const ProjectGroupCreateRequestSchema = z.object({
   displayName: z.string(),
   color: z.string().nullable().optional(),
   icon: z.string().nullable().optional(),
+  archetype: ProjectArchetypeSchema.nullable().optional(),
   requestId: z.string(),
 });
 
@@ -1348,11 +1354,12 @@ export const ProjectGroupCreateResponseSchema = z.object({
 export const ProjectGroupUpdateRequestSchema = z.object({
   type: z.literal("project.group.update.request"),
   groupId: z.string(),
-  // Absent = unchanged. For color/icon/order, null = clear, value = set.
+  // Absent = unchanged. For color/icon/order/archetype, null = clear, value = set.
   displayName: z.string().optional(),
   color: z.string().nullable().optional(),
   icon: z.string().nullable().optional(),
   order: z.number().nullable().optional(),
+  archetype: ProjectArchetypeSchema.nullable().optional(),
   requestId: z.string(),
 });
 

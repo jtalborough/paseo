@@ -5262,3 +5262,47 @@ test("project groups: update renames and clears color", async () => {
     rmSync(h.workdir, { recursive: true, force: true });
   }
 });
+
+test("project groups: archetype round-trips on create and update (Phase 1b)", async () => {
+  const h = createProjectGroupHarness();
+  try {
+    await h.session.handleMessage({
+      type: "project.group.create.request",
+      displayName: "Taxes",
+      archetype: "records",
+      requestId: "c1",
+    });
+    const created = lastPayloadOfType(h.emitted, "project.group.create.response");
+    const groupId = (created.group as { groupId: string; archetype: string }).groupId;
+    expect((created.group as { archetype: string }).archetype).toBe("records");
+    expect((await h.groupRegistry.get(groupId))?.archetype).toBe("records");
+
+    // Absent archetype on update leaves it unchanged; explicit value changes it.
+    await h.session.handleMessage({
+      type: "project.group.update.request",
+      groupId,
+      displayName: "Tax Prep",
+      requestId: "u1",
+    });
+    expect((await h.groupRegistry.get(groupId))?.archetype).toBe("records");
+
+    await h.session.handleMessage({
+      type: "project.group.update.request",
+      groupId,
+      archetype: "ops",
+      requestId: "u2",
+    });
+    expect((await h.groupRegistry.get(groupId))?.archetype).toBe("ops");
+
+    // Unspecified archetype defaults to null.
+    await h.session.handleMessage({
+      type: "project.group.create.request",
+      displayName: "Scratch",
+      requestId: "c2",
+    });
+    const second = lastPayloadOfType(h.emitted, "project.group.create.response");
+    expect((second.group as { archetype: string | null }).archetype).toBeNull();
+  } finally {
+    rmSync(h.workdir, { recursive: true, force: true });
+  }
+});

@@ -4,6 +4,7 @@ import { getDesktopHost } from "@/desktop/host";
 import { pickDirectory } from "@/desktop/pick-directory";
 import { normalizeWorkspaceDescriptor, useSessionStore } from "@/stores/session-store";
 import { type ProjectGroup, useProjectGroupsStore } from "@/stores/project-groups-store";
+import type { ProjectArchetype } from "@getpaseo/protocol/messages";
 
 // COMPAT(projectGroups): fetches user-authored project groups for a server and
 // exposes mutation helpers. Groups change only via this client's RPCs, so each
@@ -15,12 +16,17 @@ export interface UseProjectGroupsResult {
   groups: ProjectGroup[];
   supported: boolean;
   refresh: () => Promise<void>;
-  createGroup: (input: { displayName: string; color?: string | null }) => Promise<void>;
+  createGroup: (input: {
+    displayName: string;
+    color?: string | null;
+    archetype?: ProjectArchetype | null;
+  }) => Promise<void>;
   updateGroup: (input: {
     groupId: string;
     displayName?: string;
     color?: string | null;
     order?: number | null;
+    archetype?: ProjectArchetype | null;
   }) => Promise<void>;
   deleteGroup: (groupId: string) => Promise<void>;
   setFolderGroup: (projectId: string, groupId: string | null) => Promise<void>;
@@ -64,7 +70,11 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
   }, [normalizedServerId, runtime, supported]);
 
   const createGroup = useCallback(
-    async (input: { displayName: string; color?: string | null }) => {
+    async (input: {
+      displayName: string;
+      color?: string | null;
+      archetype?: ProjectArchetype | null;
+    }) => {
       if (!normalizedServerId) {
         return;
       }
@@ -84,6 +94,7 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
       displayName?: string;
       color?: string | null;
       order?: number | null;
+      archetype?: ProjectArchetype | null;
     }) => {
       if (!normalizedServerId) {
         return;

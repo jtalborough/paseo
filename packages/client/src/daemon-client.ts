@@ -78,6 +78,7 @@ import type {
   SendAgentMessageRequest,
   PaseoConfigRaw,
   PaseoConfigRevision,
+  ProjectArchetype,
 } from "@getpaseo/protocol/messages";
 import type {
   AgentPermissionRequest,
@@ -1793,7 +1794,12 @@ export class DaemonClient {
   }
 
   async createProjectGroup(
-    input: { displayName: string; color?: string | null; icon?: string | null },
+    input: {
+      displayName: string;
+      color?: string | null;
+      icon?: string | null;
+      archetype?: ProjectArchetype | null;
+    },
     requestId?: string,
   ): Promise<
     Extract<SessionOutboundMessage, { type: "project.group.create.response" }>["payload"]
@@ -1805,6 +1811,7 @@ export class DaemonClient {
         displayName: input.displayName,
         color: input.color ?? null,
         icon: input.icon ?? null,
+        archetype: input.archetype ?? null,
       },
       timeout: 10000,
     });
@@ -1817,6 +1824,7 @@ export class DaemonClient {
       color?: string | null;
       icon?: string | null;
       order?: number | null;
+      archetype?: ProjectArchetype | null;
     },
     requestId?: string,
   ): Promise<
