@@ -10,6 +10,7 @@ import {
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { deriveProjectIconColor, PROJECT_ICON_COLORS } from "@/utils/project-icon-color";
 import {
+  FolderGlyphIconContext,
   SidebarWorkspaceList,
   type SidebarWorkspaceListProps,
 } from "@/components/sidebar-workspace-list";
@@ -117,40 +118,44 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
   }
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-      testID="sidebar-projects-section-scroll"
-    >
-      {grouped.ungrouped.length > 0 ? (
-        <SidebarWorkspaceList
-          {...props}
-          projects={grouped.ungrouped}
-          disableProjectReorder
-          hideEmptyState
-          scrollable={false}
-          listFooterComponent={null}
-        />
-      ) : null}
+    // Folders inside the Projects tree render as plain folder glyphs (distinct from
+    // the colored Project tiles); Projects keep their own ProjectGroupIcon.
+    <FolderGlyphIconContext.Provider value={true}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        testID="sidebar-projects-section-scroll"
+      >
+        {grouped.ungrouped.length > 0 ? (
+          <SidebarWorkspaceList
+            {...props}
+            projects={grouped.ungrouped}
+            disableProjectReorder
+            hideEmptyState
+            scrollable={false}
+            listFooterComponent={null}
+          />
+        ) : null}
 
-      {grouped.groups.map((group) => (
-        <GroupSection
-          key={group.groupId}
-          group={group}
-          collapsed={collapsedGroupIds.has(group.groupId)}
-          onToggle={toggleGroupCollapsed}
-          listProps={props}
-          canAddFromDisk={canAddFromDisk}
-          onAddFromDisk={addFolderFromDisk}
-          onSetColor={handleSetColor}
-        />
-      ))}
+        {grouped.groups.map((group) => (
+          <GroupSection
+            key={group.groupId}
+            group={group}
+            collapsed={collapsedGroupIds.has(group.groupId)}
+            onToggle={toggleGroupCollapsed}
+            listProps={props}
+            canAddFromDisk={canAddFromDisk}
+            onAddFromDisk={addFolderFromDisk}
+            onSetColor={handleSetColor}
+          />
+        ))}
 
-      {createAffordance}
+        {createAffordance}
 
-      {props.listFooterComponent}
-    </ScrollView>
+        {props.listFooterComponent}
+      </ScrollView>
+    </FolderGlyphIconContext.Provider>
   );
 }
 
@@ -303,8 +308,9 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing[1],
   },
   groupFolders: {
-    // Indent member folders so the Project → Folder hierarchy reads visually.
-    paddingLeft: theme.spacing[3],
+    // Indent member folders so they sit clearly right of the Project's icon and
+    // read as its children (the row content already has its own ~8px padding).
+    paddingLeft: theme.spacing[6],
   },
   groupHeader: {
     flexDirection: "row",

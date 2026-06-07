@@ -17,8 +17,10 @@ import { ProjectIconView } from "@/components/project-icon-view";
 import { AdaptiveRenameModal } from "@/components/rename-modal";
 import { invalidateCheckoutGitQueriesForClient } from "@/git/query-keys";
 import {
+  createContext,
   memo,
   useCallback,
+  useContext,
   useMemo,
   useState,
   useEffect,
@@ -46,6 +48,8 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  Folder,
+  FolderGit2,
   FolderPlus,
   GitPullRequest,
   Settings,
@@ -148,6 +152,14 @@ const ThemedCircleAlert = withUnistyles(CircleAlert);
 const ThemedCircleCheck = withUnistyles(CircleCheck);
 const ThemedSyncedLoader = withUnistyles(SyncedLoader);
 const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedFolder = withUnistyles(Folder);
+const ThemedFolderGit2 = withUnistyles(FolderGit2);
+
+// When true (provided by the grouped Projects view), folder rows render a plain
+// folder glyph instead of the colored-initial tile — so Folders read distinctly
+// from Projects (which keep the colored tile). Context avoids threading a prop
+// through the memoized row chain.
+export const FolderGlyphIconContext = createContext(false);
 const ThemedMoreVertical = withUnistyles(MoreVertical);
 const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedSettings = withUnistyles(Settings);
@@ -462,6 +474,7 @@ function ProjectLeadingVisual({
   const placeholderLabel = projectIconPlaceholderLabelFromDisplayName(displayName);
   const placeholderInitial = placeholderLabel.charAt(0).toUpperCase();
   const activeWorkspace = workspace;
+  const useFolderGlyph = useContext(FolderGlyphIconContext);
   const shouldShowWorkspaceStatus =
     activeWorkspace !== null && (isArchiving || activeWorkspace.statusBucket !== "done");
   const shouldShowSyncedLoader = activeWorkspace
@@ -477,6 +490,19 @@ function ProjectLeadingVisual({
   }
 
   if (!shouldShowWorkspaceStatus || !activeWorkspace) {
+    // In the Projects (grouped) view, folders show a plain folder glyph so they
+    // read distinctly from Projects (which keep the colored-initial tile).
+    if (useFolderGlyph) {
+      return (
+        <View style={styles.projectLeadingVisualSlot}>
+          {activeWorkspace?.projectKind === "git" ? (
+            <ThemedFolderGit2 size={16} uniProps={foregroundMutedColorMapping} />
+          ) : (
+            <ThemedFolder size={16} uniProps={foregroundMutedColorMapping} />
+          )}
+        </View>
+      );
+    }
     return (
       <View style={styles.projectLeadingVisualSlot}>
         <ProjectIcon
