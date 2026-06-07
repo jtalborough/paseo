@@ -447,6 +447,82 @@ describe("WorkspaceReconciliationService", () => {
     expect(projects.get(repoDir)!.archivedAt).toBeTruthy();
   });
 
+  // R2 regression: a folder's Project/group membership (groupId) is a user-set
+  // override that is NOT re-derivable from the filesystem. When a duplicate
+  // path-keyed record carrying the groupId is merged into the canonical
+  // remote-keyed record and then archived, the membership must survive — before
+  // the fix, reconciliation only carried customName and silently dropped groupId.
+  test("preserves groupId from a duplicate project onto the canonical during merge", async () => {
+    const repoDir = createTempGitRepo("reconcile-duplicate-groupid-");
+    tempDirs.push(repoDir);
+    const duplicateWorktreeDir = path.join(repoDir, ".paseo", "worktrees", "tidy-otter");
+    mkdirSync(duplicateWorktreeDir, { recursive: true });
+    const { projects, workspaces, projectRegistry, workspaceRegistry } = createTestRegistries();
+
+    projects.set(
+      "remote:github.com/blank-dot-page/editor",
+      createPersistedProjectRecord({
+        projectId: "remote:github.com/blank-dot-page/editor",
+        rootPath: repoDir,
+        kind: "git",
+        displayName: "blank-dot-page/editor",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+    );
+    // The grouping lives ONLY on the path-keyed duplicate that gets archived.
+    projects.set(
+      repoDir,
+      createPersistedProjectRecord({
+        projectId: repoDir,
+        rootPath: repoDir,
+        kind: "git",
+        displayName: "editor",
+        groupId: "grp_taxes",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+    );
+    workspaces.set(
+      "tidy-otter",
+      createPersistedWorkspaceRecord({
+        workspaceId: "tidy-otter",
+        projectId: repoDir,
+        cwd: duplicateWorktreeDir,
+        kind: "worktree",
+        displayName: "markdown-view",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+    );
+
+    const service = new WorkspaceReconciliationService({
+      projectRegistry,
+      workspaceRegistry,
+      logger: createTestLogger(),
+      workspaceGitService: createWorkspaceGitServiceStub({
+        [repoDir]: {
+          projectKind: "git",
+          projectDisplayName: "blank-dot-page/editor",
+          workspaceDisplayName: "main",
+          gitRemote: "git@github.com:blank-dot-page/editor.git",
+        },
+        [duplicateWorktreeDir]: {
+          projectKind: "git",
+          projectDisplayName: "blank-dot-page/editor",
+          workspaceDisplayName: "markdown-view",
+          gitRemote: "git@github.com:blank-dot-page/editor.git",
+        },
+      }),
+    });
+
+    await service.runOnce();
+
+    // Membership carried to the canonical record; duplicate archived.
+    expect(projects.get("remote:github.com/blank-dot-page/editor")!.groupId).toBe("grp_taxes");
+    expect(projects.get(repoDir)!.archivedAt).toBeTruthy();
+  });
+
   test("updates project display name when git remote changes", async () => {
     const dir = createTempGitRepo("reconcile-remote-");
     tempDirs.push(dir);

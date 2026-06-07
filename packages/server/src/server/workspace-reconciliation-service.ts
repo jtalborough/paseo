@@ -43,7 +43,7 @@ export type ReconciliationChange =
       projectId: string;
       directory: string;
       fields: Partial<
-        Pick<PersistedProjectRecord, "kind" | "displayName" | "rootPath" | "customName">
+        Pick<PersistedProjectRecord, "kind" | "displayName" | "rootPath" | "customName" | "groupId">
       >;
     }
   | {
@@ -228,7 +228,7 @@ export class WorkspaceReconciliationService {
       const duplicateProjects = duplicates.filter(
         (project) => project.projectId !== canonical.projectId,
       );
-      await this.mergeDuplicateProjectCustomName(canonical, duplicateProjects, changes);
+      await this.mergeDuplicateProjectOverrides(canonical, duplicateProjects, changes);
       await Promise.all(
         duplicateProjects.flatMap((project) =>
           (workspacesByProject.get(project.projectId) ?? []).map(async (workspace) => {
@@ -261,31 +261,47 @@ export class WorkspaceReconciliationService {
     }
   }
 
-  private async mergeDuplicateProjectCustomName(
+  // Carry user-set overrides from duplicate folder records onto the canonical one
+  // before the duplicates are archived. These overrides are NOT re-derivable from
+  // the filesystem, so losing them is silent data loss. `groupId` (the folder's
+  // domain/Project membership) is exactly such an override — if it lived on a
+  // duplicate that gets archived, the folder would silently leave its Project on
+  // the next reconcile. (customName had this handling; groupId did not — R2.)
+  private async mergeDuplicateProjectOverrides(
     canonical: PersistedProjectRecord,
     duplicateProjects: PersistedProjectRecord[],
     changes: ReconciliationChange[],
   ): Promise<void> {
-    if (canonical.customName) {
-      return;
-    }
-    const customName = duplicateProjects.find((project) => project.customName)?.customName ?? null;
-    if (!customName) {
+    const nextCustomName =
+      canonical.customName ??
+      duplicateProjects.find((project) => project.customName)?.customName ??
+      null;
+    const nextGroupId =
+      canonical.groupId ?? duplicateProjects.find((project) => project.groupId)?.groupId ?? null;
+
+    const customNameChanged = nextCustomName !== canonical.customName;
+    const groupIdChanged = nextGroupId !== canonical.groupId;
+    if (!customNameChanged && !groupIdChanged) {
       return;
     }
 
     const timestamp = new Date().toISOString();
     await this.projectRegistry.upsert({
       ...canonical,
-      customName,
+      customName: nextCustomName,
+      groupId: nextGroupId,
       updatedAt: timestamp,
     });
-    canonical.customName = customName;
+    canonical.customName = nextCustomName;
+    canonical.groupId = nextGroupId;
     changes.push({
       kind: "project_updated",
       projectId: canonical.projectId,
       directory: canonical.rootPath,
-      fields: { customName },
+      fields: {
+        ...(customNameChanged ? { customName: nextCustomName } : {}),
+        ...(groupIdChanged ? { groupId: nextGroupId } : {}),
+      },
     });
   }
 
