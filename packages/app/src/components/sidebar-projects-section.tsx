@@ -8,6 +8,7 @@ import {
   type SidebarGroupEntry,
 } from "@/hooks/sidebar-workspaces-view-model";
 import { useProjectGroups } from "@/hooks/use-project-groups";
+import { deriveProjectIconColor } from "@/utils/project-icon-color";
 import {
   SidebarWorkspaceList,
   type SidebarWorkspaceListProps,
@@ -146,6 +147,27 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
   );
 }
 
+// Project icon — mirrors the folder icon (colored rounded square + white initial,
+// `project-icon-view`). Honors the group's `color` field when set, else derives a
+// stable distinct color from the groupId so every Project is visually distinct.
+function ProjectGroupIcon({ group }: { group: SidebarGroupEntry }) {
+  const initial = (group.displayName.trim()[0] ?? "?").toUpperCase();
+  const fillStyle = useMemo(
+    () => [
+      styles.projectIconFill,
+      { backgroundColor: group.color ?? deriveProjectIconColor(group.groupId) },
+    ],
+    [group.color, group.groupId],
+  );
+  return (
+    <View style={styles.projectIconSlot}>
+      <View style={fillStyle}>
+        <Text style={styles.projectIconText}>{initial}</Text>
+      </View>
+    </View>
+  );
+}
+
 function GroupSection({
   group,
   collapsed,
@@ -167,10 +189,6 @@ function GroupSection({
   const handleAddFromDisk = useCallback(() => {
     void onAddFromDisk(group.groupId);
   }, [onAddFromDisk, group.groupId]);
-  const colorDotStyle = useMemo(
-    () => [styles.groupColorDot, { backgroundColor: group.color ?? "transparent" }],
-    [group.color],
-  );
 
   let body: ReactElement | null = null;
   if (!collapsed) {
@@ -202,7 +220,7 @@ function GroupSection({
           ) : (
             <ThemedChevronDown size={14} uniProps={mutedColorMapping} />
           )}
-          {group.color ? <View style={colorDotStyle} /> : null}
+          <ProjectGroupIcon group={group} />
           <Text style={styles.groupName} numberOfLines={1}>
             {group.displayName}
           </Text>
@@ -252,10 +270,24 @@ const styles = StyleSheet.create((theme) => ({
   groupAddButton: {
     padding: theme.spacing[1],
   },
-  groupColorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  projectIconSlot: {
+    width: theme.iconSize.md,
+    height: theme.iconSize.md,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  projectIconFill: {
+    width: "100%",
+    height: "100%",
+    borderRadius: theme.borderRadius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  projectIconText: {
+    fontSize: 9,
+    color: "#ffffff",
+    fontWeight: "600",
   },
   groupName: {
     flex: 1,
