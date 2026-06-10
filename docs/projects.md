@@ -228,7 +228,8 @@ moves from prototype into stable product behavior.
 - Keep task files sync-friendly Markdown and avoid a separate drifting task database.
 - Add GitHub Issues support for importing, linking, and eventually syncing issue state.
 - Add saved custom task views and a view editor after the serializable view model is stable.
-- Add timesheet views that aggregate task `timeEntries` by day and Project.
+- Expand timesheets beyond today's Project/task summaries into date navigation and export/mirror
+  workflows.
 
 ### Browser
 

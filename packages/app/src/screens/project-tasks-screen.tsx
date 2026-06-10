@@ -7,10 +7,12 @@ import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client
 import { StyleSheet } from "react-native-unistyles";
 import { ProjectSurfaceHeader } from "@/components/project-surface-header";
 import { TaskList, taskKey } from "@/components/task-list";
+import { formatDuration } from "@/components/task-timer";
 import type { SelectOption } from "@/components/task-select";
 import { useToast } from "@/contexts/toast-context";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { useSessionStore } from "@/stores/session-store";
+import { aggregateTaskDayTotals, totalSecondsForDay } from "@/utils/task-time";
 
 interface ProjectTasksScreenProps {
   serverId: string;
@@ -35,6 +37,7 @@ export function ProjectTasksScreen({
   const { groups, supported: projectsSupported } = useProjectGroups(serverId);
   const [newTitle, setNewTitle] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [view, setView] = useState<"tasks" | "timesheet">("tasks");
   const group = useMemo(
     () => groups.find((candidate) => candidate.groupId === groupId) ?? null,
     [groupId, groups],
@@ -280,6 +283,20 @@ export function ProjectTasksScreen({
   return (
     <View style={styles.container}>
       {embedded ? null : <ProjectSurfaceHeader title={group.displayName} />}
+      <View style={styles.viewTabs}>
+        <ProjectTaskViewButton
+          label="Tasks"
+          value="tasks"
+          selected={view === "tasks"}
+          onSelect={setView}
+        />
+        <ProjectTaskViewButton
+          label="Timesheet"
+          value="timesheet"
+          selected={view === "timesheet"}
+          onSelect={setView}
+        />
+      </View>
       <View style={styles.composer}>
         <TextInput
           style={styles.input}
@@ -299,31 +316,150 @@ export function ProjectTasksScreen({
           <Text style={styles.addButtonText}>Add</Text>
         </Pressable>
       </View>
-      <TaskList
-        pending={tasksQuery.isPending}
-        error={tasksQuery.error}
-        tasks={tasksQuery.data ?? EMPTY_TASKS}
-        emptyTitle="No Project tasks yet"
-        emptyDescription="Create the first task above. Tasks are stored as plain Markdown in this Project and can be opened beside agents, notes, terminals, and browser tabs."
-        expandedId={expandedId}
-        config={config}
-        onToggleExpanded={handleToggleExpanded}
-        onPatch={handlePatch}
-        onTimerStart={handleTimerStart}
-        onTimerStop={handleTimerStop}
-        onDelete={handleDelete}
-        onRun={handleRunTask}
-        getRunDisabled={getRunDisabled}
-        projectOptions={projectOptions}
-        onChangeProject={handleChangeProject}
-        onAddType={handleAddType}
-        onAddPerson={handleAddPerson}
-        onAddContext={handleAddContext}
-        onRemoveType={handleRemoveType}
-        onRemovePerson={handleRemovePerson}
-        onRemoveContext={handleRemoveContext}
-      />
+      {view === "timesheet" ? (
+        <ProjectTimesheetView
+          pending={tasksQuery.isPending}
+          error={tasksQuery.error}
+          tasks={tasksQuery.data ?? EMPTY_TASKS}
+          onOpenTask={setExpandedId}
+          onSelectTasksView={setView}
+        />
+      ) : (
+        <TaskList
+          pending={tasksQuery.isPending}
+          error={tasksQuery.error}
+          tasks={tasksQuery.data ?? EMPTY_TASKS}
+          emptyTitle="No Project tasks yet"
+          emptyDescription="Create the first task above. Tasks are stored as plain Markdown in this Project and can be opened beside agents, notes, terminals, and browser tabs."
+          expandedId={expandedId}
+          config={config}
+          onToggleExpanded={handleToggleExpanded}
+          onPatch={handlePatch}
+          onTimerStart={handleTimerStart}
+          onTimerStop={handleTimerStop}
+          onDelete={handleDelete}
+          onRun={handleRunTask}
+          getRunDisabled={getRunDisabled}
+          projectOptions={projectOptions}
+          onChangeProject={handleChangeProject}
+          onAddType={handleAddType}
+          onAddPerson={handleAddPerson}
+          onAddContext={handleAddContext}
+          onRemoveType={handleRemoveType}
+          onRemovePerson={handleRemovePerson}
+          onRemoveContext={handleRemoveContext}
+        />
+      )}
     </View>
+  );
+}
+
+function ProjectTaskViewButton({
+  label,
+  value,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  value: "tasks" | "timesheet";
+  selected: boolean;
+  onSelect: (view: "tasks" | "timesheet") => void;
+}) {
+  const handlePress = useCallback(() => onSelect(value), [onSelect, value]);
+  const buttonStyle = useMemo(
+    () => (selected ? [styles.viewButton, styles.viewButtonSelected] : styles.viewButton),
+    [selected],
+  );
+  return (
+    <Pressable accessibilityRole="button" onPress={handlePress} style={buttonStyle}>
+      <Text style={selected ? styles.viewLabelSelected : styles.viewLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function ProjectTimesheetView({
+  pending,
+  error,
+  tasks,
+  onOpenTask,
+  onSelectTasksView,
+}: {
+  pending: boolean;
+  error: Error | null;
+  tasks: StoredTask[];
+  onOpenTask: (taskKey: string) => void;
+  onSelectTasksView: (view: "tasks") => void;
+}) {
+  const now = useMemo(() => new Date(), []);
+  const totals = useMemo(() => aggregateTaskDayTotals(tasks, now, now), [now, tasks]);
+  const totalSeconds = useMemo(() => totalSecondsForDay(tasks, now, now), [now, tasks]);
+  const openTask = useCallback(
+    (selectedTaskKey: string) => {
+      onOpenTask(selectedTaskKey);
+      onSelectTasksView("tasks");
+    },
+    [onOpenTask, onSelectTasksView],
+  );
+
+  if (pending) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.muted}>Loading time entries...</Text>
+      </View>
+    );
+  }
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.muted}>{error.message}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.timesheet}>
+      <View style={styles.timesheetHeader}>
+        <View>
+          <Text style={styles.timesheetTitle}>Today by task</Text>
+          <Text style={styles.muted}>Tracked from task time entries</Text>
+        </View>
+        <Text style={styles.timesheetTotal}>{formatDuration(totalSeconds)}</Text>
+      </View>
+      {totals.length > 0 ? (
+        totals.map((total) => (
+          <ProjectTimesheetRow
+            key={total.taskKey}
+            taskKey={total.taskKey}
+            title={total.title}
+            seconds={total.seconds}
+            onOpen={openTask}
+          />
+        ))
+      ) : (
+        <Text style={styles.muted}>No tracked time today</Text>
+      )}
+    </View>
+  );
+}
+
+function ProjectTimesheetRow({
+  taskKey: rowTaskKey,
+  title,
+  seconds,
+  onOpen,
+}: {
+  taskKey: string;
+  title: string;
+  seconds: number;
+  onOpen: (taskKey: string) => void;
+}) {
+  const handlePress = useCallback(() => onOpen(rowTaskKey), [onOpen, rowTaskKey]);
+  return (
+    <Pressable accessibilityRole="button" onPress={handlePress} style={styles.timesheetRow}>
+      <Text style={styles.timesheetTask} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.timesheetTime}>{formatDuration(seconds)}</Text>
+    </Pressable>
   );
 }
 
@@ -331,6 +467,22 @@ const PLACEHOLDER_COLOR = "#9ca3af";
 
 const styles = StyleSheet.create((theme) => ({
   container: { flex: 1, minHeight: 0, backgroundColor: theme.colors.surface0 },
+  viewTabs: {
+    flexDirection: "row",
+    gap: theme.spacing[1],
+    paddingHorizontal: theme.spacing[3],
+    paddingTop: theme.spacing[3],
+    borderBottomWidth: theme.borderWidth[1],
+    borderBottomColor: theme.colors.border,
+  },
+  viewButton: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+  },
+  viewButtonSelected: { backgroundColor: theme.colors.surface2 },
+  viewLabel: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  viewLabelSelected: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
   composer: {
     flexDirection: "row",
     alignItems: "center",
@@ -359,4 +511,36 @@ const styles = StyleSheet.create((theme) => ({
   pressed: { opacity: 0.8 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: theme.spacing[6] },
   muted: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  timesheet: { padding: theme.spacing[4], gap: theme.spacing[2] },
+  timesheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: theme.spacing[3],
+  },
+  timesheetTitle: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
+  timesheetTotal: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    fontVariant: ["tabular-nums"],
+  },
+  timesheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[3],
+    padding: theme.spacing[3],
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surface1,
+  },
+  timesheetTask: {
+    flex: 1,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+  },
+  timesheetTime: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontVariant: ["tabular-nums"],
+  },
 }));

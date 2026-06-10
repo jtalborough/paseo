@@ -5,6 +5,14 @@ export interface ProjectDayTotal {
   seconds: number;
 }
 
+export interface TaskDayTotal {
+  taskKey: string;
+  taskId: string;
+  projectGroupId: string;
+  title: string;
+  seconds: number;
+}
+
 export function taskSecondsForDay(task: StoredTask, day: Date, now = new Date()): number {
   const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
   const dayEnd = dayStart + 24 * 60 * 60 * 1000;
@@ -32,6 +40,23 @@ export function aggregateProjectDayTotals(
   return Array.from(totals, ([projectGroupId, seconds]) => ({ projectGroupId, seconds })).sort(
     (left, right) => right.seconds - left.seconds,
   );
+}
+
+export function aggregateTaskDayTotals(
+  tasks: StoredTask[],
+  day: Date,
+  now = new Date(),
+): TaskDayTotal[] {
+  return tasks
+    .map((task) => ({
+      taskKey: `${task.metadata.projectGroupId}:${task.metadata.id}`,
+      taskId: task.metadata.id,
+      projectGroupId: task.metadata.projectGroupId,
+      title: task.metadata.title,
+      seconds: taskSecondsForDay(task, day, now),
+    }))
+    .filter((total) => total.seconds > 0)
+    .sort((left, right) => right.seconds - left.seconds || left.title.localeCompare(right.title));
 }
 
 export function totalSecondsForDay(tasks: StoredTask[], day: Date, now = new Date()): number {

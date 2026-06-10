@@ -1,16 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { StoredTask } from "@getpaseo/protocol/task/types";
-import { aggregateProjectDayTotals, taskSecondsForDay } from "@/utils/task-time";
+import {
+  aggregateProjectDayTotals,
+  aggregateTaskDayTotals,
+  taskSecondsForDay,
+} from "@/utils/task-time";
 
 function task(
   projectGroupId: string,
   timeEntries: StoredTask["metadata"]["timeEntries"],
+  options: { id?: string; title?: string } = {},
 ): StoredTask {
   return {
     metadata: {
-      id: "task",
+      id: options.id ?? "task",
       projectGroupId,
-      title: "Task",
+      title: options.title ?? "Task",
       actionState: "todo",
       run: "self",
       priority: null,
@@ -61,6 +66,48 @@ describe("task time aggregation", () => {
     expect(aggregateProjectDayTotals([first, running], day, now)).toEqual([
       { projectGroupId: "grp_one", seconds: 3600 },
       { projectGroupId: "grp_two", seconds: 1800 },
+    ]);
+  });
+
+  it("aggregates daily task totals for a Project timesheet", () => {
+    const day = new Date(2026, 5, 8);
+    const now = new Date(2026, 5, 8, 12, 0, 0);
+    const first = task(
+      "grp_one",
+      [
+        {
+          startedAt: new Date(2026, 5, 8, 9, 0, 0).toISOString(),
+          endedAt: new Date(2026, 5, 8, 10, 0, 0).toISOString(),
+        },
+      ],
+      { id: "a", title: "Alpha" },
+    );
+    const second = task(
+      "grp_one",
+      [
+        {
+          startedAt: new Date(2026, 5, 8, 10, 0, 0).toISOString(),
+          endedAt: new Date(2026, 5, 8, 10, 30, 0).toISOString(),
+        },
+      ],
+      { id: "b", title: "Beta" },
+    );
+
+    expect(aggregateTaskDayTotals([second, first], day, now)).toEqual([
+      {
+        taskKey: "grp_one:a",
+        taskId: "a",
+        projectGroupId: "grp_one",
+        title: "Alpha",
+        seconds: 3600,
+      },
+      {
+        taskKey: "grp_one:b",
+        taskId: "b",
+        projectGroupId: "grp_one",
+        title: "Beta",
+        seconds: 1800,
+      },
     ]);
   });
 });
