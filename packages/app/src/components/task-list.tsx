@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import type { ActionState, StoredTask, TaskConfig } from "@getpaseo/protocol/task/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
@@ -60,6 +60,65 @@ export function TaskList({
   projectOptions?: SelectOption[];
   onChangeProject?: (task: StoredTask, projectGroupId: string) => void;
 }) {
+  const [showCompleted, setShowCompleted] = useState(false);
+  const { activeTasks, completedTasks } = useMemo(() => {
+    const active: StoredTask[] = [];
+    const completed: StoredTask[] = [];
+    for (const task of tasks) {
+      if (task.metadata.actionState === "done") {
+        completed.push(task);
+      } else {
+        active.push(task);
+      }
+    }
+    return { activeTasks: active, completedTasks: completed };
+  }, [tasks]);
+  const completedVisible = showCompleted || activeTasks.length === 0;
+  const completedToggleable = activeTasks.length > 0;
+  const toggleCompleted = useCallback(() => {
+    setShowCompleted((current) => !current);
+  }, []);
+  const renderTask = useCallback(
+    (task: StoredTask) => (
+      <TaskRow
+        key={`${task.metadata.projectGroupId}:${task.metadata.id}`}
+        task={task}
+        expanded={expandedId === taskKey(task)}
+        config={config}
+        onToggleExpanded={onToggleExpanded}
+        onPatch={onPatch}
+        onTimerStart={onTimerStart}
+        onTimerStop={onTimerStop}
+        onDelete={onDelete}
+        onAddType={onAddType}
+        onAddPerson={onAddPerson}
+        onAddContext={onAddContext}
+        onRemoveType={onRemoveType}
+        onRemovePerson={onRemovePerson}
+        onRemoveContext={onRemoveContext}
+        projectOptions={projectOptions}
+        onChangeProject={onChangeProject}
+      />
+    ),
+    [
+      config,
+      expandedId,
+      onAddContext,
+      onAddPerson,
+      onAddType,
+      onChangeProject,
+      onDelete,
+      onPatch,
+      onRemoveContext,
+      onRemovePerson,
+      onRemoveType,
+      onTimerStart,
+      onTimerStop,
+      onToggleExpanded,
+      projectOptions,
+    ],
+  );
+
   if (pending) {
     return <ActivityIndicator style={styles.loader} />;
   }
@@ -75,27 +134,25 @@ export function TaskList({
   }
   return (
     <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-      {tasks.map((task) => (
-        <TaskRow
-          key={`${task.metadata.projectGroupId}:${task.metadata.id}`}
-          task={task}
-          expanded={expandedId === taskKey(task)}
-          config={config}
-          onToggleExpanded={onToggleExpanded}
-          onPatch={onPatch}
-          onTimerStart={onTimerStart}
-          onTimerStop={onTimerStop}
-          onDelete={onDelete}
-          onAddType={onAddType}
-          onAddPerson={onAddPerson}
-          onAddContext={onAddContext}
-          onRemoveType={onRemoveType}
-          onRemovePerson={onRemovePerson}
-          onRemoveContext={onRemoveContext}
-          projectOptions={projectOptions}
-          onChangeProject={onChangeProject}
-        />
-      ))}
+      {activeTasks.map(renderTask)}
+      {completedTasks.length > 0 ? (
+        <View style={styles.completedSection}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!completedToggleable}
+            onPress={completedToggleable ? toggleCompleted : undefined}
+            style={styles.completedHeader}
+          >
+            <Text style={styles.completedTitle}>
+              {completedTasks.length} completed task{completedTasks.length === 1 ? "" : "s"}
+            </Text>
+            {completedToggleable ? (
+              <Text style={styles.completedAction}>{completedVisible ? "Hide" : "Show"}</Text>
+            ) : null}
+          </Pressable>
+          {completedVisible ? completedTasks.map(renderTask) : null}
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -279,6 +336,26 @@ const styles = StyleSheet.create((theme) => ({
   taskTitle: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
   taskTitleRunning: { fontWeight: theme.fontWeight.semibold },
   taskTitleDone: { color: theme.colors.foregroundMuted, textDecorationLine: "line-through" },
+  completedSection: {
+    gap: theme.spacing[2],
+    marginTop: theme.spacing[2],
+  },
+  completedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[2],
+  },
+  completedTitle: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+  },
+  completedAction: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
   badges: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing[1] },
   badge: {
     maxWidth: 180,
