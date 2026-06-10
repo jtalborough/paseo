@@ -13,12 +13,41 @@ export interface TaskDayTotal {
   seconds: number;
 }
 
+export function addTaskTimeDays(day: Date, offset: number): Date {
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate() + offset);
+}
+
+export function formatTaskTimeDayLabel(day: Date, today = new Date()): string {
+  if (isSameLocalDay(day, today)) {
+    return "Today";
+  }
+  if (isSameLocalDay(day, addTaskTimeDays(today, -1))) {
+    return "Yesterday";
+  }
+  if (isSameLocalDay(day, addTaskTimeDays(today, 1))) {
+    return "Tomorrow";
+  }
+  return day.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: day.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
+}
+
 export function taskSecondsForDay(task: StoredTask, day: Date, now = new Date()): number {
   const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
   const dayEnd = dayStart + 24 * 60 * 60 * 1000;
   return task.metadata.timeEntries.reduce(
     (total, entry) => total + entrySecondsWithin(entry, dayStart, dayEnd, now.getTime()),
     0,
+  );
+}
+
+function isSameLocalDay(left: Date, right: Date): boolean {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
   );
 }
 

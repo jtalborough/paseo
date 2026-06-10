@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { StoredTask } from "@getpaseo/protocol/task/types";
 import {
+  addTaskTimeDays,
   aggregateProjectDayTotals,
   aggregateTaskDayTotals,
+  formatTaskTimeDayLabel,
   taskSecondsForDay,
 } from "@/utils/task-time";
 
@@ -49,6 +51,15 @@ function task(
 }
 
 describe("task time aggregation", () => {
+  it("formats and shifts local timesheet days", () => {
+    const today = new Date(2026, 5, 10, 9, 30, 0);
+
+    expect(formatTaskTimeDayLabel(today, today)).toBe("Today");
+    expect(formatTaskTimeDayLabel(addTaskTimeDays(today, -1), today)).toBe("Yesterday");
+    expect(formatTaskTimeDayLabel(addTaskTimeDays(today, 1), today)).toBe("Tomorrow");
+    expect(formatTaskTimeDayLabel(new Date(2026, 5, 1), today)).toBe("Jun 1");
+  });
+
   it("clips intervals to the requested local day and groups by Project", () => {
     const day = new Date(2026, 5, 8);
     const now = new Date(2026, 5, 8, 12, 0, 0);

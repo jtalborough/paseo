@@ -11,7 +11,11 @@ import { useToast } from "@/contexts/toast-context";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { useSessionStore } from "@/stores/session-store";
 import { BUILTIN_TASK_VIEWS, filterTasksByView, taskCreateInputForView } from "@/utils/task-views";
-import { aggregateProjectDayTotals } from "@/utils/task-time";
+import {
+  addTaskTimeDays,
+  aggregateProjectDayTotals,
+  formatTaskTimeDayLabel,
+} from "@/utils/task-time";
 import { formatDuration } from "@/components/task-timer";
 
 const EMPTY_CONFIG: TaskConfig = { types: [], people: [], contexts: [] };
@@ -271,14 +275,27 @@ function TimesheetView({
   tasks: StoredTask[];
   groups: Array<{ groupId: string; displayName: string }>;
 }) {
-  const totals = useMemo(() => aggregateProjectDayTotals(tasks, new Date()), [tasks]);
+  const [day, setDay] = useState(() => new Date());
+  const now = useMemo(() => new Date(), []);
+  const totals = useMemo(() => aggregateProjectDayTotals(tasks, day, now), [day, now, tasks]);
+  const dayLabel = useMemo(() => formatTaskTimeDayLabel(day, now), [day, now]);
   const names = useMemo(
     () => new Map(groups.map((group) => [group.groupId, group.displayName])),
     [groups],
   );
+  const goPreviousDay = useCallback(() => setDay((current) => addTaskTimeDays(current, -1)), []);
+  const goNextDay = useCallback(() => setDay((current) => addTaskTimeDays(current, 1)), []);
+  const goToday = useCallback(() => setDay(new Date()), []);
   return (
     <View style={styles.timesheet}>
-      <Text style={styles.timesheetTitle}>Today by Project</Text>
+      <View style={styles.timesheetHeader}>
+        <Text style={styles.timesheetTitle}>{dayLabel} by Project</Text>
+        <View style={styles.timesheetControls}>
+          <TimesheetDayButton label="Prev" onPress={goPreviousDay} />
+          <TimesheetDayButton label="Today" onPress={goToday} />
+          <TimesheetDayButton label="Next" onPress={goNextDay} />
+        </View>
+      </View>
       {totals.length > 0 ? (
         totals.map((total) => (
           <View key={total.projectGroupId} style={styles.timesheetRow}>
@@ -289,9 +306,17 @@ function TimesheetView({
           </View>
         ))
       ) : (
-        <Text style={styles.muted}>No tracked time today</Text>
+        <Text style={styles.muted}>No tracked time for this day</Text>
       )}
     </View>
+  );
+}
+
+function TimesheetDayButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={styles.timesheetControl}>
+      <Text style={styles.timesheetControlText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -363,7 +388,27 @@ const styles = StyleSheet.create((theme) => ({
   },
   addButtonText: { color: theme.colors.accentForeground, fontWeight: theme.fontWeight.medium },
   timesheet: { padding: theme.spacing[4], gap: theme.spacing[2] },
+  timesheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[3],
+  },
   timesheetTitle: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
+  timesheetControls: {
+    flexDirection: "row",
+    gap: theme.spacing[1],
+  },
+  timesheetControl: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+  },
+  timesheetControlText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
   timesheetRow: {
     flexDirection: "row",
     justifyContent: "space-between",

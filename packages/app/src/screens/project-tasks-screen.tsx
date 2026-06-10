@@ -12,7 +12,12 @@ import type { SelectOption } from "@/components/task-select";
 import { useToast } from "@/contexts/toast-context";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { useSessionStore } from "@/stores/session-store";
-import { aggregateTaskDayTotals, totalSecondsForDay } from "@/utils/task-time";
+import {
+  addTaskTimeDays,
+  aggregateTaskDayTotals,
+  formatTaskTimeDayLabel,
+  totalSecondsForDay,
+} from "@/utils/task-time";
 
 interface ProjectTasksScreenProps {
   serverId: string;
@@ -390,9 +395,11 @@ function ProjectTimesheetView({
   onOpenTask: (taskKey: string) => void;
   onSelectTasksView: (view: "tasks") => void;
 }) {
+  const [day, setDay] = useState(() => new Date());
   const now = useMemo(() => new Date(), []);
-  const totals = useMemo(() => aggregateTaskDayTotals(tasks, now, now), [now, tasks]);
-  const totalSeconds = useMemo(() => totalSecondsForDay(tasks, now, now), [now, tasks]);
+  const totals = useMemo(() => aggregateTaskDayTotals(tasks, day, now), [day, now, tasks]);
+  const totalSeconds = useMemo(() => totalSecondsForDay(tasks, day, now), [day, now, tasks]);
+  const dayLabel = useMemo(() => formatTaskTimeDayLabel(day, now), [day, now]);
   const openTask = useCallback(
     (selectedTaskKey: string) => {
       onOpenTask(selectedTaskKey);
@@ -400,6 +407,9 @@ function ProjectTimesheetView({
     },
     [onOpenTask, onSelectTasksView],
   );
+  const goPreviousDay = useCallback(() => setDay((current) => addTaskTimeDays(current, -1)), []);
+  const goNextDay = useCallback(() => setDay((current) => addTaskTimeDays(current, 1)), []);
+  const goToday = useCallback(() => setDay(new Date()), []);
 
   if (pending) {
     return (
@@ -419,10 +429,17 @@ function ProjectTimesheetView({
     <View style={styles.timesheet}>
       <View style={styles.timesheetHeader}>
         <View>
-          <Text style={styles.timesheetTitle}>Today by task</Text>
+          <Text style={styles.timesheetTitle}>{dayLabel} by task</Text>
           <Text style={styles.muted}>Tracked from task time entries</Text>
         </View>
-        <Text style={styles.timesheetTotal}>{formatDuration(totalSeconds)}</Text>
+        <View style={styles.timesheetHeaderActions}>
+          <Text style={styles.timesheetTotal}>{formatDuration(totalSeconds)}</Text>
+          <View style={styles.timesheetControls}>
+            <TimesheetDayButton label="Prev" onPress={goPreviousDay} />
+            <TimesheetDayButton label="Today" onPress={goToday} />
+            <TimesheetDayButton label="Next" onPress={goNextDay} />
+          </View>
+        </View>
       </View>
       {totals.length > 0 ? (
         totals.map((total) => (
@@ -435,9 +452,17 @@ function ProjectTimesheetView({
           />
         ))
       ) : (
-        <Text style={styles.muted}>No tracked time today</Text>
+        <Text style={styles.muted}>No tracked time for this day</Text>
       )}
     </View>
+  );
+}
+
+function TimesheetDayButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={styles.timesheetControl}>
+      <Text style={styles.timesheetControlText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -518,11 +543,29 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "space-between",
     gap: theme.spacing[3],
   },
+  timesheetHeaderActions: {
+    alignItems: "flex-end",
+    gap: theme.spacing[2],
+  },
   timesheetTitle: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
   timesheetTotal: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontVariant: ["tabular-nums"],
+  },
+  timesheetControls: {
+    flexDirection: "row",
+    gap: theme.spacing[1],
+  },
+  timesheetControl: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+  },
+  timesheetControlText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
   },
   timesheetRow: {
     flexDirection: "row",
