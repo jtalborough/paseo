@@ -15,6 +15,7 @@ import {
   TASK_RECURRENCE_OPTIONS,
   WEEKDAY_OPTIONS,
   taskRecurrenceFromOption,
+  taskRecurrenceCompletionPreview,
   taskRecurrenceToOption,
 } from "@/utils/task-recurrence";
 import { linksToText, textToLinks } from "@/utils/task-links";
@@ -168,6 +169,15 @@ export function TaskEditor({
   const typeOptions = useMemo(() => config.types.map(toOption), [config.types]);
   const peopleOptions = useMemo(() => config.people.map(toOption), [config.people]);
   const contextOptions = useMemo(() => config.contexts.map(toOption), [config.contexts]);
+  const recurrencePreview = useMemo(
+    () =>
+      taskRecurrenceCompletionPreview({
+        recurrence: metadata.recurrence,
+        doDate: metadata.doDate,
+        completedAt: new Date().toISOString(),
+      }),
+    [metadata.doDate, metadata.recurrence],
+  );
 
   return (
     <View style={styles.editor}>
@@ -243,6 +253,7 @@ export function TaskEditor({
           onChange={setWeeklyDays}
         />
       ) : null}
+      {recurrencePreview ? <Text style={styles.recurrencePreview}>{recurrencePreview}</Text> : null}
       <RemindersField value={remindersToText(metadata.remind)} onCommit={setReminders} />
       <AgentRunField
         value={metadata.provider}
@@ -574,6 +585,10 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: theme.colors.border,
   },
   addChipText: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  recurrencePreview: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
   fieldInput: {
     height: 32,
     paddingHorizontal: theme.spacing[2],

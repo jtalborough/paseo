@@ -223,8 +223,8 @@ moves from prototype into stable product behavior.
 ### Tasks
 
 - Polish click-to-complete, active task state, and task navigation from timers.
-- Finish recurring task UI, including weekly recurrence on selected weekdays and next occurrence
-  visibility.
+- Polish recurring task creation flows beyond the existing presets, weekday selector, and next
+  occurrence preview.
 - Keep task files sync-friendly Markdown and avoid a separate drifting task database.
 - Add GitHub Issues support for importing, linking, and eventually syncing issue state.
 - Add saved custom task views and a view editor after the serializable view model is stable.

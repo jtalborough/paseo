@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   CUSTOM_RECURRENCE_OPTION,
   WEEKLY_DAYS_RECURRENCE_OPTION,
+  computeNextTaskDoDate,
+  taskRecurrenceCompletionPreview,
   taskRecurrenceFromOption,
   taskRecurrenceLabel,
   taskRecurrenceToOption,
@@ -52,5 +54,55 @@ describe("task recurrence UI mapping", () => {
       "Weekly Mon, Wed",
     );
     expect(taskRecurrenceLabel(null)).toBeNull();
+  });
+
+  it("previews the daemon reschedule date for completion", () => {
+    expect(
+      taskRecurrenceCompletionPreview({
+        recurrence: { kind: "weekly", weekdays: ["mon", "wed"] },
+        doDate: null,
+        completedAt: "2026-06-10T09:00:00.000Z",
+      }),
+    ).toBe("Completing reschedules to 2026-06-15");
+    expect(
+      taskRecurrenceCompletionPreview({
+        recurrence: null,
+        doDate: null,
+        completedAt: "2026-06-10T09:00:00.000Z",
+      }),
+    ).toBeNull();
+  });
+
+  it("matches server recurrence date math", () => {
+    expect(
+      computeNextTaskDoDate(
+        { kind: "relative", every: 2, unit: "week", from: "scheduled" },
+        { doDate: "2026-06-01", completedAt: "2026-06-10T12:00:00.000Z" },
+      ),
+    ).toBe("2026-06-15");
+    expect(
+      computeNextTaskDoDate(
+        { kind: "relative", every: 3, unit: "day", from: "completion" },
+        { doDate: "2026-06-01", completedAt: "2026-06-10T12:00:00.000Z" },
+      ),
+    ).toBe("2026-06-13");
+    expect(
+      computeNextTaskDoDate(
+        { kind: "relative", every: 1, unit: "month", from: "scheduled" },
+        { doDate: "2026-01-31", completedAt: "2026-01-31T00:00:00.000Z" },
+      ),
+    ).toBe("2026-02-28");
+    expect(
+      computeNextTaskDoDate(
+        { kind: "monthly", day: 5 },
+        { doDate: null, completedAt: "2026-06-10T00:00:00.000Z" },
+      ),
+    ).toBe("2026-07-05");
+    expect(
+      computeNextTaskDoDate(
+        { kind: "yearly", month: 4, day: 15 },
+        { doDate: null, completedAt: "2026-06-10T00:00:00.000Z" },
+      ),
+    ).toBe("2027-04-15");
   });
 });

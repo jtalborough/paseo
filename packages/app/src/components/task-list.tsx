@@ -6,7 +6,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { TaskEditor } from "@/components/task-editor";
 import type { SelectOption } from "@/components/task-select";
 import { TaskTimer } from "@/components/task-timer";
-import { taskRecurrenceLabel } from "@/utils/task-recurrence";
+import { computeNextTaskDoDate, taskRecurrenceLabel } from "@/utils/task-recurrence";
 
 const ACTION_STATE_LABEL: Record<ActionState, string> = {
   todo: "ToDo",
@@ -410,6 +410,14 @@ function taskBadges(task: StoredTask, projectOptions?: SelectOption[]): string[]
   const recurrence = taskRecurrenceLabel(metadata.recurrence);
   if (recurrence) {
     badges.push(recurrence);
+  }
+  if (metadata.recurrence && !metadata.doDate) {
+    badges.push(
+      `Next ${computeNextTaskDoDate(metadata.recurrence, {
+        doDate: null,
+        completedAt: new Date().toISOString(),
+      })}`,
+    );
   }
   if (metadata.remind.length > 0) {
     badges.push(`${metadata.remind.length} reminder${metadata.remind.length === 1 ? "" : "s"}`);
