@@ -52,6 +52,7 @@ import {
   LoopLogsResponseSchema,
   LoopStopResponseSchema,
 } from "@getpaseo/protocol/loop/rpc-schemas";
+import { TaskRequestSchemas, TaskResponseSchemas } from "@getpaseo/protocol/task/messages";
 import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
@@ -643,6 +644,7 @@ export const AgentSnapshotPayloadSchema = z.object({
   id: z.string(),
   provider: AgentProviderSchema,
   cwd: z.string(),
+  projectGroupId: z.string().nullable().optional(),
   model: z.string().nullable(),
   features: z.array(AgentFeatureSchema).optional(),
   thinkingOptionId: z.string().nullable().optional(),
@@ -680,6 +682,7 @@ export const AgentListItemPayloadSchema = z.object({
   effectiveThinkingOptionId: z.string().nullable().optional(),
   status: AgentStatusSchema,
   cwd: z.string(),
+  projectGroupId: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   lastUserMessageAt: z.string().nullable(),
@@ -733,6 +736,7 @@ export const AudioPlayedMessageSchema = z.object({
 const AgentDirectoryFilterSchema = z.object({
   labels: z.record(z.string()).optional(),
   projectKeys: z.array(z.string()).optional(),
+  projectGroupIds: z.array(z.string()).optional(),
   statuses: z.array(AgentStatusSchema).optional(),
   includeArchived: z.boolean().optional(),
   requiresAttention: z.boolean().optional(),
@@ -1097,6 +1101,7 @@ export const CreateAgentRequestMessageSchema = z.object({
   config: AgentSessionConfigSchema,
   env: z.record(z.string()).optional(),
   workspaceId: z.string().optional(),
+  projectGroupId: z.string().optional(),
   worktreeName: z.string().optional(),
   initialPrompt: z.string().optional(),
   clientMessageId: z.string().optional(),
@@ -1310,6 +1315,7 @@ export type ProjectArchetype = z.infer<typeof ProjectArchetypeSchema>;
 export const ProjectGroupPayloadSchema = z.object({
   groupId: z.string(),
   displayName: z.string(),
+  cwd: z.string().optional(),
   color: z.string().nullable(),
   icon: z.string().nullable(),
   order: z.number().nullable(),
@@ -1905,6 +1911,7 @@ export const CreateTerminalRequestSchema = z.object({
   cwd: z.string(),
   name: z.string().optional(),
   agentId: z.string().optional(),
+  linkedAgentId: z.string().optional(),
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
   requestId: z.string(),
@@ -2108,6 +2115,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectRequestSchema,
   LoopLogsRequestSchema,
   LoopStopRequestSchema,
+  // COMPAT(tasks): added in v0.1.90, remove gate after 2026-12-15.
+  ...TaskRequestSchemas,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -2288,6 +2297,8 @@ export const ServerInfoStatusPayloadSchema = z
         gitLog: z.boolean().optional(),
         // COMPAT(projectGroups): added in v0.1.90, remove gate after 2026-12-15.
         projectGroups: z.boolean().optional(),
+        // COMPAT(tasks): added in v0.1.90, remove gate after 2026-12-15.
+        tasks: z.boolean().optional(),
       })
       .optional(),
   })
@@ -3761,6 +3772,7 @@ const TerminalInfoSchema = z.object({
   name: z.string(),
   cwd: z.string(),
   title: z.string().optional(),
+  linkedAgentId: z.string().optional(),
 });
 
 export const TerminalCellSchema = z.object({
@@ -4014,6 +4026,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectResponseSchema,
   LoopLogsResponseSchema,
   LoopStopResponseSchema,
+  // COMPAT(tasks): added in v0.1.90, remove gate after 2026-12-15.
+  ...TaskResponseSchemas,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;
@@ -4374,12 +4388,12 @@ export const WSRecordingStateMessageSchema = z.object({
 // Wrapped session message
 export const WSSessionInboundSchema = z.object({
   type: z.literal("session"),
-  message: SessionInboundMessageSchema,
+  message: SessionInboundMessageSchema as z.ZodTypeAny,
 });
 
 export const WSSessionOutboundSchema = z.object({
   type: z.literal("session"),
-  message: SessionOutboundMessageSchema,
+  message: SessionOutboundMessageSchema as z.ZodTypeAny,
 });
 
 // Complete WebSocket message schemas

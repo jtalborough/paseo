@@ -2,6 +2,66 @@ import type { WorkspaceTabTarget } from "@/stores/workspace-tabs-store";
 import { normalizeWorkspaceFileLocation, workspaceFileLocationsEqual } from "@/workspace/file-open";
 
 type WorkspaceDraftTabSetup = NonNullable<Extract<WorkspaceTabTarget, { kind: "draft" }>["setup"]>;
+type ProjectWorkspaceTabTarget = Extract<
+  WorkspaceTabTarget,
+  {
+    kind:
+      | "project-overview"
+      | "tasks"
+      | "notes"
+      | "project-tasks"
+      | "project-notes"
+      | "project-agents"
+      | "project-files";
+  }
+>;
+type ProjectWorkspaceTabKind = ProjectWorkspaceTabTarget["kind"];
+
+const PROJECT_WORKSPACE_TAB_KINDS = new Set<string>([
+  "project-overview",
+  "tasks",
+  "notes",
+  "project-tasks",
+  "project-notes",
+  "project-agents",
+  "project-files",
+]);
+
+function isProjectWorkspaceTabKind(kind: string): kind is ProjectWorkspaceTabKind {
+  return PROJECT_WORKSPACE_TAB_KINDS.has(kind);
+}
+
+function normalizeProjectWorkspaceTabTarget(
+  value: WorkspaceTabTarget,
+): ProjectWorkspaceTabTarget | null {
+  if (!isProjectWorkspaceTabTarget(value)) {
+    return null;
+  }
+  const groupId = trimNonEmpty(value.groupId);
+  return groupId ? { kind: value.kind, groupId } : null;
+}
+
+function isProjectWorkspaceTabTarget(
+  value: WorkspaceTabTarget,
+): value is ProjectWorkspaceTabTarget {
+  return isProjectWorkspaceTabKind(value.kind);
+}
+
+function normalizeTerminalTabTarget(
+  value: Extract<WorkspaceTabTarget, { kind: "terminal" }>,
+): WorkspaceTabTarget | null {
+  const terminalId = trimNonEmpty(value.terminalId);
+  const cwd = trimOptionalString(value.cwd);
+  const sourceAgentId = trimOptionalString(value.sourceAgentId);
+  return terminalId
+    ? {
+        kind: "terminal",
+        terminalId,
+        ...(cwd ? { cwd } : {}),
+        ...(sourceAgentId ? { sourceAgentId } : {}),
+      }
+    : null;
+}
 
 export function normalizeWorkspaceTabTarget(
   value: WorkspaceTabTarget | null | undefined,
@@ -15,15 +75,22 @@ export function normalizeWorkspaceTabTarget(
       return null;
     }
     const setup = normalizeWorkspaceDraftTabSetup(value.setup);
-    return setup ? { kind: "draft", draftId, setup } : { kind: "draft", draftId };
+    const cwd = trimOptionalString(value.cwd);
+    const projectGroupId = trimOptionalString(value.projectGroupId);
+    return {
+      kind: "draft",
+      draftId,
+      ...(cwd ? { cwd } : {}),
+      ...(projectGroupId ? { projectGroupId } : {}),
+      ...(setup ? { setup } : {}),
+    };
   }
   if (value.kind === "agent") {
     const agentId = trimNonEmpty(value.agentId);
     return agentId ? { kind: "agent", agentId } : null;
   }
   if (value.kind === "terminal") {
-    const terminalId = trimNonEmpty(value.terminalId);
-    return terminalId ? { kind: "terminal", terminalId } : null;
+    return normalizeTerminalTabTarget(value);
   }
   if (value.kind === "browser") {
     const browserId = trimNonEmpty(value.browserId);
@@ -36,6 +103,8 @@ export function normalizeWorkspaceTabTarget(
     const workspaceId = trimNonEmpty(value.workspaceId);
     return workspaceId ? { kind: "setup", workspaceId } : null;
   }
+  const projectTarget = normalizeProjectWorkspaceTabTarget(value);
+  if (projectTarget) return projectTarget;
   return null;
 }
 
@@ -71,7 +140,7 @@ export function workspaceTabTargetsEqual(
     return false;
   }
   if (left.kind === "draft" && right.kind === "draft") {
-    return left.draftId === right.draftId && workspaceDraftTabSetupsEqual(left.setup, right.setup);
+    return workspaceDraftTargetsEqual(left, right);
   }
   if (left.kind === "agent" && right.kind === "agent") {
     return left.agentId === right.agentId;
@@ -88,7 +157,22 @@ export function workspaceTabTargetsEqual(
   if (left.kind === "setup" && right.kind === "setup") {
     return left.workspaceId === right.workspaceId;
   }
+  if (isProjectWorkspaceTabTarget(left) && isProjectWorkspaceTabTarget(right)) {
+    return left.groupId === right.groupId;
+  }
   return false;
+}
+
+function workspaceDraftTargetsEqual(
+  left: Extract<WorkspaceTabTarget, { kind: "draft" }>,
+  right: Extract<WorkspaceTabTarget, { kind: "draft" }>,
+): boolean {
+  return (
+    left.draftId === right.draftId &&
+    (left.cwd ?? null) === (right.cwd ?? null) &&
+    (left.projectGroupId ?? null) === (right.projectGroupId ?? null) &&
+    workspaceDraftTabSetupsEqual(left.setup, right.setup)
+  );
 }
 
 function workspaceDraftTabSetupsEqual(
@@ -139,6 +223,9 @@ export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): st
   }
   if (target.kind === "setup") {
     return `setup_${target.workspaceId}`;
+  }
+  if (isProjectWorkspaceTabTarget(target)) {
+    return `${target.kind}_${target.groupId}`;
   }
   return `file_${target.path}`;
 }

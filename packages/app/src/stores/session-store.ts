@@ -103,6 +103,7 @@ export interface Agent {
   lastError?: string | null;
   title: string | null;
   cwd: string;
+  projectGroupId?: string | null;
   model: string | null;
   features?: AgentFeature[];
   thinkingOptionId?: string | null;

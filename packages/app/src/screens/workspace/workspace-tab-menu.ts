@@ -15,6 +15,7 @@ export type WorkspaceTabMenuEntry =
         | "arrow-left-to-line"
         | "arrow-right-to-line"
         | "copy-x"
+        | "terminal"
         | "pencil"
         | "x";
       hint?: string;
@@ -38,6 +39,7 @@ interface BuildWorkspaceTabMenuEntriesInput {
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onClearTerminalOutput?: (terminalId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCloseTabsBefore: (tabId: string) => Promise<void> | void;
@@ -52,6 +54,7 @@ interface BuildWorkspaceDesktopTabActionsInput {
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onClearTerminalOutput?: (terminalId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
@@ -97,7 +100,10 @@ function getCloseButtonTestId(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "setup") {
     return `workspace-setup-close-${encodeFilePathForPathSegment(tab.target.workspaceId)}`;
   }
-  return `workspace-file-close-${encodeFilePathForPathSegment(tab.target.path)}`;
+  if (tab.target.kind === "file") {
+    return `workspace-file-close-${encodeFilePathForPathSegment(tab.target.path)}`;
+  }
+  return `workspace-project-close-${encodeFilePathForPathSegment(tab.tabId)}`;
 }
 
 export function buildWorkspaceTabMenuEntries(
@@ -112,6 +118,7 @@ export function buildWorkspaceTabMenuEntries(
     onCopyResumeCommand,
     onCopyAgentId,
     onReloadAgent,
+    onClearTerminalOutput,
     onRenameTab,
     onCloseTab,
     onCloseTabsBefore,
@@ -159,6 +166,19 @@ export function buildWorkspaceTabMenuEntries(
         onRenameTab(tab);
       },
     });
+    if (tab.target.kind === "terminal" && onClearTerminalOutput) {
+      const { terminalId } = tab.target;
+      entries.push({
+        kind: "item",
+        key: "clear-terminal-output",
+        label: "Clear output",
+        icon: "terminal",
+        testID: `${menuTestIDBase}-clear-output`,
+        onSelect: () => {
+          void onClearTerminalOutput(terminalId);
+        },
+      });
+    }
     entries.push({
       kind: "separator",
       key: "rename-separator",
@@ -241,6 +261,7 @@ export function buildWorkspaceDesktopTabActions(
       onCopyResumeCommand: input.onCopyResumeCommand,
       onCopyAgentId: input.onCopyAgentId,
       onReloadAgent: input.onReloadAgent,
+      onClearTerminalOutput: input.onClearTerminalOutput,
       onRenameTab: input.onRenameTab,
       onCloseTab: input.onCloseTab,
       onCloseTabsBefore: input.onCloseTabsToLeft,

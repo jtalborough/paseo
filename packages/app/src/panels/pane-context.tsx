@@ -1,14 +1,20 @@
 import React, { createContext, useContext, type ReactNode } from "react";
 import invariant from "tiny-invariant";
 import type { WorkspaceTabTarget } from "@/stores/workspace-tabs-store";
+import type { SurfaceScope } from "@/surfaces/surface-scope";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 
 export interface PaneContextValue {
   serverId: string;
+  scope: SurfaceScope;
   workspaceId: string;
   tabId: string;
   target: WorkspaceTabTarget;
   openTab: (target: WorkspaceTabTarget) => void;
+  openTabInSplit: (
+    target: WorkspaceTabTarget,
+    options?: { position?: "left" | "right" | "top" | "bottom" },
+  ) => void;
   closeCurrentTab: () => void;
   retargetCurrentTab: (target: WorkspaceTabTarget) => void;
   openFileInWorkspace: (request: WorkspaceFileOpenRequest) => void;

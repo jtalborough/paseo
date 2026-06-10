@@ -103,6 +103,7 @@ function cloneTerminalInfo(info: WorkerTerminalInfo): WorkerTerminalInfo {
     name: info.name,
     cwd: info.cwd,
     ...(info.title ? { title: info.title } : {}),
+    ...(info.linkedAgentId ? { linkedAgentId: info.linkedAgentId } : {}),
   };
 }
 
@@ -152,6 +153,7 @@ export function createWorkerTerminalManager(
         name: record.info.name,
         cwd: record.info.cwd,
         ...(record.info.title ? { title: record.info.title } : {}),
+        ...(record.info.linkedAgentId ? { linkedAgentId: record.info.linkedAgentId } : {}),
       });
     }
     return terminals;
@@ -552,6 +554,10 @@ export function createWorkerTerminalManager(
 
     getTerminal(id: string): TerminalSession | undefined {
       return recordsById.get(id)?.session;
+    },
+
+    getTerminalLinkedAgentId(id: string): string | undefined {
+      return recordsById.get(id)?.info.linkedAgentId;
     },
 
     async getTerminalState(

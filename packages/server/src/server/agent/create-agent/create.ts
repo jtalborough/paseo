@@ -33,7 +33,7 @@ import {
 } from "../timeline-append.js";
 
 export interface CreateAgentWorkspace {
-  workspaceId: string;
+  workspaceId?: string;
 }
 
 export interface CreateAgentSessionWorktreeResult {
@@ -61,6 +61,7 @@ export interface CreateAgentFromSessionInput {
   kind: "session";
   config: AgentSessionConfig;
   workspaceId?: string;
+  projectGroupId?: string;
   worktreeName?: string;
   initialPrompt?: string;
   clientMessageId?: string;
@@ -135,6 +136,7 @@ interface ResolvedCreateAgent {
 interface AgentCreateOptions {
   labels?: Record<string, string>;
   workspaceId?: string;
+  projectGroupId?: string;
   initialPrompt?: string;
   env?: Record<string, string>;
   initialTitle?: string | null;
@@ -216,6 +218,7 @@ async function resolveSessionCreateAgent(
     createOptions: {
       labels: input.labels,
       workspaceId: workspace.workspaceId,
+      projectGroupId: input.projectGroupId,
       initialPrompt: trimmedPrompt,
       env: input.env,
       initialTitle: input.provisionalTitle,
@@ -242,6 +245,9 @@ async function resolveMcpCreateAgent(
   const parentAgent = input.callerAgentId
     ? requireParentAgent(dependencies.agentManager, input.callerAgentId)
     : null;
+  const projectGroupId = parentAgent
+    ? ((await dependencies.agentStorage.get(parentAgent.id))?.projectGroupId ?? undefined)
+    : undefined;
   const cwd = parentAgent
     ? resolveChildAgentCwd({
         parentCwd: parentAgent.cwd,
@@ -285,7 +291,13 @@ async function resolveMcpCreateAgent(
       thinkingOptionId: input.thinking,
       ...(resolvedFeatures ? { featureValues: resolvedFeatures } : {}),
     },
-    createOptions: labels ? { labels } : undefined,
+    createOptions:
+      labels || projectGroupId
+        ? {
+            ...(labels ? { labels } : {}),
+            ...(projectGroupId ? { projectGroupId } : {}),
+          }
+        : undefined,
     metadataInitialPrompt: trimmedPrompt,
     prompt: trimmedPrompt,
     explicitTitle: input.title.trim(),

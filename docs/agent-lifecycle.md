@@ -21,6 +21,11 @@ Agent-scoped `create_agent` accepts `detached: true` for agents that should stan
 - **Subagents** — created with `detached: false` or omitted. They exist as part of the creating agent's work, appear in that agent's subagent track, and are archived with it.
 - **Detached agents** — created with `detached: true`. They take over as sibling/root agents (e.g. handoffs, fire-and-forget delegations), do not appear in the creating agent's subagent track, and are not archived with it.
 
+Agent-scoped creation inherits the creating agent's explicit Project placement. This applies to both
+subagents and detached agents: detachment changes lifecycle ownership, not the domain Project the
+agent belongs to. The child's `cwd` may differ from the parent's while `projectGroupId` remains the
+same.
+
 `notifyOnFinish` defaults to `true` for agent-scoped creation because most subagents are delegated work the creating agent needs to hear back from. Set it to `false` only for truly fire-and-forget agents.
 
 ## Archive

@@ -185,6 +185,7 @@ import {
 } from "./file-explorer/service.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import { PushTokenStore } from "./push/token-store.js";
+import { TaskStore } from "./task/store.js";
 import {
   readPaseoConfigForEdit,
   writePaseoConfigForEdit,
@@ -193,6 +194,11 @@ import {
 import { buildMetadataPrompt } from "../utils/build-metadata-prompt.js";
 import { archivePersistedWorkspaceRecord } from "./workspace-archive-service.js";
 import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
+import {
+  archiveProjectDirectory,
+  projectDirectoryPath,
+  syncProjectDirectory,
+} from "./project-directory.js";
 import type { ServiceProxySubsystem } from "./service-proxy.js";
 import {
   checkoutResolvedBranch,
@@ -307,6 +313,10 @@ function stripTrailingPathSeparators(path: string): string {
     normalized = normalized.slice(0, -1);
   }
   return normalized;
+}
+
+function isCanonicalPathWithinRoot(rootPath: string, candidatePath: string): boolean {
+  return candidatePath === rootPath || candidatePath.startsWith(rootPath + sep);
 }
 
 type GitMutationRefreshReason =
@@ -778,6 +788,7 @@ export class Session {
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly groupRegistry: GroupRegistry;
+  private readonly taskStore: TaskStore;
   private readonly chatService: FileBackedChatService;
   private readonly scheduleService: ScheduleService;
   private readonly loopService: LoopService;
@@ -901,6 +912,7 @@ export class Session {
     this.projectRegistry = projectRegistry;
     this.workspaceRegistry = workspaceRegistry;
     this.groupRegistry = groupRegistry ?? createNoopGroupRegistry();
+    this.taskStore = new TaskStore(paseoHome);
     this.chatService = chatService;
     this.scheduleService = scheduleService;
     this.loopService = loopService;
@@ -1414,6 +1426,7 @@ export class Session {
       }
     }
     payload.archivedAt = storedRecord?.archivedAt ?? null;
+    payload.projectGroupId = storedRecord?.projectGroupId ?? null;
     return payload;
   }
 
@@ -1472,6 +1485,14 @@ export class Session {
     if (filter.projectKeys && filter.projectKeys.length > 0) {
       const projectKeys = new Set(filter.projectKeys.filter((item) => item.trim().length > 0));
       if (projectKeys.size > 0 && !projectKeys.has(project.projectKey)) {
+        return false;
+      }
+    }
+    if (filter.projectGroupIds && filter.projectGroupIds.length > 0) {
+      const projectGroupIds = new Set(
+        filter.projectGroupIds.filter((item) => item.trim().length > 0),
+      );
+      if (projectGroupIds.size > 0 && !projectGroupIds.has(agent.projectGroupId ?? "")) {
         return false;
       }
     }
@@ -1743,6 +1764,7 @@ export class Session {
       this.dispatchCheckoutMessage(msg) ??
       this.dispatchWorkspaceAndProjectMessage(msg) ??
       this.dispatchProjectGroupMessage(msg) ??
+      this.dispatchTaskMessage(msg) ??
       this.dispatchProviderMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
       this.dispatchChatScheduleLoopMessage(msg) ??
@@ -2641,13 +2663,179 @@ export class Session {
   }
 
   private async handleProjectGroupListRequest(requestId: string): Promise<void> {
-    const groups = (await this.groupRegistry.list())
-      .filter((group) => !group.archivedAt)
-      .map((group) => this.projectGroupRecordToPayload(group));
+    const allProjects = await this.projectRegistry.list();
+    const activeGroups = (await this.groupRegistry.list()).filter((group) => !group.archivedAt);
+    const groups = await Promise.all(
+      activeGroups.map(async (group) => {
+        await syncProjectDirectory({
+          paseoHome: this.paseoHome,
+          group,
+          children: allProjects.filter((project) => project.groupId === group.groupId),
+        });
+        return this.projectGroupRecordToPayload(group);
+      }),
+    );
     this.emit({
       type: "project.group.list.response",
       payload: { requestId, groups },
     });
+  }
+
+  private dispatchTaskMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "task.list.request":
+        return this.handleTaskListRequest(msg);
+      case "tasks.query.request":
+        return this.handleTaskQueryRequest(msg);
+      case "task.get.request":
+        return this.handleTaskGetRequest(msg);
+      case "task.create.request":
+        return this.handleTaskCreateRequest(msg);
+      case "task.update.request":
+        return this.handleTaskUpdateRequest(msg);
+      case "task.move.request":
+        return this.handleTaskMoveRequest(msg);
+      case "task.delete.request":
+        return this.handleTaskDeleteRequest(msg);
+      case "task.timer.start.request":
+        return this.handleTaskTimerStartRequest(msg);
+      case "task.timer.stop.request":
+        return this.handleTaskTimerStopRequest(msg);
+      case "task.config.get.request":
+        return this.handleTaskConfigGetRequest(msg);
+      case "task.config.update.request":
+        return this.handleTaskConfigUpdateRequest(msg);
+      case "task.views.get.request":
+        return this.handleTaskViewsGetRequest(msg);
+      case "task.views.update.request":
+        return this.handleTaskViewsUpdateRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private async assertActiveTaskProject(projectGroupId: string): Promise<void> {
+    const group = await this.groupRegistry.get(projectGroupId);
+    if (!group || group.archivedAt) {
+      throw new Error(`Project not found: ${projectGroupId}`);
+    }
+  }
+
+  private async handleTaskListRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.list.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const tasks = await this.taskStore.list(msg.projectGroupId);
+    this.emit({ type: "task.list.response", payload: { requestId: msg.requestId, tasks } });
+  }
+
+  private async handleTaskQueryRequest(
+    msg: Extract<SessionInboundMessage, { type: "tasks.query.request" }>,
+  ): Promise<void> {
+    const groups = (await this.groupRegistry.list()).filter((group) => !group.archivedAt);
+    const tasks = (await Promise.all(groups.map((group) => this.taskStore.list(group.groupId))))
+      .flat()
+      .sort((left, right) => left.metadata.createdAt.localeCompare(right.metadata.createdAt));
+    this.emit({ type: "tasks.query.response", payload: { requestId: msg.requestId, tasks } });
+  }
+
+  private async handleTaskGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.get.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const task = await this.taskStore.get(msg.projectGroupId, msg.id);
+    this.emit({ type: "task.get.response", payload: { requestId: msg.requestId, task } });
+  }
+
+  private async handleTaskCreateRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.create.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.input.projectGroupId);
+    const task = await this.taskStore.create(msg.input);
+    this.emit({ type: "task.create.response", payload: { requestId: msg.requestId, task } });
+  }
+
+  private async handleTaskUpdateRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.update.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const task = await this.taskStore.update(msg.projectGroupId, msg.id, msg.patch);
+    this.emit({ type: "task.update.response", payload: { requestId: msg.requestId, task } });
+  }
+
+  private async handleTaskMoveRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.move.request" }>,
+  ): Promise<void> {
+    await Promise.all([
+      this.assertActiveTaskProject(msg.projectGroupId),
+      this.assertActiveTaskProject(msg.newProjectGroupId),
+    ]);
+    const task = await this.taskStore.move(msg.projectGroupId, msg.id, msg.newProjectGroupId);
+    this.emit({ type: "task.move.response", payload: { requestId: msg.requestId, task } });
+  }
+
+  private async handleTaskDeleteRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.delete.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    await this.taskStore.delete(msg.projectGroupId, msg.id);
+    this.emit({ type: "task.delete.response", payload: { requestId: msg.requestId, id: msg.id } });
+  }
+
+  private async handleTaskTimerStartRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.timer.start.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const activeProjectGroupIds = (await this.groupRegistry.list())
+      .filter((group) => !group.archivedAt)
+      .map((group) => group.groupId);
+    const tasks = await this.taskStore.startExclusiveTimer({
+      projectGroupId: msg.projectGroupId,
+      id: msg.id,
+      activeProjectGroupIds,
+    });
+    this.emit({ type: "task.timer.start.response", payload: { requestId: msg.requestId, tasks } });
+  }
+
+  private async handleTaskTimerStopRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.timer.stop.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const task = await this.taskStore.stopTimer(msg.projectGroupId, msg.id);
+    this.emit({ type: "task.timer.stop.response", payload: { requestId: msg.requestId, task } });
+  }
+
+  private async handleTaskConfigGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.config.get.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const config = await this.taskStore.getConfig(msg.projectGroupId);
+    this.emit({ type: "task.config.get.response", payload: { requestId: msg.requestId, config } });
+  }
+
+  private async handleTaskConfigUpdateRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.config.update.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const config = await this.taskStore.updateConfig(msg.projectGroupId, msg.config);
+    this.emit({
+      type: "task.config.update.response",
+      payload: { requestId: msg.requestId, config },
+    });
+  }
+
+  private async handleTaskViewsGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.views.get.request" }>,
+  ): Promise<void> {
+    const views = await this.taskStore.getViews();
+    this.emit({ type: "task.views.get.response", payload: { requestId: msg.requestId, views } });
+  }
+
+  private async handleTaskViewsUpdateRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.views.update.request" }>,
+  ): Promise<void> {
+    const views = await this.taskStore.updateViews(msg.views);
+    this.emit({ type: "task.views.update.response", payload: { requestId: msg.requestId, views } });
   }
 
   private async handleProjectGroupCreateRequest(input: {
@@ -2678,6 +2866,7 @@ export class Session {
         updatedAt: now,
       });
       await this.groupRegistry.upsert(record);
+      await syncProjectDirectory({ paseoHome: this.paseoHome, group: record, children: [] });
       this.emit({
         type: "project.group.create.response",
         payload: {
@@ -2742,6 +2931,13 @@ export class Session {
         archivedAt: existing.archivedAt,
       });
       await this.groupRegistry.upsert(next);
+      await syncProjectDirectory({
+        paseoHome: this.paseoHome,
+        group: next,
+        children: (await this.projectRegistry.list()).filter(
+          (project) => project.groupId === next.groupId,
+        ),
+      });
       this.emit({
         type: "project.group.update.response",
         payload: {
@@ -2770,14 +2966,29 @@ export class Session {
 
   private async handleProjectGroupDeleteRequest(groupId: string, requestId: string): Promise<void> {
     try {
-      // Removing a group ungroups its member folders (the folders survive).
+      // Archiving a Project ungroups its member folders. The external folders survive
+      // untouched; only the Paseo-owned Project directory is archived.
       const projects = await this.projectRegistry.list();
       const members = projects.filter((project) => project.groupId === groupId);
       const now = new Date().toISOString();
+      const existing = await this.groupRegistry.get(groupId);
+      if (existing && !existing.archivedAt) {
+        const archivedGroup = createPersistedGroupRecord({
+          ...existing,
+          updatedAt: now,
+          archivedAt: now,
+        });
+        await syncProjectDirectory({
+          paseoHome: this.paseoHome,
+          group: archivedGroup,
+          children: members,
+        });
+        await this.groupRegistry.archive(groupId, now);
+        await archiveProjectDirectory({ paseoHome: this.paseoHome, groupId, archivedAt: now });
+      }
       for (const member of members) {
         await this.projectRegistry.upsert({ ...member, groupId: null, updatedAt: now });
       }
-      await this.groupRegistry.remove(groupId);
       this.emit({
         type: "project.group.delete.response",
         payload: { requestId, accepted: true, groupId, error: null },
@@ -2843,11 +3054,30 @@ export class Session {
           return;
         }
       }
+      const affectedGroupIds = new Set<string>();
+      if (existing.groupId) {
+        affectedGroupIds.add(existing.groupId);
+      }
+      if (groupId) {
+        affectedGroupIds.add(groupId);
+      }
       await this.projectRegistry.upsert({
         ...existing,
         groupId,
         updatedAt: new Date().toISOString(),
       });
+      const projects = await this.projectRegistry.list();
+      for (const affectedGroupId of affectedGroupIds) {
+        const group = await this.groupRegistry.get(affectedGroupId);
+        if (!group || group.archivedAt) {
+          continue;
+        }
+        await syncProjectDirectory({
+          paseoHome: this.paseoHome,
+          group,
+          children: projects.filter((project) => project.groupId === affectedGroupId),
+        });
+      }
       this.emit({
         type: "project.folder.set_group.response",
         payload: { requestId, accepted: true, projectId, groupId, error: null },
@@ -2879,6 +3109,7 @@ export class Session {
   private projectGroupRecordToPayload(record: PersistedGroupRecord): {
     groupId: string;
     displayName: string;
+    cwd: string;
     color: string | null;
     icon: string | null;
     order: number | null;
@@ -2890,6 +3121,7 @@ export class Session {
     return {
       groupId: record.groupId,
       displayName: record.displayName,
+      cwd: projectDirectoryPath(this.paseoHome, record.groupId),
       color: record.color,
       icon: record.icon,
       order: record.order,
@@ -3361,6 +3593,7 @@ export class Session {
   ): Promise<void> {
     const {
       config,
+      projectGroupId,
       worktreeName,
       requestId,
       initialPrompt,
@@ -3420,6 +3653,7 @@ export class Session {
           kind: "session",
           config: createAgentConfig,
           workspaceId: msg.workspaceId,
+          projectGroupId,
           worktreeName,
           initialPrompt,
           clientMessageId,
@@ -3435,7 +3669,7 @@ export class Session {
           buildSessionConfig: (sessionConfig, gitOptions, legacyWorktreeName, ctx) =>
             this.buildAgentSessionConfig(sessionConfig, gitOptions, legacyWorktreeName, ctx),
           resolveWorkspace: ({ cwd, workspaceId }) =>
-            this.resolveCreateAgentWorkspace(cwd, workspaceId),
+            this.resolveCreateAgentPlacement(cwd, workspaceId, projectGroupId),
         },
       );
       createdAgentId = snapshot.id;
@@ -3505,6 +3739,37 @@ export class Session {
       throw new Error(`Workspace not found: ${workspaceId}`);
     }
     return { workspaceId: resolvedWorkspace.workspaceId };
+  }
+
+  private async resolveCreateAgentPlacement(
+    cwd: string,
+    workspaceId?: string,
+    projectGroupId?: string,
+  ): Promise<{ workspaceId?: string }> {
+    if (!projectGroupId) {
+      return this.resolveCreateAgentWorkspace(cwd, workspaceId);
+    }
+
+    const group = await this.groupRegistry.get(projectGroupId);
+    if (!group || group.archivedAt) {
+      throw new Error(`Project not found: ${projectGroupId}`);
+    }
+
+    const normalizedCwd = normalizePersistedWorkspaceId(cwd);
+    const projectCwd = normalizePersistedWorkspaceId(
+      projectDirectoryPath(this.paseoHome, projectGroupId),
+    );
+    if (!workspaceId && normalizedCwd === projectCwd) {
+      return {};
+    }
+
+    const resolved = await this.resolveCreateAgentWorkspace(cwd, workspaceId);
+    const workspace = await this.workspaceRegistry.get(resolved.workspaceId);
+    const folder = workspace ? await this.projectRegistry.get(workspace.projectId) : null;
+    if (!folder || folder.groupId !== projectGroupId) {
+      throw new Error(`Workspace does not belong to Project ${projectGroupId}`);
+    }
+    return resolved;
   }
 
   private async handleResumeAgentRequest(
@@ -4275,6 +4540,30 @@ export class Session {
       return true;
     }
     return resolvedCandidate.startsWith(resolvedRoot + sep);
+  }
+
+  private async assertAuthorizedFileRoot(cwd: string): Promise<void> {
+    const requestedRoot = canonicalizeConfigRoot(cwd);
+    const [workspaces, groups] = await Promise.all([
+      this.workspaceRegistry.list(),
+      this.groupRegistry.list(),
+    ]);
+    const matchesWorkspace = workspaces.some(
+      (workspace) =>
+        workspace.archivedAt === null &&
+        isCanonicalPathWithinRoot(canonicalizeConfigRoot(workspace.cwd), requestedRoot),
+    );
+    const matchesProject = groups.some(
+      (group) =>
+        group.archivedAt === null &&
+        isCanonicalPathWithinRoot(
+          canonicalizeConfigRoot(projectDirectoryPath(this.paseoHome, group.groupId)),
+          requestedRoot,
+        ),
+    );
+    if (!matchesWorkspace && !matchesProject) {
+      throw new Error("cwd is not an active Workspace or Project directory");
+    }
   }
 
   private async generateCommitMessage(cwd: string): Promise<string> {
@@ -6119,6 +6408,7 @@ export class Session {
     }
 
     try {
+      await this.assertAuthorizedFileRoot(cwd);
       if (mode === "list") {
         const directory = await listDirectoryEntries({
           root: cwd,
@@ -6232,6 +6522,7 @@ export class Session {
     }
 
     try {
+      await this.assertAuthorizedFileRoot(cwd);
       const result = await writeExplorerFile({
         root: cwd,
         relativePath: requestedPath,
@@ -6349,6 +6640,7 @@ export class Session {
     );
 
     try {
+      await this.assertAuthorizedFileRoot(cwd);
       const info = await getDownloadableFileInfo({
         root: cwd,
         relativePath: requestedPath,

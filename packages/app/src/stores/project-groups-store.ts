@@ -17,6 +17,30 @@ interface ProjectGroupsStoreState {
 
 const EMPTY_GROUPS: ProjectGroup[] = [];
 
+function areGroupsEqual(left: ProjectGroup[], right: ProjectGroup[]): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((group, index) => {
+    const candidate = right[index];
+    return (
+      candidate?.groupId === group.groupId &&
+      candidate.displayName === group.displayName &&
+      candidate.cwd === group.cwd &&
+      candidate.color === group.color &&
+      candidate.icon === group.icon &&
+      candidate.order === group.order &&
+      candidate.archetype === group.archetype &&
+      candidate.archivedAt === group.archivedAt &&
+      candidate.createdAt === group.createdAt &&
+      candidate.updatedAt === group.updatedAt
+    );
+  });
+}
+
 export const useProjectGroupsStore = create<ProjectGroupsStoreState>()((set, get) => ({
   groupsByServerId: {},
   getGroups: (serverId) => {
@@ -26,9 +50,14 @@ export const useProjectGroupsStore = create<ProjectGroupsStoreState>()((set, get
     return get().groupsByServerId[serverId] ?? EMPTY_GROUPS;
   },
   setGroups: (serverId, groups) => {
-    set((state) => ({
-      groupsByServerId: { ...state.groupsByServerId, [serverId]: groups },
-    }));
+    set((state) => {
+      if (areGroupsEqual(state.groupsByServerId[serverId] ?? EMPTY_GROUPS, groups)) {
+        return state;
+      }
+      return {
+        groupsByServerId: { ...state.groupsByServerId, [serverId]: groups },
+      };
+    });
   },
   clear: (serverId) => {
     set((state) => {

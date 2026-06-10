@@ -13,6 +13,7 @@ export interface TerminalListItem {
   name: string;
   cwd: string;
   title?: string;
+  linkedAgentId?: string;
 }
 
 export interface TerminalsChangedEvent {
@@ -29,6 +30,7 @@ export interface TerminalManager {
     cwd: string;
     name?: string;
     title?: string;
+    linkedAgentId?: string;
     env?: Record<string, string>;
     command?: string;
     args?: string[];
@@ -40,6 +42,7 @@ export interface TerminalManager {
     options?: TerminalStateSnapshotOptions,
   ): Promise<TerminalStateSnapshot | null>;
   setTerminalTitle(id: string, title: string): boolean;
+  getTerminalLinkedAgentId(id: string): string | undefined;
   killTerminal(id: string): void;
   killTerminalAndWait(
     id: string,
@@ -59,6 +62,7 @@ export function createTerminalManager(): TerminalManager {
   const terminalsById = new Map<string, TerminalSession>();
   const terminalExitUnsubscribeById = new Map<string, () => void>();
   const terminalTitleUnsubscribeById = new Map<string, () => void>();
+  const linkedAgentIdByTerminalId = new Map<string, string>();
   const terminalsChangedListeners = new Set<TerminalsChangedListener>();
   const defaultEnvByRootCwd = new Map<string, Record<string, string>>();
 
@@ -86,6 +90,7 @@ export function createTerminalManager(): TerminalManager {
     }
 
     terminalsById.delete(id);
+    linkedAgentIdByTerminalId.delete(id);
 
     const terminals = terminalsByCwd.get(session.cwd);
     if (terminals) {
@@ -141,6 +146,9 @@ export function createTerminalManager(): TerminalManager {
       name: input.session.name,
       cwd: input.session.cwd,
       title: input.session.getTitle(),
+      ...(linkedAgentIdByTerminalId.get(input.session.id)
+        ? { linkedAgentId: linkedAgentIdByTerminalId.get(input.session.id) }
+        : {}),
     };
   }
 
@@ -187,6 +195,7 @@ export function createTerminalManager(): TerminalManager {
       cwd: string;
       name?: string;
       title?: string;
+      linkedAgentId?: string;
       env?: Record<string, string>;
       command?: string;
       args?: string[];
@@ -209,6 +218,9 @@ export function createTerminalManager(): TerminalManager {
           ...(mergedEnv ? { env: mergedEnv } : {}),
         }),
       );
+      if (options.linkedAgentId) {
+        linkedAgentIdByTerminalId.set(session.id, options.linkedAgentId);
+      }
 
       terminals.push(session);
       terminalsByCwd.set(options.cwd, terminals);
@@ -224,6 +236,10 @@ export function createTerminalManager(): TerminalManager {
 
     getTerminal(id: string): TerminalSession | undefined {
       return terminalsById.get(id);
+    },
+
+    getTerminalLinkedAgentId(id: string): string | undefined {
+      return linkedAgentIdByTerminalId.get(id);
     },
 
     async getTerminalState(

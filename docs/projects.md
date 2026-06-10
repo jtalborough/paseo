@@ -1,0 +1,208 @@
+# Projects
+
+A Project is a user-authored domain container above external Folders and their Workspaces:
+
+```
+Project -> Folder -> Workspace
+```
+
+Projects are keyed by their stable `grp_` id. Tasks, notes, Project-level agents, and future
+domain content key to that id, never to a Folder's legacy `projectId`.
+
+## Project directory
+
+Every Project has a Paseo-managed working directory:
+
+```
+$PASEO_HOME/projects/{groupId}/
+├── project.json
+├── project.md
+├── agents/
+│   └── README.md
+├── context/
+│   ├── README.md
+│   └── packets/
+│       └── README.md
+├── notes/
+│   └── README.md
+├── prompts/
+│   └── README.md
+└── tasks/
+    └── README.md
+```
+
+This directory is the Project's portable unit and the `cwd` for Project-level agents. Files in it
+are ordinary files, with notes and tasks stored as Markdown. Users can sync the directory with
+folder-sync tools such as Nextcloud without requiring a Paseo cloud service.
+
+`project.json` is the contained manifest. It includes Project metadata and references to external
+child Folders. The daemon's `groups.json` remains an index for fast lookup; it is not the portable
+Project content.
+
+## Workspace layout
+
+Paseo has two workspace scopes:
+
+- Global: Tasks, Projects, schedules, files, knowledge, agents, and browser activity across every
+  Project and ungrouped Folder.
+- Project: the same surfaces filtered to one Project, plus that Project's owned files and external
+  Folder references.
+
+Project-scoped surfaces key to `groupId`. Do not key Project tasks, schedules, notes, bookmarks, or
+knowledge to a legacy Folder `projectId`.
+
+Project Tasks are structured Markdown documents under `tasks/`. Each Task is one Markdown file with
+queryable YAML frontmatter and a free-form Markdown body. The file is authoritative; the UI and
+derived global views must not maintain a separate task database that can drift from synced Project
+content. Task frontmatter keys ownership explicitly with `projectGroupId`.
+Project Notes follows the same rule for `notes/`.
+
+Project Tasks are the working backlog for both humans and agents. Use them for active execution
+plans, cleanup checklists, bug follow-ups, and agent-ready work items. Use docs for durable product
+model, architecture, conventions, and decisions that should outlive a specific task. A planning
+conversation can update both, but the executable "what do we do next?" list should live in tasks so
+it is visible in the app and can later launch or brief agents directly.
+
+Task timers are mutually exclusive across active Projects. The daemon owns start/stop operations so
+multiple clients cannot leave competing timers running. Each Task records append-only
+`timeEntries` intervals in its Markdown frontmatter; daily totals and Project timesheets are derived
+from those intervals. `timerStartedAt` and `trackedSeconds` remain compatibility summaries, not the
+timesheet source of truth.
+
+Global Task views are definitions over the cross-Project Task query. Built-in Today, Inbox, and All
+views live in the Task view registry; add future views as definitions instead of branching the
+Tasks screen for each new view. Custom global definitions persist in `$PASEO_HOME/task-views.json`
+and are available through the Task views RPCs, so an editor UI can be added later without changing
+the storage or query model.
+
+Keep owned Project Files distinct from Project Folders:
+
+- Project Files are ordinary files inside the Project directory. They are portable and syncable with
+  the Project.
+- Project Folders are external directories the Project references. They can expose their
+  subdirectories through Folder-aware tools, but they are not owned by the Project directory.
+
+Global "All Files" is an aggregate/search surface over Project Files and explicit Folder files. It
+should not become one giant tree that implies every referenced Folder is contained inside Paseo.
+
+## Agent context
+
+A Project is also the durable context shared by its agents and chats. Paseo combines two
+complementary ways for an agent to use that context:
+
+- Live tools operate on the current filesystem and running environment. Project-level agents start
+  in the Project directory and receive explicit tools for referenced Folders.
+- Local retrieval searches Project knowledge, notes, tasks, bookmarks, and other durable content to
+  find relevant context quickly.
+
+These are not interchangeable. Retrieval is a discovery aid, not an authoritative copy of live
+files. Before an agent acts on a live file, it must read the current file through a filesystem tool.
+Retrieved results should identify their source and freshness so the agent and user can distinguish
+current content from an imported or stale snapshot.
+
+Agents belong to a Project through `groupId`, independently of their `cwd`. A Project-level agent's
+`cwd` is the managed Project directory. A Folder or Workspace agent can run inside an external child
+directory while still appearing in the Project's agent surface.
+
+Project-level agents do not create a synthetic Folder or Workspace for the managed Project
+directory. Agent placement must support a Project directly instead of inferring all ownership from
+`cwd`.
+
+The Project directory contains durable, user-owned context that should sync between hosts: agent
+definitions, instructions, notes, task definitions, knowledge sources, bookmarks, and schedule
+definitions. Runtime process state, provider session handles, generated indexes, and active-agent
+timelines remain daemon infrastructure. Derived indexes must be rebuildable from the Project's
+portable content.
+
+Durable agent context is split into explicit files:
+
+- `prompts/`: reusable Markdown instructions for a Project, team, role, or workflow.
+- `agents/`: reusable agent profile definitions. A profile can point at prompts and declare default
+  provider, model, tool grants, folder grants, and launch preferences, but it is not a live session.
+- `context/packets/`: explicit launch bundles for a specific run. A packet records which prompt,
+  task, notes, bookmarks, files, browser state, and Folder grants were selected.
+
+Within these durable files, references use Project-root-relative POSIX paths such as
+`prompts/implementation.md`, `agents/planner.yaml`, and `tasks/2026-06-09-task.md`. They are not
+filesystem-absolute paths and they are not relative to the YAML file's own folder. That keeps the
+Project directory portable across hosts and sync tools.
+
+Context packets are the bridge between chat-style Project knowledge and coding-agent execution. They
+are concrete and reviewable: an agent launch should be explainable by pointing to the packet and the
+live tools it was granted. Retrieval can help assemble a packet, but the packet remains the durable
+record of what was intentionally handed to the agent.
+
+## Folder boundary
+
+Folders are external directories referenced by a Project. They are not copied or moved into the
+Project directory.
+
+Project-level agents start in the Project directory. Access to child Folders must be explicit
+through Folder-aware tools or an explicit user selection. Never silently choose the first Folder
+as a Project agent's `cwd`.
+
+The client filesystem API accepts only active Workspace and managed Project directories, or an
+explicit subdirectory inside one. This prevents arbitrary cwd browsing through file explorer,
+editor, and download requests. It is a root-level client boundary, not a substitute for per-agent
+Folder grants: Project-level agents still need explicit Folder-aware tools before they can act in
+external child Folders.
+
+## Archive semantics
+
+Archiving a Project moves only its Paseo-managed Project directory under
+`$PASEO_HOME/projects/archived/` and archives its index record. Child Folders and their Workspaces
+remain untouched and become ungrouped.
+
+The archived manifest retains its child Folder references for history.
+
+## Current product backlog
+
+This is the working backlog for the Project surface direction. Keep it current as the feature set
+moves from prototype into stable product behavior.
+
+### UI stabilization
+
+- Agent panes should use the full available pane width while preserving readable message content
+  where that improves scanning.
+- Agent and linked Terminal tabs should keep a visible relationship: the agent exposes a linked
+  terminal affordance, and the terminal title/metadata should identify the owning agent when known.
+- Add-tab actions for Agent, Terminal, Browser, Tasks, and Notes should stay directly visible when
+  there is enough room, and collapse into the overflow menu only when space is tight.
+- Project and Workspace headers should keep the same structure and action placement, including
+  Scripts, Open, Commit, tab actions, and split controls.
+- Project Overview should stay lightweight once real work happens in Project tabs.
+
+### Tasks
+
+- Polish click-to-complete, active task state, and task navigation from timers.
+- Finish recurring task UI, including weekly recurrence on selected weekdays and next occurrence
+  visibility.
+- Keep task files sync-friendly Markdown and avoid a separate drifting task database.
+- Add GitHub Issues support for importing, linking, and eventually syncing issue state.
+- Add saved custom task views and a view editor after the serializable view model is stable.
+- Add timesheet views that aggregate task `timeEntries` by day and Project.
+
+### Browser
+
+- Treat Browser as its own epic. It needs bookmarks, credentials/OnePassword strategy, Project
+  browser state, and agent-readable/agent-controllable browser context.
+- Browser state should be selectable into Project context packets rather than implicitly handed to
+  every agent.
+
+### Agent context
+
+- Build durable Project prompts, agent profiles, and context packets as ordinary files in the
+  Project directory.
+- Context packets should explicitly record selected tasks, notes, files, browser state, prompts,
+  and Folder grants for each launch.
+- Retrieval is for discovery; live filesystem tools remain authoritative before an agent acts on a
+  current file.
+- Project-level agents should start in the Project directory and receive explicit Folder tools for
+  external child Folders.
+
+### Stabilization
+
+- Keep the current work split into reviewable chunks: Project surface, Tasks, linked terminals,
+  tab model, and docs/skills.
+- Run focused tests for changed files, then `npm run typecheck`, `npm run lint`, and
+  `npm run format:check` before landing.

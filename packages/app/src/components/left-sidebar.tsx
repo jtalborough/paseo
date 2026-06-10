@@ -1,5 +1,14 @@
 import { router, usePathname } from "expo-router";
-import { FolderPlus, Home, MessagesSquare, Plus, Search, Settings, X } from "lucide-react-native";
+import {
+  FolderPlus,
+  Home,
+  ListTodo,
+  MessagesSquare,
+  Plus,
+  Search,
+  Settings,
+  X,
+} from "lucide-react-native";
 import {
   type Dispatch,
   memo,
@@ -35,6 +44,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { SidebarGroupingSelector } from "@/components/sidebar/sidebar-grouping-selector";
+import { TaskTimerSummary } from "@/components/task-timer-summary";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -68,6 +78,7 @@ import {
   buildHostOpenProjectRoute,
   buildHostNewWorkspaceRoute,
   buildHostSessionsRoute,
+  buildHostTasksRoute,
   buildSettingsRoute,
   mapPathnameToServer,
 } from "@/utils/host-routes";
@@ -478,44 +489,47 @@ function SidebarFooter({
   const newAgentKeys = useShortcutKeys("new-agent");
   return (
     <View style={styles.sidebarFooter}>
-      <View style={styles.footerHostSlot}>
-        <HostPickerTrigger
-          triggerRef={hostTriggerRef}
-          setIsHostPickerOpen={setIsHostPickerOpen}
-          hostOptionsEmpty={hostOptions.length === 0}
-          hostStatusDotStyle={hostStatusDotStyle}
-          activeHostLabel={activeHostLabel}
-        />
-      </View>
-      <View style={styles.footerIconRow}>
-        <Tooltip delayDuration={300}>
-          <TooltipTrigger asChild>
-            <FooterIconButton
-              onPress={handleOpenProject}
-              testID="sidebar-add-project"
-              accessibilityLabel="Add project"
-              icon={FolderPlus}
-              theme={theme}
-            />
-          </TooltipTrigger>
-          <TooltipContent side="top" align="center" offset={8}>
-            <AddProjectTooltipContent newAgentKeys={newAgentKeys} />
-          </TooltipContent>
-        </Tooltip>
-        <FooterIconButton
-          onPress={handleHome}
-          testID="sidebar-home"
-          accessibilityLabel="Home"
-          icon={Home}
-          theme={theme}
-        />
-        <FooterIconButton
-          onPress={handleSettings}
-          testID="sidebar-settings"
-          accessibilityLabel="Settings"
-          icon={Settings}
-          theme={theme}
-        />
+      <TaskTimerSummary serverId={activeServerId} placement="sidebar" />
+      <View style={styles.footerControls}>
+        <View style={styles.footerHostSlot}>
+          <HostPickerTrigger
+            triggerRef={hostTriggerRef}
+            setIsHostPickerOpen={setIsHostPickerOpen}
+            hostOptionsEmpty={hostOptions.length === 0}
+            hostStatusDotStyle={hostStatusDotStyle}
+            activeHostLabel={activeHostLabel}
+          />
+        </View>
+        <View style={styles.footerIconRow}>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <FooterIconButton
+                onPress={handleOpenProject}
+                testID="sidebar-add-project"
+                accessibilityLabel="Add project"
+                icon={FolderPlus}
+                theme={theme}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="top" align="center" offset={8}>
+              <AddProjectTooltipContent newAgentKeys={newAgentKeys} />
+            </TooltipContent>
+          </Tooltip>
+          <FooterIconButton
+            onPress={handleHome}
+            testID="sidebar-home"
+            accessibilityLabel="Home"
+            icon={Home}
+            theme={theme}
+          />
+          <FooterIconButton
+            onPress={handleSettings}
+            testID="sidebar-settings"
+            accessibilityLabel="Settings"
+            icon={Settings}
+            theme={theme}
+          />
+        </View>
       </View>
       <Combobox
         options={hostOptions}
@@ -565,6 +579,7 @@ function MobileSidebar({
 }: MobileSidebarProps) {
   const pathname = usePathname();
   const isSessionsActive = pathname.includes("/sessions");
+  const isTasksActive = pathname === buildHostTasksRoute(activeServerId ?? "");
   const {
     translateX,
     backdropOpacity,
@@ -604,6 +619,11 @@ function MobileSidebar({
   const handleWorkspacePress = useCallback(() => {
     closeToAgent();
   }, [closeToAgent]);
+  const handleTasks = useCallback(() => {
+    if (!activeServerId) return;
+    closeToAgent();
+    router.push(buildHostTasksRoute(activeServerId));
+  }, [activeServerId, closeToAgent]);
 
   const closeGesture = useMemo(
     () =>
@@ -744,6 +764,13 @@ function MobileSidebar({
                 isActive={isSessionsActive}
                 testID="sidebar-sessions"
               />
+              <SidebarHeaderRow
+                icon={ListTodo}
+                label="Tasks"
+                onPress={handleTasks}
+                isActive={isTasksActive}
+                testID="sidebar-tasks"
+              />
             </View>
             <WorkspacesSectionHeader serverId={activeServerId} />
             <Pressable
@@ -835,6 +862,7 @@ function DesktopSidebar({
 }: DesktopSidebarProps) {
   const pathname = usePathname();
   const isSessionsActive = pathname.includes("/sessions");
+  const isTasksActive = pathname === buildHostTasksRoute(activeServerId ?? "");
   const padding = useWindowControlsPadding("sidebar");
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
   const setSidebarWidth = usePanelStore((state) => state.setSidebarWidth);
@@ -892,6 +920,11 @@ function DesktopSidebar({
     () => [styles.resizeHandle, isWeb && ({ cursor: "col-resize" } as object)],
     [],
   );
+  const handleTasks = useCallback(() => {
+    if (activeServerId) {
+      router.push(buildHostTasksRoute(activeServerId));
+    }
+  }, [activeServerId]);
 
   if (!isOpen) {
     return null;
@@ -910,6 +943,13 @@ function DesktopSidebar({
               onPress={handleViewMore}
               isActive={isSessionsActive}
               testID="sidebar-sessions"
+            />
+            <SidebarHeaderRow
+              icon={ListTodo}
+              label="Tasks"
+              onPress={handleTasks}
+              isActive={isTasksActive}
+              testID="sidebar-tasks"
             />
           </View>
         </View>
@@ -1153,13 +1193,16 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   sidebarFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[3],
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
+    gap: theme.spacing[2],
+  },
+  footerControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   footerHostSlot: {
     flexGrow: 0,

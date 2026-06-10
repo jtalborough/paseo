@@ -410,6 +410,17 @@ function buildExplicitTimelineSeedForRegister(
   };
 }
 
+function buildProjectTaskRuntimePrompt(projectGroupId: string | undefined): string | null {
+  if (!projectGroupId) {
+    return null;
+  }
+  return [
+    "This agent is attached to a Paseo Project.",
+    `Project group id: ${projectGroupId}`,
+    "Use Project Tasks as the shared backlog for durable work. Before creating follow-up tasks, call list_project_tasks to avoid duplicates. When durable work is identified, call create_project_task or update_project_task so the human and future agents can see it in the Project Tasks tab. Mark tasks done only after the work is actually complete.",
+  ].join("\n");
+}
+
 export class AgentManager {
   private readonly clients = new Map<AgentProvider, AgentClient>();
   private readonly providerEnabled = new Map<AgentProvider, boolean>();
@@ -804,6 +815,7 @@ export class AgentManager {
     options?: {
       labels?: Record<string, string>;
       workspaceId?: string;
+      projectGroupId?: string;
       initialPrompt?: string;
       env?: Record<string, string>;
       persistSession?: boolean;
@@ -811,22 +823,11 @@ export class AgentManager {
     },
   ): Promise<ManagedAgent> {
     const resolvedAgentId = validateAgentId(agentId ?? this.idFactory(), "createAgent");
-    const injectedConfig =
-      this.mcpBaseUrl == null
-        ? config
-        : {
-            ...config,
-            mcpServers: {
-              paseo: {
-                type: "http" as const,
-                url: `${this.mcpBaseUrl}?callerAgentId=${resolvedAgentId}`,
-              },
-              ...config.mcpServers,
-            },
-          };
+    const injectedConfig = this.injectPaseoMcpServer(config, resolvedAgentId);
     this.requireEnabledProvider(injectedConfig.provider);
     const normalizedConfig = this.applyDaemonAppendSystemPrompt(
       await this.normalizeConfig(injectedConfig),
+      buildProjectTaskRuntimePrompt(options?.projectGroupId),
     );
     const launchContext = this.buildLaunchContext(resolvedAgentId, options?.env);
     const client = await this.requireAvailableClient({
@@ -837,6 +838,7 @@ export class AgentManager {
     return this.registerSession(session, normalizedConfig, resolvedAgentId, {
       labels: options?.labels,
       workspaceId: options?.workspaceId,
+      projectGroupId: options?.projectGroupId,
       initialTitle: options?.initialTitle,
     });
   }
@@ -872,8 +874,9 @@ export class AgentManager {
       ...overrides,
       provider: handle.provider,
     } as AgentSessionConfig;
+    const injectedConfig = this.injectPaseoMcpServer(mergedConfig, resolvedAgentId);
     const normalizedConfig = this.applyDaemonAppendSystemPrompt(
-      await this.normalizeConfig(mergedConfig),
+      await this.normalizeConfig(injectedConfig),
     );
     const resumeOverrides: Partial<AgentSessionConfig> = { ...overrides };
     let hasResumeOverrides = overrides !== undefined;
@@ -885,6 +888,11 @@ export class AgentManager {
 
     if (normalizedConfig.modeId !== mergedConfig.modeId) {
       resumeOverrides.modeId = normalizedConfig.modeId;
+      hasResumeOverrides = true;
+    }
+
+    if (JSON.stringify(normalizedConfig.mcpServers) !== JSON.stringify(mergedConfig.mcpServers)) {
+      resumeOverrides.mcpServers = normalizedConfig.mcpServers;
       hasResumeOverrides = true;
     }
 
@@ -938,8 +946,9 @@ export class AgentManager {
       ...overrides,
       provider,
     } as AgentSessionConfig;
+    const injectedConfig = this.injectPaseoMcpServer(refreshConfig, agentId);
     const normalizedConfig = this.applyDaemonAppendSystemPrompt(
-      await this.normalizeConfig(refreshConfig),
+      await this.normalizeConfig(injectedConfig),
     );
     const launchContext = this.buildLaunchContext(agentId);
 
@@ -2269,6 +2278,7 @@ export class AgentManager {
     agentId: string,
     options?: {
       workspaceId?: string;
+      projectGroupId?: string;
       createdAt?: Date;
       updatedAt?: Date;
       lastUserMessageAt?: Date | null;
@@ -2315,13 +2325,17 @@ export class AgentManager {
     await this.refreshRuntimeInfo(managed);
     await this.persistSnapshot(managed, {
       workspaceId: options?.workspaceId,
+      projectGroupId: options?.projectGroupId,
       title: initialPersistedTitle,
     });
     this.emitState(managed, { persist: false });
 
     await this.refreshSessionState(managed);
     managed.lifecycle = "idle";
-    await this.persistSnapshot(managed, { workspaceId: options?.workspaceId });
+    await this.persistSnapshot(managed, {
+      workspaceId: options?.workspaceId,
+      projectGroupId: options?.projectGroupId,
+    });
     this.emitState(managed, { persist: false });
     this.subscribeToSession(managed);
     return { ...managed };
@@ -2577,7 +2591,12 @@ export class AgentManager {
 
   private async persistSnapshot(
     agent: ManagedAgent,
-    options?: { workspaceId?: string; title?: string | null; internal?: boolean },
+    options?: {
+      workspaceId?: string;
+      projectGroupId?: string | null;
+      title?: string | null;
+      internal?: boolean;
+    },
   ): Promise<void> {
     if (!this.registry) {
       return;
@@ -3431,6 +3450,22 @@ export class AgentManager {
     }
   }
 
+  private injectPaseoMcpServer(config: AgentSessionConfig, agentId: string): AgentSessionConfig {
+    if (this.mcpBaseUrl == null) {
+      return config;
+    }
+    return {
+      ...config,
+      mcpServers: {
+        paseo: {
+          type: "http" as const,
+          url: `${this.mcpBaseUrl}?callerAgentId=${agentId}`,
+        },
+        ...config.mcpServers,
+      },
+    };
+  }
+
   private async normalizeConfig(config: AgentSessionConfig): Promise<AgentSessionConfig> {
     const normalized: AgentSessionConfig = { ...config };
 
@@ -3489,8 +3524,14 @@ export class AgentManager {
     return normalized;
   }
 
-  private applyDaemonAppendSystemPrompt(config: AgentSessionConfig): AgentSessionConfig {
-    const daemonAppendSystemPrompt = this.appendSystemPrompt.trim();
+  private applyDaemonAppendSystemPrompt(
+    config: AgentSessionConfig,
+    extraAppendSystemPrompt?: string | null,
+  ): AgentSessionConfig {
+    const daemonAppendSystemPrompt = [this.appendSystemPrompt, extraAppendSystemPrompt]
+      .map((part) => part?.trim() ?? "")
+      .filter(Boolean)
+      .join("\n\n");
     const next = { ...config };
     delete next.daemonAppendSystemPrompt;
 

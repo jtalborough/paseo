@@ -36,6 +36,7 @@ const STORED_AGENT_SCHEMA = z.object({
   id: z.string(),
   provider: z.string(),
   cwd: z.string(),
+  projectGroupId: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   lastActivityAt: z.string().optional(),
@@ -191,8 +192,10 @@ export class AgentStorage {
 
   async applySnapshot(
     agent: ManagedAgent,
-    workspaceIdOrOptions?: string | { title?: string | null; internal?: boolean },
-    options?: { title?: string | null; internal?: boolean },
+    workspaceIdOrOptions?:
+      | string
+      | { title?: string | null; internal?: boolean; projectGroupId?: string | null },
+    options?: { title?: string | null; internal?: boolean; projectGroupId?: string | null },
   ): Promise<void> {
     const nextOptions = typeof workspaceIdOrOptions === "string" ? options : workspaceIdOrOptions;
     await this.load();
@@ -208,6 +211,10 @@ export class AgentStorage {
       internal: hasInternalOverride
         ? nextOptions?.internal
         : (agent.internal ?? existing?.internal),
+      projectGroupId:
+        nextOptions?.projectGroupId !== undefined
+          ? nextOptions.projectGroupId
+          : existing?.projectGroupId,
     });
 
     // Preserve soft-delete/archive status across snapshot flushes.

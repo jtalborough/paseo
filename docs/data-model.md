@@ -25,12 +25,30 @@ $PASEO_HOME/
 ├── loops/
 │   └── loops.json                       # All loop records
 ├── projects/
-│   ├── projects.json                    # Project registry
-│   └── workspaces.json                  # Workspace registry
+│   ├── projects.json                    # Legacy Folder registry
+│   ├── workspaces.json                  # Workspace registry
+│   ├── groups.json                      # Project index
+│   ├── {groupId}/                       # Portable Project directory and agent cwd
+│   │   ├── project.json                 # Contained Project manifest + Folder references
+│   │   ├── project.md                   # Plain-Markdown Project notes
+│   │   ├── agents/                      # Durable agent profile definitions, not runtime state
+│   │   ├── context/
+│   │   │   └── packets/                 # Explicit agent launch context bundles
+│   │   ├── notes/                       # Plain-Markdown notes
+│   │   ├── prompts/                     # Reusable Project prompt Markdown
+│   │   └── tasks/                       # Structured Markdown Tasks with YAML frontmatter
+│   └── archived/                        # Archived Project directories
 └── push-tokens.json                     # Expo push notification tokens
 ```
 
 The `agents/{sanitized-cwd}/` directory name is derived from the agent's `cwd` by stripping the filesystem root and replacing path separators with `-` (Windows drive letters become a `C-` style prefix). Persistent server stores write atomically by writing a temp file in the target directory and then renaming it into place.
+
+Project directories are the portable unit suitable for ordinary folder-sync tools. Child Folders
+are external references and are never moved or deleted when a Project is archived.
+
+Project `agents/`, `prompts/`, and `context/packets/` are durable authoring files. They describe
+which instructions and files should be handed to an agent, but they are not running sessions.
+Runtime agent records, provider handles, and timelines remain under `$PASEO_HOME/agents/`.
 
 ---
 
@@ -45,6 +63,7 @@ Each agent is stored as a separate JSON file, grouped by project directory.
 | `id`                 | `string`                                 | UUID, primary key                                                                                                                                                         |
 | `provider`           | `string`                                 | Agent provider (`"claude"`, `"codex"`, `"opencode"`, etc.)                                                                                                                |
 | `cwd`                | `string`                                 | Working directory the agent operates in                                                                                                                                   |
+| `projectGroupId`     | `string?`                                | Optional explicit Project placement (`grp_...`). Project-level agents can use the managed Project directory as `cwd` without creating a Workspace.                        |
 | `createdAt`          | `string` (ISO 8601)                      | Creation timestamp                                                                                                                                                        |
 | `updatedAt`          | `string` (ISO 8601)                      | Last update timestamp                                                                                                                                                     |
 | `lastActivityAt`     | `string?` (ISO 8601)                     | Last activity timestamp                                                                                                                                                   |

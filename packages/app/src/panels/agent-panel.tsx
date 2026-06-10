@@ -1,7 +1,8 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import { SquarePen } from "lucide-react-native";
+import { useQueryClient } from "@tanstack/react-query";
+import { SquarePen, Terminal } from "lucide-react-native";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import ReanimatedAnimated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -53,13 +54,22 @@ import {
   deriveRouteBottomAnchorIntent,
   deriveRouteBottomAnchorRequest,
 } from "@/screens/agent/agent-ready-screen-bottom-anchor";
+import {
+  buildTerminalsQueryKey,
+  upsertCreatedTerminalPayload,
+  type ListTerminalsPayload,
+} from "@/screens/workspace/terminals/state";
 import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import { usePanelStore } from "@/stores/panel-store";
 import { type Agent, useSessionStore } from "@/stores/session-store";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
-import { buildWorkspaceTabPersistenceKey } from "@/stores/workspace-tabs-store";
+import {
+  buildWorkspaceTabsSurfacePersistenceKey,
+  useWorkspaceTabsStore,
+  type WorkspaceTab,
+} from "@/stores/workspace-tabs-store";
 import type { Theme } from "@/styles/theme";
 import { useArchiveSubagent, useSubagentsForParent } from "@/subagents";
 import { SubagentsTrack } from "@/subagents/track";
@@ -207,6 +217,41 @@ function resolveWorkspaceAgentTabLabel(title: string | null | undefined): string
   return normalized;
 }
 
+function resolveAgentTerminalName(agent: Agent): string {
+  const title = resolveWorkspaceAgentTabLabel(agent.title);
+  return title ? `${title} terminal` : `Agent ${agent.id.slice(0, 8)} terminal`;
+}
+
+function isTerminalWorkspaceTab(tab: WorkspaceTab): tab is WorkspaceTab & {
+  target: Extract<WorkspaceTab["target"], { kind: "terminal" }>;
+} {
+  return tab.target.kind === "terminal";
+}
+
+function buildLinkedTerminalWireContext(input: {
+  agentId: string;
+  tabs: WorkspaceTab[];
+}): string | null {
+  const terminalLines = input.tabs.filter(isTerminalWorkspaceTab).map((tab) => {
+    const cwd = tab.target.cwd ? ` cwd=${tab.target.cwd}` : "";
+    return `- terminalId=${tab.target.terminalId}${cwd}`;
+  });
+  if (terminalLines.length === 0) {
+    return null;
+  }
+  return [
+    "<paseo-linked-terminals>",
+    "The current Paseo UI has terminal tabs linked to this agent.",
+    `This agent id is ${input.agentId}.`,
+    "Use the Paseo MCP terminal tools to inspect and control linked terminals. In Claude Code these appear as mcp__paseo__list_terminals, mcp__paseo__capture_terminal, and mcp__paseo__send_terminal_keys.",
+    "First call list_terminals and prefer a terminal whose linkedAgentId matches this agent id. If linkedAgentId is unavailable, use one of the explicit terminalIds below.",
+    "If the user asks whether you can see or use the terminal, call capture_terminal on the relevant terminalId before answering.",
+    "To run a command in the linked terminal, call send_terminal_keys with the command text and Enter; then call capture_terminal for the result.",
+    ...terminalLines,
+    "</paseo-linked-terminals>",
+  ].join("\n");
+}
+
 function shouldStoreFetchedAgentInActiveDirectory(agent: Agent): boolean {
   return !agent.archivedAt && Boolean(agent.projectPlacement);
 }
@@ -342,6 +387,8 @@ function DraftPanel() {
       tabId={tabId}
       draftId={target.draftId}
       initialSetup={target.setup}
+      initialCwd={target.cwd}
+      projectGroupId={target.projectGroupId}
       isPaneFocused={isInteractive}
       onOpenWorkspaceFile={openFileInWorkspace}
       onCreated={handleCreated}
@@ -484,6 +531,17 @@ function AgentPanelContent({
       isConnected={runtimeIsConnected}
       connectionStatus={connectionStatus}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
+    />
+  );
+}
+
+export function StandaloneAgentPanel({ serverId, agentId }: { serverId: string; agentId: string }) {
+  return (
+    <AgentPanelContent
+      serverId={serverId}
+      agentId={agentId}
+      isPaneFocused={true}
+      onOpenWorkspaceFile={undefined}
     />
   );
 }
@@ -1232,6 +1290,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
       isAuthoritativeHistoryReady={hasAppliedAuthoritativeHistory}
       toast={toast}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
+      fullWidth
     />
   );
 });
@@ -1324,7 +1383,22 @@ function ActiveAgentComposer({
     { initialIsBelow: isCompactFormFactor },
   );
   const paneContext = usePaneContext();
-  const { workspaceId, tabId, retargetCurrentTab } = paneContext;
+  const { scope, workspaceId, tabId, openTabInSplit, retargetCurrentTab } = paneContext;
+  const client = useHostRuntimeClient(serverId);
+  const queryClient = useQueryClient();
+  const linkedTerminalTabs = useWorkspaceTabsStore(
+    useShallow((state) => {
+      const surfaceKey = buildWorkspaceTabsSurfacePersistenceKey({ serverId, scope });
+      if (!surfaceKey) {
+        return [];
+      }
+      return (state.uiTabsByWorkspace[surfaceKey] ?? []).filter(
+        (tab) => tab.target.kind === "terminal" && tab.target.sourceAgentId === agentId,
+      );
+    }),
+  );
+  const [isCreatingLinkedTerminal, setIsCreatingLinkedTerminal] = useState(false);
+  const [linkedTerminalError, setLinkedTerminalError] = useState<string | null>(null);
   const { archiveAgent } = useArchiveAgent();
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
   const hideWorkspaceAgent = useWorkspaceLayoutStore((state) => state.hideAgent);
@@ -1370,6 +1444,74 @@ function ActiveAgentComposer({
     [isCompactFormFactor, openFileExplorerForCheckout, serverId, setExplorerTabForCheckout],
   );
 
+  const openLinkedTerminal = useCallback(async () => {
+    const agent = resolveChatAgentFromSession(useSessionStore.getState(), serverId, agentId);
+    if (!agent) {
+      throw new Error("Agent not found");
+    }
+    if (!client) {
+      throw new Error("Host is not connected");
+    }
+
+    setLinkedTerminalError(null);
+    setIsCreatingLinkedTerminal(true);
+    try {
+      const payload = await client.createTerminal(
+        agent.cwd,
+        resolveAgentTerminalName(agent),
+        undefined,
+        {
+          linkedAgentId: agent.id,
+        },
+      );
+      const createdTerminal = payload.terminal;
+      if (!createdTerminal) {
+        throw new Error("Unable to create terminal");
+      }
+      // Seed the workspace terminals query before opening the tab. The workspace
+      // tab reconciler closes terminal tabs whose id is not in the terminals
+      // query yet, which would immediately collapse the split we open below.
+      queryClient.setQueryData<ListTerminalsPayload>(
+        buildTerminalsQueryKey(serverId, createdTerminal.cwd),
+        (current) =>
+          upsertCreatedTerminalPayload({
+            current,
+            terminal: createdTerminal,
+            workspaceDirectory: createdTerminal.cwd,
+          }),
+      );
+      openTabInSplit(
+        {
+          kind: "terminal",
+          terminalId: createdTerminal.id,
+          cwd: createdTerminal.cwd,
+          sourceAgentId: agent.id,
+        },
+        { position: "right" },
+      );
+    } finally {
+      setIsCreatingLinkedTerminal(false);
+    }
+  }, [agentId, client, openTabInSplit, queryClient, serverId]);
+
+  const handleOpenLinkedTerminalPress = useCallback(() => {
+    openLinkedTerminal().catch((error) => {
+      setLinkedTerminalError(toErrorMessage(error));
+    });
+  }, [openLinkedTerminal]);
+  const linkedTerminalButtonStyle = useCallback(
+    ({ pressed }: { pressed: boolean }) => [
+      styles.linkedTerminalButton,
+      pressed ? styles.linkedTerminalButtonPressed : null,
+      isCreatingLinkedTerminal || !client ? styles.linkedTerminalButtonDisabled : null,
+    ],
+    [client, isCreatingLinkedTerminal],
+  );
+  const buildWireMessageContext = useCallback(
+    () => buildLinkedTerminalWireContext({ agentId, tabs: linkedTerminalTabs }),
+    [agentId, linkedTerminalTabs],
+  );
+
   const handleClientSlashCommand = useCallback(
     async (command: ClientSlashCommand) => {
       const agent = resolveChatAgentFromSession(useSessionStore.getState(), serverId, agentId);
@@ -1377,7 +1519,12 @@ function ActiveAgentComposer({
         throw new Error("Agent not found");
       }
 
-      const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
+      if (command.kind === "open-terminal") {
+        await openLinkedTerminal();
+        return;
+      }
+
+      const workspaceKey = buildWorkspaceTabsSurfacePersistenceKey({ serverId, scope });
       if (workspaceKey) {
         unpinWorkspaceAgent(workspaceKey, agentId);
         hideWorkspaceAgent(workspaceKey, agentId);
@@ -1387,6 +1534,7 @@ function ActiveAgentComposer({
         retargetCurrentTab({
           kind: "draft",
           draftId: generateDraftId(),
+          projectGroupId: agent.projectGroupId ?? null,
           setup: buildDraftAgentSetup(agent),
         });
       } else if (workspaceKey) {
@@ -1400,11 +1548,12 @@ function ActiveAgentComposer({
       archiveAgent,
       closeWorkspaceTab,
       hideWorkspaceAgent,
+      openLinkedTerminal,
       retargetCurrentTab,
       serverId,
+      scope,
       tabId,
       unpinWorkspaceAgent,
-      workspaceId,
     ],
   );
 
@@ -1437,6 +1586,27 @@ function ActiveAgentComposer({
         onOpenSubagent={handleOpenSubagent}
         onArchiveSubagent={handleArchiveSubagent}
       />
+      <View style={styles.agentToolbar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open linked terminal"
+          disabled={isCreatingLinkedTerminal || !client}
+          onPress={handleOpenLinkedTerminalPress}
+          style={linkedTerminalButtonStyle}
+        >
+          {isCreatingLinkedTerminal ? (
+            <ThemedActivityIndicator size="small" uniProps={foregroundMutedColorMapping} />
+          ) : (
+            <Terminal size={14} color={styles.linkedTerminalIcon.color} />
+          )}
+          <Text style={styles.linkedTerminalButtonText}>Linked terminal</Text>
+        </Pressable>
+        {linkedTerminalError ? (
+          <Text numberOfLines={1} style={styles.linkedTerminalError}>
+            {linkedTerminalError}
+          </Text>
+        ) : null}
+      </View>
       <Composer
         agentId={agentId}
         serverId={serverId}
@@ -1458,8 +1628,10 @@ function ActiveAgentComposer({
         onComposerHeightChange={onComposerHeightChange}
         onMessageSent={onMessageSent}
         onClientSlashCommand={handleClientSlashCommand}
+        buildWireMessageContext={buildWireMessageContext}
         footer={composerFooter}
         isCompactLayout={isCompactComposerLayout}
+        fullWidth
       />
     </ReanimatedAnimated.View>
   );
@@ -1554,6 +1726,44 @@ const styles = StyleSheet.create((theme) => ({
   inputAreaWrapper: {
     width: "100%",
     backgroundColor: theme.colors.surface0,
+  },
+  agentToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingTop: theme.spacing[2],
+    paddingBottom: theme.spacing[1],
+  },
+  linkedTerminalButton: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface1,
+    paddingHorizontal: theme.spacing[3],
+  },
+  linkedTerminalButtonPressed: {
+    backgroundColor: theme.colors.surface2,
+  },
+  linkedTerminalButtonDisabled: {
+    opacity: 0.55,
+  },
+  linkedTerminalIcon: {
+    color: theme.colors.foregroundMuted,
+  },
+  linkedTerminalButtonText: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foreground,
+  },
+  linkedTerminalError: {
+    flex: 1,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.destructive,
   },
   historySyncOverlay: {
     position: "absolute",

@@ -19,8 +19,13 @@ export const useProjectSelectionStore = create<ProjectSelectionState>()((set, ge
     return get().selectedGroupIdByServerId[serverId] ?? null;
   },
   selectGroup: (serverId, groupId) => {
-    set((state) => ({
-      selectedGroupIdByServerId: { ...state.selectedGroupIdByServerId, [serverId]: groupId },
-    }));
+    set((state) => {
+      if (state.selectedGroupIdByServerId[serverId] === groupId) {
+        return state;
+      }
+      return {
+        selectedGroupIdByServerId: { ...state.selectedGroupIdByServerId, [serverId]: groupId },
+      };
+    });
   },
 }));

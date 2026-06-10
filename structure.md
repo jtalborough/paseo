@@ -1,0 +1,16 @@
+- Global
+  - All Tasks
+  - All Projects
+  - All schedules
+  - All Files
+  - All Knowledge
+  - All Agents
+  - BRowser
+- Projects
+  - Project Tasks
+  - Project Schedules
+  - Project Agents
+  - Project Bookmarks
+  - Project Files
+  - Project Folders
+    - Subdirectories

@@ -55,12 +55,17 @@ const agentTab: WorkspaceTabDescriptor = {
   target: { kind: "agent", agentId: "agent-a" },
 };
 
-function buildContent(tab: WorkspaceTabDescriptor = agentTab) {
+function buildContent(
+  tab: WorkspaceTabDescriptor = agentTab,
+  input: Partial<Parameters<typeof buildWorkspacePaneContentModel>[0]> = {},
+) {
   return buildWorkspacePaneContentModel({
     tab,
     normalizedServerId: "server-a",
     normalizedWorkspaceId: "workspace-a",
+    ...input,
     onOpenTab: vi.fn(),
+    onOpenTabInSplit: vi.fn(),
     onCloseCurrentTab: vi.fn(),
     onRetargetCurrentTab: vi.fn(),
     onOpenWorkspaceFile: vi.fn(),
@@ -107,6 +112,10 @@ describe("WorkspacePaneContent", () => {
     expect(unmountCount).not.toHaveBeenCalled();
     expect(snapshots).toHaveLength(2);
     expect(snapshots[1]?.paneContextValue).toBe(snapshots[0]?.paneContextValue);
+    expect(snapshots[0]?.paneContextValue.scope).toEqual({
+      kind: "workspace",
+      workspaceId: "workspace-a",
+    });
     expect(snapshots[0]?.focus).toEqual({
       isWorkspaceFocused: true,
       isPaneFocused: false,
@@ -158,5 +167,17 @@ describe("WorkspacePaneContent", () => {
       kind: "agent",
       agentId: "agent-a",
     });
+  });
+
+  it("allows Project surfaces to override the pane scope", () => {
+    const content = buildContent(agentTab, {
+      scope: { kind: "project", groupId: "grp_one" },
+    });
+
+    expect(content.paneContextValue.scope).toEqual({
+      kind: "project",
+      groupId: "grp_one",
+    });
+    expect(content.paneContextValue.workspaceId).toBe("workspace-a");
   });
 });

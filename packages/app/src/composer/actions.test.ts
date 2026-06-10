@@ -399,6 +399,30 @@ describe("dispatchComposerAgentMessage", () => {
     });
   });
 
+  it("can send hidden wire context without changing the visible user message", async () => {
+    const client = createFakeSendClient();
+    const stream = createFakeStream();
+
+    await dispatchComposerAgentMessage({
+      client,
+      agentId: "agent",
+      text: "can you see the terminal?",
+      wireText: "can you see the terminal?\n\n<context>terminal id term-1</context>",
+      attachments: [],
+      encodeImages: passthroughEncodeImages,
+      stream,
+    });
+
+    expect(client.calls[0]?.text).toBe(
+      "can you see the terminal?\n\n<context>terminal id term-1</context>",
+    );
+    const userMessage = stream.tail.get("agent")?.[0] as Extract<
+      StreamItem,
+      { kind: "user_message" }
+    >;
+    expect(userMessage.text).toBe("can you see the terminal?");
+  });
+
   it("serializes workspace review attachments through the structured attachment path", async () => {
     const client = createFakeSendClient();
     const stream = createFakeStream();

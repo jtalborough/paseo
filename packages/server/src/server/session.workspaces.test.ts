@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test, vi } from "vitest";
@@ -44,6 +44,7 @@ import {
   FileBackedProjectRegistry,
   FileBackedWorkspaceRegistry,
   createPersistedProjectRecord,
+  createPersistedGroupRecord,
   createPersistedWorkspaceRecord,
 } from "./workspace-registry.js";
 
@@ -108,6 +109,11 @@ interface SessionTestAccess {
   getAgentPayloadById(agentId: string): Promise<unknown>;
   buildProjectPlacementForCwd(cwd: string): Promise<unknown>;
   buildProjectPlacement(cwd: string): Promise<unknown>;
+  resolveCreateAgentPlacement(
+    cwd: string,
+    workspaceId?: string,
+    projectGroupId?: string,
+  ): Promise<{ workspaceId?: string }>;
   resolveRegisteredWorkspaceIdForCwd(
     cwd: string,
     workspaces: ReturnType<typeof createPersistedWorkspaceRecord>[],
@@ -465,6 +471,7 @@ function createSessionForWorkspaceTests(
     projectRegistry?: ConstructorParameters<typeof Session>[0]["projectRegistry"];
     workspaceRegistry?: ConstructorParameters<typeof Session>[0]["workspaceRegistry"];
     groupRegistry?: ConstructorParameters<typeof Session>[0]["groupRegistry"];
+    paseoHome?: string;
   } = {},
 ): TestSession {
   const logger = {
@@ -484,7 +491,7 @@ function createSessionForWorkspaceTests(
       logger: asSessionLogger(logger),
       downloadTokenStore: asDownloadTokenStore(),
       pushTokenStore: asPushTokenStore(),
-      paseoHome: "/tmp/paseo-test",
+      paseoHome: options.paseoHome ?? "/tmp/paseo-test",
       agentManager: asAgentManager({
         subscribe: () => () => {},
         listAgents: () => [],
@@ -674,6 +681,172 @@ test("create_agent_request keeps requested child cwd when grouped under an exist
     expect(findByType(emitted, "status")?.payload).toMatchObject({
       status: "agent_created",
       agent: { cwd: child },
+    });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("Project-level agent placement does not create a synthetic Workspace", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-project-agent-placement-"));
+  try {
+    const logger = {
+      child: () => logger,
+      trace: vi.fn(),
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const paseoHome = path.join(workdir, "paseo-home");
+    const projectRegistry = new FileBackedProjectRegistry(
+      path.join(workdir, "projects.json"),
+      asSessionLogger(logger),
+    );
+    const workspaceRegistry = new FileBackedWorkspaceRegistry(
+      path.join(workdir, "workspaces.json"),
+      asSessionLogger(logger),
+    );
+    const groupRegistry = new FileBackedGroupRegistry(
+      path.join(workdir, "groups.json"),
+      asSessionLogger(logger),
+    );
+    await groupRegistry.upsert(
+      createPersistedGroupRecord({
+        groupId: "grp_project_agent",
+        displayName: "Project agent",
+        createdAt: "2026-06-07T00:00:00.000Z",
+        updatedAt: "2026-06-07T00:00:00.000Z",
+      }),
+    );
+    const projectCwd = path.join(paseoHome, "projects", "grp_project_agent");
+    const session = createSessionForWorkspaceTests({
+      paseoHome,
+      projectRegistry,
+      workspaceRegistry,
+      groupRegistry,
+    });
+
+    await expect(
+      session.resolveCreateAgentPlacement(projectCwd, undefined, "grp_project_agent"),
+    ).resolves.toEqual({});
+    await expect(workspaceRegistry.list()).resolves.toEqual([]);
+    await expect(
+      session.resolveCreateAgentPlacement(
+        path.join(workdir, "other"),
+        undefined,
+        "grp_project_agent",
+      ),
+    ).rejects.toThrow("Workspace does not belong to Project grp_project_agent");
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("create_agent_request persists Project placement without creating a Workspace", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-create-project-agent-"));
+  try {
+    const logger = {
+      child: () => logger,
+      trace: vi.fn(),
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const paseoHome = path.join(workdir, "paseo-home");
+    const projectCwd = path.join(paseoHome, "projects", "grp_project_agent");
+    mkdirSync(projectCwd, { recursive: true });
+    const agentStorage = new AgentStorage(path.join(workdir, "agents"), asSessionLogger(logger));
+    const agentManager = new AgentManager({
+      clients: { codex: new CreateAgentTestClient() },
+      registry: agentStorage,
+      logger: asSessionLogger(logger),
+      idFactory: () => "00000000-0000-4000-8000-000000000552",
+    });
+    const projectRegistry = new FileBackedProjectRegistry(
+      path.join(workdir, "projects.json"),
+      asSessionLogger(logger),
+    );
+    const workspaceRegistry = new FileBackedWorkspaceRegistry(
+      path.join(workdir, "workspaces.json"),
+      asSessionLogger(logger),
+    );
+    const groupRegistry = new FileBackedGroupRegistry(
+      path.join(workdir, "groups.json"),
+      asSessionLogger(logger),
+    );
+    await groupRegistry.upsert(
+      createPersistedGroupRecord({
+        groupId: "grp_project_agent",
+        displayName: "Project agent",
+        createdAt: "2026-06-07T00:00:00.000Z",
+        updatedAt: "2026-06-07T00:00:00.000Z",
+      }),
+    );
+
+    const emitted: SessionOutboundMessage[] = [];
+    const session = new Session({
+      clientId: "test-client",
+      appVersion: null,
+      onMessage: (message) => emitted.push(message),
+      logger: asSessionLogger(logger),
+      downloadTokenStore: asDownloadTokenStore(),
+      pushTokenStore: asPushTokenStore(),
+      paseoHome,
+      agentManager,
+      agentStorage,
+      projectRegistry,
+      workspaceRegistry,
+      groupRegistry,
+      chatService: asChatService(),
+      scheduleService: asScheduleService(),
+      loopService: asLoopService(),
+      checkoutDiffManager: asCheckoutDiffManager({
+        subscribe: async () => ({
+          initial: { cwd: projectCwd, files: [], error: null },
+          unsubscribe: () => {},
+        }),
+        scheduleRefreshForCwd: () => {},
+        getMetrics: () => ({
+          checkoutDiffTargetCount: 0,
+          checkoutDiffSubscriptionCount: 0,
+          checkoutDiffWatcherCount: 0,
+          checkoutDiffFallbackRefreshTargetCount: 0,
+        }),
+        dispose: () => {},
+      }),
+      workspaceGitService: createNoopWorkspaceGitService(),
+      daemonConfigStore: asDaemonConfigStore({
+        get: () => ({ mcp: { injectIntoAgents: false }, providers: {} }),
+        onChange: () => () => {},
+      }),
+      mcpBaseUrl: null,
+      stt: null,
+      tts: null,
+      providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+      terminalManager: null,
+    });
+
+    await session.handleMessage({
+      type: "create_agent_request",
+      requestId: "req-create-project-agent",
+      config: { provider: "codex", cwd: projectCwd },
+      projectGroupId: "grp_project_agent",
+      attachments: [],
+    });
+
+    await expect(workspaceRegistry.list()).resolves.toEqual([]);
+    await expect(agentStorage.get("00000000-0000-4000-8000-000000000552")).resolves.toMatchObject({
+      cwd: projectCwd,
+      projectGroupId: "grp_project_agent",
+    });
+    expect(findByType(emitted, "status")?.payload).toMatchObject({
+      status: "agent_created",
+      agent: {
+        cwd: projectCwd,
+        projectGroupId: "grp_project_agent",
+      },
     });
   } finally {
     rmSync(workdir, { recursive: true, force: true });
@@ -5083,6 +5256,7 @@ function createProjectGroupHarness() {
     projectRegistry,
     workspaceRegistry,
     groupRegistry,
+    paseoHome: workdir,
   });
   return { workdir, projectRegistry, workspaceRegistry, groupRegistry, emitted, session };
 }
@@ -5109,8 +5283,11 @@ test("project groups: create then list round-trips and persists to disk", async 
     });
     const created = lastPayloadOfType(h.emitted, "project.group.create.response");
     expect(created).toMatchObject({ requestId: "c1", accepted: true });
-    const groupId = (created.group as { groupId: string }).groupId;
+    const createdGroup = created.group as { groupId: string; cwd: string };
+    const groupId = createdGroup.groupId;
     expect(groupId).toMatch(/^grp_/);
+    expect(createdGroup.cwd).toBe(path.join(h.workdir, "projects", groupId));
+    expect(existsSync(path.join(createdGroup.cwd, "project.json"))).toBe(true);
 
     await h.session.handleMessage({ type: "project.group.list.request", requestId: "l1" });
     const listed = lastPayloadOfType(h.emitted, "project.group.list.response");
@@ -5192,7 +5369,7 @@ test("project groups: set_group assigns a folder and rejects an unknown group", 
   }
 });
 
-test("project groups: deleting a group ungroups its member folders", async () => {
+test("project groups: deleting a group archives its directory and ungroups member folders", async () => {
   const h = createProjectGroupHarness();
   try {
     await h.session.handleMessage({
@@ -5224,9 +5401,13 @@ test("project groups: deleting a group ungroups its member folders", async () =>
       accepted: true,
       groupId,
     });
-    expect(await h.groupRegistry.get(groupId)).toBeNull();
+    expect((await h.groupRegistry.get(groupId))?.archivedAt).not.toBeNull();
+    expect(existsSync(path.join(h.workdir, "projects", "archived"))).toBe(true);
     // Member folder survives, just ungrouped.
     expect((await h.projectRegistry.get("p1"))?.groupId).toBeNull();
+
+    await h.session.handleMessage({ type: "project.group.list.request", requestId: "l1" });
+    expect(lastPayloadOfType(h.emitted, "project.group.list.response").groups).toEqual([]);
   } finally {
     rmSync(h.workdir, { recursive: true, force: true });
   }

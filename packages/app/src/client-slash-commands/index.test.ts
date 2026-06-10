@@ -67,6 +67,7 @@ describe("resolveClientSlashCommand", () => {
     ).toEqual([
       ["exit", ["quit", "q"], "immediate"],
       ["clear", ["new"], "immediate"],
+      ["terminal", ["term"], "immediate"],
     ]);
   });
 
@@ -92,11 +93,20 @@ describe("resolveClientSlashCommand", () => {
       name: "clear",
       kind: "replace-agent-with-draft",
     });
+    expect(resolveClientSlashCommand({ text: "/terminal", hasAttachments: false })).toMatchObject({
+      name: "terminal",
+      kind: "open-terminal",
+    });
+    expect(resolveClientSlashCommand({ text: "/term", hasAttachments: false })).toMatchObject({
+      name: "terminal",
+      kind: "open-terminal",
+    });
   });
 
   it("leaves provider commands, arguments, ordinary messages, and attachment submits alone", () => {
     expect(resolveClientSlashCommand({ text: "/clear now", hasAttachments: false })).toBeNull();
     expect(resolveClientSlashCommand({ text: "/quit now", hasAttachments: false })).toBeNull();
+    expect(resolveClientSlashCommand({ text: "/terminal now", hasAttachments: false })).toBeNull();
     expect(
       resolveClientSlashCommand({ text: "/provider-command", hasAttachments: false }),
     ).toBeNull();

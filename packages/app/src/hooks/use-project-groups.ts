@@ -28,6 +28,7 @@ export interface UseProjectGroupsResult {
     order?: number | null;
     archetype?: ProjectArchetype | null;
   }) => Promise<void>;
+  reorderGroups: (groupIds: string[]) => Promise<void>;
   deleteGroup: (groupId: string) => Promise<void>;
   setFolderGroup: (projectId: string, groupId: string | null) => Promise<void>;
   // Phase 1a: pick any local directory (git or non-git), register it, and assign
@@ -82,7 +83,10 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
       if (!client) {
         return;
       }
-      await client.createProjectGroup(input);
+      const payload = await client.createProjectGroup(input);
+      if (!payload.accepted || payload.error) {
+        throw new Error(payload.error ?? "Failed to create Project");
+      }
       await refresh();
     },
     [normalizedServerId, runtime, refresh],
@@ -103,7 +107,27 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
       if (!client) {
         return;
       }
-      await client.updateProjectGroup(input);
+      const payload = await client.updateProjectGroup(input);
+      if (!payload.accepted || payload.error) {
+        throw new Error(payload.error ?? "Failed to update Project");
+      }
+      await refresh();
+    },
+    [normalizedServerId, runtime, refresh],
+  );
+
+  const reorderGroups = useCallback(
+    async (groupIds: string[]) => {
+      if (!normalizedServerId) {
+        return;
+      }
+      const client = runtime.getClient(normalizedServerId);
+      if (!client) {
+        return;
+      }
+      await Promise.all(
+        groupIds.map((groupId, index) => client.updateProjectGroup({ groupId, order: index })),
+      );
       await refresh();
     },
     [normalizedServerId, runtime, refresh],
@@ -118,7 +142,10 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
       if (!client) {
         return;
       }
-      await client.deleteProjectGroup(groupId);
+      const payload = await client.deleteProjectGroup(groupId);
+      if (!payload.accepted || payload.error) {
+        throw new Error(payload.error ?? "Failed to remove Project");
+      }
       await refresh();
     },
     [normalizedServerId, runtime, refresh],
@@ -190,6 +217,7 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
     refresh,
     createGroup,
     updateGroup,
+    reorderGroups,
     deleteGroup,
     setFolderGroup,
     canAddFromDisk,

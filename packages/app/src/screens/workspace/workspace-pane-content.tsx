@@ -10,6 +10,8 @@ import { useStableEvent } from "@/hooks/use-stable-event";
 import { getPanelRegistration } from "@/panels/panel-registry";
 import { ensurePanelsRegistered } from "@/panels/register-panels";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
+import { workspaceSurfaceScope } from "@/surfaces/surface-scope";
+import type { SurfaceScope } from "@/surfaces/surface-scope";
 import { RenderProfile } from "@/utils/render-profiler";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 
@@ -23,7 +25,12 @@ export interface BuildWorkspacePaneContentModelInput {
   tab: WorkspaceTabDescriptor;
   normalizedServerId: string;
   normalizedWorkspaceId: string;
+  scope?: SurfaceScope;
   onOpenTab: (target: WorkspaceTabDescriptor["target"]) => void;
+  onOpenTabInSplit: (
+    target: WorkspaceTabDescriptor["target"],
+    options?: { position?: "left" | "right" | "top" | "bottom" },
+  ) => void;
   onCloseCurrentTab: () => void;
   onRetargetCurrentTab: (target: WorkspaceTabDescriptor["target"]) => void;
   onOpenWorkspaceFile: (request: WorkspaceFileOpenRequest) => void;
@@ -34,7 +41,9 @@ export function buildWorkspacePaneContentModel({
   tab,
   normalizedServerId,
   normalizedWorkspaceId,
+  scope: inputScope,
   onOpenTab,
+  onOpenTabInSplit,
   onCloseCurrentTab,
   onRetargetCurrentTab,
   onOpenWorkspaceFile,
@@ -43,15 +52,19 @@ export function buildWorkspacePaneContentModel({
   ensurePanelsRegistered();
   const registration = getPanelRegistration(tab.kind);
   invariant(registration, `No panel registration for kind: ${tab.kind}`);
+  const scope = inputScope ?? workspaceSurfaceScope(normalizedWorkspaceId);
+  invariant(scope, "Workspace pane content requires a workspace scope");
   return {
     key: `${normalizedServerId}:${normalizedWorkspaceId}:${tab.tabId}`,
     Component: registration.component,
     paneContextValue: {
       serverId: normalizedServerId,
+      scope,
       workspaceId: normalizedWorkspaceId,
       tabId: tab.tabId,
       target: tab.target,
       openTab: onOpenTab,
+      openTabInSplit: onOpenTabInSplit,
       closeCurrentTab: onCloseCurrentTab,
       retargetCurrentTab: onRetargetCurrentTab,
       openFileInWorkspace: onOpenWorkspaceFile,
@@ -75,6 +88,7 @@ export function WorkspacePaneContent({
 }: WorkspacePaneContentProps) {
   const { Component, key, paneContextValue } = content;
   const openTab = useStableEvent(paneContextValue.openTab);
+  const openTabInSplit = useStableEvent(paneContextValue.openTabInSplit);
   const closeCurrentTab = useStableEvent(paneContextValue.closeCurrentTab);
   const retargetCurrentTab = useStableEvent(paneContextValue.retargetCurrentTab);
   const openFileInWorkspace = useStableEvent(paneContextValue.openFileInWorkspace);
@@ -82,10 +96,12 @@ export function WorkspacePaneContent({
   const stablePaneContextValue = useMemo(
     () => ({
       serverId: paneContextValue.serverId,
+      scope: paneContextValue.scope,
       workspaceId: paneContextValue.workspaceId,
       tabId: paneContextValue.tabId,
       target: paneContextValue.target,
       openTab,
+      openTabInSplit,
       closeCurrentTab,
       retargetCurrentTab,
       openFileInWorkspace,
@@ -96,7 +112,9 @@ export function WorkspacePaneContent({
       openFileInWorkspace,
       openImportSheet,
       openTab,
+      openTabInSplit,
       paneContextValue.serverId,
+      paneContextValue.scope,
       paneContextValue.tabId,
       paneContextValue.target,
       paneContextValue.workspaceId,

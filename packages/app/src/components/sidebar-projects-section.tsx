@@ -1,15 +1,40 @@
 import { type ReactElement, useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { ChevronDown, ChevronRight, FolderPlus, Plus } from "lucide-react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
+import { router, usePathname } from "expo-router";
+import {
+  ChevronDown,
+  ChevronRight,
+  FolderPlus,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { AdaptiveRenameModal } from "@/components/rename-modal";
 import type { Theme } from "@/styles/theme";
 import {
   groupSidebarProjects,
   type SidebarGroupEntry,
 } from "@/hooks/sidebar-workspaces-view-model";
 import { useProjectGroups } from "@/hooks/use-project-groups";
-import { useProjectSelectionStore } from "@/stores/project-selection-store";
+import { DraggableList, type DraggableRenderItemInfo } from "@/components/draggable-list";
 import { deriveProjectIconColor, PROJECT_ICON_COLORS } from "@/utils/project-icon-color";
+import {
+  buildHostOpenProjectRoute,
+  buildHostProjectRoute,
+  buildHostProjectTasksRoute,
+} from "@/utils/host-routes";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useToast } from "@/contexts/toast-context";
+import { confirmDialog } from "@/utils/confirm-dialog";
+import { isNative } from "@/constants/platform";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import {
   FolderGlyphIconContext,
   SidebarWorkspaceList,
@@ -27,11 +52,27 @@ const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMut
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedChevronRight = withUnistyles(ChevronRight);
 const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedMoreVertical = withUnistyles(MoreVertical);
+const ThemedPencil = withUnistyles(Pencil);
 const ThemedPlus = withUnistyles(Plus);
+const ThemedTrash2 = withUnistyles(Trash2);
+const projectGroupKeyExtractor = (group: SidebarGroupEntry) => group.groupId;
+const pencilLeadingIcon = <ThemedPencil size={16} uniProps={mutedColorMapping} />;
+const trashLeadingIcon = <ThemedTrash2 size={16} uniProps={mutedColorMapping} />;
 
 export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
-  const { groups, supported, createGroup, updateGroup, canAddFromDisk, addFolderFromDisk } =
-    useProjectGroups(props.serverId);
+  const pathname = usePathname();
+  const toast = useToast();
+  const {
+    groups,
+    supported,
+    createGroup,
+    updateGroup,
+    reorderGroups,
+    deleteGroup,
+    canAddFromDisk,
+    addFolderFromDisk,
+  } = useProjectGroups(props.serverId);
 
   const handleSetColor = useCallback(
     (groupId: string, color: string) => {
@@ -41,19 +82,11 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
   );
 
   const serverId = props.serverId;
-  const selectedGroupId = useProjectSelectionStore((state) => state.getSelectedGroupId(serverId));
-  const selectGroup = useProjectSelectionStore((state) => state.selectGroup);
-  const handleSelect = useCallback(
-    (groupId: string) => {
-      if (serverId) {
-        selectGroup(serverId, groupId);
-      }
-    },
-    [serverId, selectGroup],
-  );
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+  const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
 
   const toggleGroupCollapsed = useCallback((groupId: string) => {
     setCollapsedGroupIds((current) => {
@@ -72,6 +105,15 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
     [props.projects, groups],
   );
 
+  const handleGroupDragEnd = useCallback(
+    (nextGroups: SidebarGroupEntry[]) => {
+      void reorderGroups(nextGroups.map((group) => group.groupId)).catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to reorder Projects");
+      });
+    },
+    [reorderGroups, toast],
+  );
+
   const handleStartAddGroup = useCallback(() => setIsAddingGroup(true), []);
 
   const submitNewGroup = useCallback(async () => {
@@ -84,92 +126,200 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
     await createGroup({ displayName: name });
   }, [newGroupName, createGroup]);
 
+  const handleDeleteGroup = useCallback(
+    async (group: SidebarGroupEntry) => {
+      const confirmed = await confirmDialog({
+        title: "Remove Project?",
+        message: `Archive "${group.displayName}" and remove it from the sidebar?\n\nChild folders will not be deleted. They will become ungrouped.`,
+        confirmLabel: "Remove",
+        cancelLabel: "Cancel",
+        destructive: true,
+      });
+      if (!confirmed) {
+        return;
+      }
+      setDeletingGroupId(group.groupId);
+      try {
+        await deleteGroup(group.groupId);
+        const projectRoute = buildHostProjectRoute(serverId ?? "", group.groupId);
+        const isDeletedProjectOpen =
+          pathname === projectRoute || pathname.startsWith(`${projectRoute}/`);
+        if (isDeletedProjectOpen && serverId) {
+          router.navigate(buildHostOpenProjectRoute(serverId));
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to remove Project");
+      } finally {
+        setDeletingGroupId(null);
+      }
+    },
+    [deleteGroup, pathname, serverId, toast],
+  );
+  const renamingGroup = useMemo(
+    () => grouped.groups.find((group) => group.groupId === renamingGroupId) ?? null,
+    [grouped.groups, renamingGroupId],
+  );
+  const handleRenameGroup = useCallback((group: SidebarGroupEntry) => {
+    setRenamingGroupId(group.groupId);
+  }, []);
+  const handleCloseRenameGroup = useCallback(() => setRenamingGroupId(null), []);
+  const handleSubmitRenameGroup = useCallback(
+    async (value: string) => {
+      if (!renamingGroup) {
+        return;
+      }
+      await updateGroup({ groupId: renamingGroup.groupId, displayName: value.trim() });
+    },
+    [renamingGroup, updateGroup],
+  );
+  const validateRenameGroup = useCallback(
+    (value: string): string | null => {
+      const next = value.trim();
+      if (next.length === 0) {
+        return "Name is required";
+      }
+      const duplicate = groups.some(
+        (group) =>
+          group.groupId !== renamingGroupId &&
+          group.displayName.trim().toLowerCase() === next.toLowerCase(),
+      );
+      return duplicate ? "A Project with this name already exists" : null;
+    },
+    [groups, renamingGroupId],
+  );
+
+  const createAffordance = useMemo(
+    () =>
+      isAddingGroup ? (
+        <View style={styles.addGroupRow}>
+          <TextInput
+            style={styles.addGroupInput}
+            value={newGroupName}
+            onChangeText={setNewGroupName}
+            placeholder="Project name"
+            autoFocus
+            onSubmitEditing={submitNewGroup}
+            onBlur={submitNewGroup}
+            returnKeyType="done"
+            testID="sidebar-new-group-input"
+          />
+        </View>
+      ) : (
+        <Pressable
+          style={styles.newGroupButton}
+          onPress={handleStartAddGroup}
+          testID="sidebar-new-group-button"
+        >
+          <ThemedFolderPlus size={16} uniProps={mutedColorMapping} />
+          <Text style={styles.newGroupLabel}>New Project</Text>
+        </Pressable>
+      ),
+    [handleStartAddGroup, isAddingGroup, newGroupName, submitNewGroup],
+  );
+
+  const listHeader = useMemo(
+    () =>
+      grouped.ungrouped.length > 0 ? (
+        <SidebarWorkspaceList
+          {...props}
+          projects={grouped.ungrouped}
+          disableProjectReorder
+          hideEmptyState
+          scrollable={false}
+          listFooterComponent={null}
+        />
+      ) : null,
+    [grouped.ungrouped, props],
+  );
+
+  const listFooter = useMemo(
+    () => (
+      <>
+        {createAffordance}
+        {props.listFooterComponent}
+      </>
+    ),
+    [createAffordance, props.listFooterComponent],
+  );
+
+  const renderGroup = useCallback(
+    ({ item: group, drag, isActive }: DraggableRenderItemInfo<SidebarGroupEntry>) => (
+      <GroupSection
+        group={group}
+        collapsed={collapsedGroupIds.has(group.groupId)}
+        onToggle={toggleGroupCollapsed}
+        listProps={props}
+        canAddFromDisk={canAddFromDisk}
+        onAddFromDisk={addFolderFromDisk}
+        onSetColor={handleSetColor}
+        onRename={handleRenameGroup}
+        onDelete={handleDeleteGroup}
+        deleteStatus={deletingGroupId === group.groupId ? "pending" : "idle"}
+        pathname={pathname}
+        serverId={serverId ?? ""}
+        drag={drag}
+        isDragging={isActive}
+      />
+    ),
+    [
+      addFolderFromDisk,
+      canAddFromDisk,
+      collapsedGroupIds,
+      deletingGroupId,
+      handleDeleteGroup,
+      handleRenameGroup,
+      handleSetColor,
+      pathname,
+      props,
+      serverId,
+      toggleGroupCollapsed,
+    ],
+  );
+
   // Capability off entirely → unchanged flat list, no grouping affordances.
   if (!supported) {
     return <SidebarWorkspaceList {...props} />;
   }
-
-  const createAffordance = isAddingGroup ? (
-    <View style={styles.addGroupRow}>
-      <TextInput
-        style={styles.addGroupInput}
-        value={newGroupName}
-        onChangeText={setNewGroupName}
-        placeholder="Project name"
-        autoFocus
-        onSubmitEditing={submitNewGroup}
-        onBlur={submitNewGroup}
-        returnKeyType="done"
-        testID="sidebar-new-group-input"
-      />
-    </View>
-  ) : (
-    <Pressable
-      style={styles.newGroupButton}
-      onPress={handleStartAddGroup}
-      testID="sidebar-new-group-button"
-    >
-      <ThemedFolderPlus size={16} uniProps={mutedColorMapping} />
-      <Text style={styles.newGroupLabel}>New Project</Text>
-    </Pressable>
-  );
+  if (!serverId) {
+    return <SidebarWorkspaceList {...props} />;
+  }
 
   // Supported but no groups yet → keep the full flat, draggable list and surface
   // the create affordance as its footer (otherwise the first group is unreachable).
   if (groups.length === 0) {
-    return (
-      <SidebarWorkspaceList
-        {...props}
-        listFooterComponent={
-          <>
-            {createAffordance}
-            {props.listFooterComponent}
-          </>
-        }
-      />
-    );
+    return <SidebarWorkspaceList {...props} listFooterComponent={listFooter} />;
   }
 
   return (
     // Folders inside the Projects tree render as plain folder glyphs (distinct from
     // the colored Project tiles); Projects keep their own ProjectGroupIcon.
     <FolderGlyphIconContext.Provider value={true}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        testID="sidebar-projects-section-scroll"
-      >
-        {grouped.ungrouped.length > 0 ? (
-          <SidebarWorkspaceList
-            {...props}
-            projects={grouped.ungrouped}
-            disableProjectReorder
-            hideEmptyState
-            scrollable={false}
-            listFooterComponent={null}
-          />
-        ) : null}
-
-        {grouped.groups.map((group) => (
-          <GroupSection
-            key={group.groupId}
-            group={group}
-            collapsed={collapsedGroupIds.has(group.groupId)}
-            onToggle={toggleGroupCollapsed}
-            listProps={props}
-            canAddFromDisk={canAddFromDisk}
-            onAddFromDisk={addFolderFromDisk}
-            onSetColor={handleSetColor}
-            selected={selectedGroupId === group.groupId}
-            onSelect={handleSelect}
-          />
-        ))}
-
-        {createAffordance}
-
-        {props.listFooterComponent}
-      </ScrollView>
+      <>
+        <DraggableList
+          data={grouped.groups}
+          keyExtractor={projectGroupKeyExtractor}
+          renderItem={renderGroup}
+          onDragEnd={handleGroupDragEnd}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          testID="sidebar-projects-section-scroll"
+          ListHeaderComponent={listHeader}
+          ListFooterComponent={listFooter}
+          nestable={isNative}
+        />
+        <AdaptiveRenameModal
+          visible={Boolean(renamingGroup)}
+          title="Rename Project"
+          initialValue={renamingGroup?.displayName ?? ""}
+          placeholder="Project name"
+          submitLabel="Rename"
+          validate={validateRenameGroup}
+          onClose={handleCloseRenameGroup}
+          onSubmit={handleSubmitRenameGroup}
+          testID="sidebar-group-rename"
+        />
+      </>
     </FolderGlyphIconContext.Provider>
   );
 }
@@ -211,8 +361,13 @@ function GroupSection({
   canAddFromDisk,
   onAddFromDisk,
   onSetColor,
-  selected,
-  onSelect,
+  onRename,
+  onDelete,
+  deleteStatus,
+  pathname,
+  serverId,
+  drag,
+  isDragging,
 }: {
   group: SidebarGroupEntry;
   collapsed: boolean;
@@ -221,17 +376,41 @@ function GroupSection({
   canAddFromDisk: boolean;
   onAddFromDisk: (groupId: string | null) => Promise<void>;
   onSetColor: (groupId: string, color: string) => void;
-  selected: boolean;
-  onSelect: (groupId: string) => void;
+  onRename: (group: SidebarGroupEntry) => void;
+  onDelete: (group: SidebarGroupEntry) => void;
+  deleteStatus: "idle" | "pending";
+  pathname: string;
+  serverId: string;
+  drag: () => void;
+  isDragging: boolean;
 }) {
+  const isCompact = useIsCompactFormFactor();
+  const [isHovered, setIsHovered] = useState(false);
   const [isColorPicking, setIsColorPicking] = useState(false);
+  const handlePointerEnter = useCallback(() => setIsHovered(true), []);
+  const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const handlePress = useCallback(() => onToggle(group.groupId), [onToggle, group.groupId]);
   // The chevron collapses/expands; tapping the Project name selects it (makes it the
   // active context / opens its home).
-  const handleSelect = useCallback(() => onSelect(group.groupId), [onSelect, group.groupId]);
+  const projectRoute = buildHostProjectRoute(serverId, group.groupId);
+  const projectTasksRoute = buildHostProjectTasksRoute(serverId, group.groupId);
+  const handleSelect = useCallback(() => {
+    router.navigate(projectTasksRoute);
+  }, [projectTasksRoute]);
+  const projectHomeSelected = pathname === projectRoute || pathname.startsWith(`${projectRoute}/`);
   const headerStyle = useMemo(
-    () => (selected ? [styles.groupHeader, styles.groupHeaderSelected] : styles.groupHeader),
-    [selected],
+    () => [
+      styles.groupHeader,
+      isHovered && !projectHomeSelected && styles.groupHeaderHovered,
+      projectHomeSelected && styles.groupHeaderSelected,
+      isDragging && styles.groupHeaderDragging,
+    ],
+    [isHovered, projectHomeSelected, isDragging],
+  );
+  const showControls = isHovered || isNative || isCompact || isDragging;
+  const addButtonStyle = useMemo(
+    () => [styles.groupAddButton, !showControls && styles.groupControlHidden],
+    [showControls],
   );
   // "+" is a direct disk picker: add ANY folder (git or non-git) into this Project
   // in one step. (Assigning already-registered folders is intentionally not offered.)
@@ -247,6 +426,11 @@ function GroupSection({
     },
     [onSetColor, group.groupId],
   );
+  const handleDelete = useCallback(() => onDelete(group), [group, onDelete]);
+  const handleRename = useCallback(() => onRename(group), [group, onRename]);
+  const handleDrag = useCallback(() => {
+    drag();
+  }, [drag]);
 
   let body: ReactElement | null = null;
   if (!collapsed) {
@@ -270,7 +454,11 @@ function GroupSection({
 
   return (
     <View style={styles.groupSection}>
-      <View style={headerStyle}>
+      <View
+        style={headerStyle}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={handlePointerLeave}
+      >
         <Pressable
           style={styles.groupChevronButton}
           onPress={handlePress}
@@ -294,6 +482,8 @@ function GroupSection({
         <Pressable
           style={styles.groupHeaderMain}
           onPress={handleSelect}
+          onLongPress={handleDrag}
+          delayLongPress={250}
           testID={`sidebar-group-select-${group.groupId}`}
         >
           <Text style={styles.groupName} numberOfLines={1}>
@@ -303,7 +493,8 @@ function GroupSection({
         </Pressable>
         {canAddFromDisk ? (
           <Pressable
-            style={styles.groupAddButton}
+            style={addButtonStyle}
+            pointerEvents={showControls ? "auto" : "none"}
             onPress={handleAddFromDisk}
             hitSlop={8}
             accessibilityLabel="Add folder from disk"
@@ -312,6 +503,13 @@ function GroupSection({
             <ThemedPlus size={14} uniProps={mutedColorMapping} />
           </Pressable>
         ) : null}
+        <ProjectActionsMenu
+          groupId={group.groupId}
+          deleteStatus={deleteStatus}
+          visible={showControls}
+          onRename={handleRename}
+          onDelete={handleDelete}
+        />
       </View>
 
       {isColorPicking ? (
@@ -324,6 +522,58 @@ function GroupSection({
 
       {body}
     </View>
+  );
+}
+
+function ProjectActionsMenu({
+  groupId,
+  deleteStatus,
+  visible,
+  onRename,
+  onDelete,
+}: {
+  groupId: string;
+  deleteStatus: "idle" | "pending";
+  visible: boolean;
+  onRename: () => void;
+  onDelete: () => void;
+}) {
+  const triggerStyle = useMemo(
+    () => [styles.groupActionButton, !visible && styles.groupControlHidden],
+    [visible],
+  );
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        hitSlop={8}
+        style={triggerStyle}
+        pointerEvents={visible ? "auto" : "none"}
+        accessibilityRole="button"
+        accessibilityLabel="Project actions"
+        testID={`sidebar-group-actions-${groupId}`}
+      >
+        <ThemedMoreVertical size={14} uniProps={mutedColorMapping} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" width={240}>
+        <DropdownMenuItem
+          testID={`sidebar-group-rename-${groupId}`}
+          leading={pencilLeadingIcon}
+          onSelect={onRename}
+        >
+          Rename Project
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          testID={`sidebar-group-remove-${groupId}`}
+          leading={trashLeadingIcon}
+          destructive
+          status={deleteStatus}
+          pendingLabel="Removing..."
+          onSelect={onDelete}
+        >
+          Remove Project
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -343,15 +593,34 @@ const styles = StyleSheet.create((theme) => ({
     paddingLeft: theme.spacing[6],
   },
   groupHeader: {
+    minHeight: 36,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
+    paddingVertical: theme.spacing[2],
+    borderRadius: theme.borderRadius.lg,
   },
   groupHeaderSelected: {
     backgroundColor: theme.colors.surface2,
+  },
+  groupHeaderHovered: {
+    backgroundColor: theme.colors.surfaceSidebarHover,
+  },
+  groupHeaderDragging: {
+    backgroundColor: theme.colors.surface2,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    transform: [{ scale: 1.02 }],
+    zIndex: 3,
+    ...theme.shadow.md,
+  },
+  groupDragHandle: {
+    width: 16,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
   groupChevronButton: {
     alignItems: "center",
@@ -361,7 +630,6 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: theme.spacing[1],
     gap: theme.spacing[1],
   },
   colorPickerRow: {
@@ -379,6 +647,16 @@ const styles = StyleSheet.create((theme) => ({
   },
   groupAddButton: {
     padding: theme.spacing[1],
+  },
+  groupActionButton: {
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.md,
+  },
+  groupControlHidden: {
+    opacity: 0,
   },
   projectIconSlot: {
     width: theme.iconSize.md,
@@ -402,10 +680,8 @@ const styles = StyleSheet.create((theme) => ({
   groupName: {
     flex: 1,
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.normal,
   },
   groupCount: {
     color: theme.colors.foregroundMuted,

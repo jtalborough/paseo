@@ -5,6 +5,11 @@ import {
   normalizeWorkspaceTabTarget,
   workspaceTabTargetsEqual,
 } from "@/workspace-tabs/identity";
+import {
+  buildSurfacePersistenceKey,
+  workspaceSurfaceScope,
+  type SurfaceScope,
+} from "@/surfaces/surface-scope";
 import type { WorkspaceFileTabTarget } from "@/workspace/file-open";
 
 export interface WorkspaceDraftTabSetup {
@@ -17,12 +22,41 @@ export interface WorkspaceDraftTabSetup {
 }
 
 export type WorkspaceTabTarget =
-  | { kind: "draft"; draftId: string; setup?: WorkspaceDraftTabSetup }
+  | {
+      kind: "draft";
+      draftId: string;
+      cwd?: string | null;
+      projectGroupId?: string | null;
+      setup?: WorkspaceDraftTabSetup;
+    }
   | { kind: "agent"; agentId: string }
-  | { kind: "terminal"; terminalId: string }
+  | { kind: "terminal"; terminalId: string; cwd?: string | null; sourceAgentId?: string | null }
   | { kind: "browser"; browserId: string }
   | WorkspaceFileTabTarget
-  | { kind: "setup"; workspaceId: string };
+  | { kind: "setup"; workspaceId: string }
+  | { kind: "project-overview"; groupId: string }
+  | { kind: "tasks"; groupId: string }
+  | { kind: "notes"; groupId: string }
+  | { kind: "project-tasks"; groupId: string }
+  | { kind: "project-notes"; groupId: string }
+  | { kind: "project-agents"; groupId: string }
+  | { kind: "project-files"; groupId: string };
+
+const PROJECT_WORKSPACE_TAB_KINDS = new Set<string>([
+  "project-overview",
+  "tasks",
+  "notes",
+  "project-tasks",
+  "project-notes",
+  "project-agents",
+  "project-files",
+]);
+
+type ProjectWorkspaceTabKind = Extract<WorkspaceTabTarget, { groupId: string }>["kind"];
+
+function isProjectWorkspaceTabKind(kind: string | null): kind is ProjectWorkspaceTabKind {
+  return typeof kind === "string" && PROJECT_WORKSPACE_TAB_KINDS.has(kind);
+}
 
 export interface WorkspaceTab {
   tabId: string;
@@ -42,6 +76,12 @@ export const initialWorkspaceTabsCoreState: WorkspaceTabsCoreState = {
   focusedTabIdByWorkspace: {},
 };
 
+interface SurfaceScopedInput {
+  serverId: string;
+  workspaceId?: string;
+  scope?: SurfaceScope;
+}
+
 function trimNonEmpty(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
     return null;
@@ -54,12 +94,17 @@ export function buildWorkspaceTabPersistenceKey(input: {
   serverId: string;
   workspaceId: string;
 }): string | null {
-  const serverId = trimNonEmpty(input.serverId);
-  const workspaceId = trimNonEmpty(input.workspaceId);
-  if (!serverId || !workspaceId) {
-    return null;
-  }
-  return `${serverId}:${workspaceId}`;
+  return buildSurfacePersistenceKey({
+    serverId: input.serverId,
+    scope: workspaceSurfaceScope(input.workspaceId),
+  });
+}
+
+export function buildWorkspaceTabsSurfacePersistenceKey(input: SurfaceScopedInput): string | null {
+  return buildSurfacePersistenceKey({
+    serverId: input.serverId,
+    scope: input.scope ?? workspaceSurfaceScope(input.workspaceId),
+  });
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -125,7 +170,8 @@ function buildNextTabsForEnsure(args: {
 
 export interface EnsureTabInput {
   serverId: string;
-  workspaceId: string;
+  workspaceId?: string;
+  scope?: SurfaceScope;
   target: WorkspaceTabTarget;
   now: number;
 }
@@ -139,10 +185,7 @@ export function applyEnsureTab(
   state: WorkspaceTabsCoreState,
   input: EnsureTabInput,
 ): EnsureTabResult {
-  const key = buildWorkspaceTabPersistenceKey({
-    serverId: input.serverId,
-    workspaceId: input.workspaceId,
-  });
+  const key = buildWorkspaceTabsSurfacePersistenceKey(input);
   const normalizedTarget = normalizeWorkspaceTabTarget(input.target);
   if (!key || !normalizedTarget) {
     return { state, tabId: null };
@@ -189,7 +232,8 @@ export function applyEnsureTab(
 
 export interface FocusTabInput {
   serverId: string;
-  workspaceId: string;
+  workspaceId?: string;
+  scope?: SurfaceScope;
   tabId: string;
 }
 
@@ -197,10 +241,7 @@ export function applyFocusTab(
   state: WorkspaceTabsCoreState,
   input: FocusTabInput,
 ): WorkspaceTabsCoreState {
-  const key = buildWorkspaceTabPersistenceKey({
-    serverId: input.serverId,
-    workspaceId: input.workspaceId,
-  });
+  const key = buildWorkspaceTabsSurfacePersistenceKey(input);
   const normalizedTabId = trimNonEmpty(input.tabId);
   if (!key || !normalizedTabId) {
     return state;
@@ -228,6 +269,7 @@ export function applyOpenOrFocusTab(
   const focused = applyFocusTab(ensured.state, {
     serverId: input.serverId,
     workspaceId: input.workspaceId,
+    scope: input.scope,
     tabId: ensured.tabId,
   });
   return { state: focused, tabId: ensured.tabId };
@@ -235,7 +277,8 @@ export function applyOpenOrFocusTab(
 
 export interface OpenDraftTabInput {
   serverId: string;
-  workspaceId: string;
+  workspaceId?: string;
+  scope?: SurfaceScope;
   draftId: string;
   now: number;
 }
@@ -251,6 +294,7 @@ export function applyOpenDraftTab(
   return applyOpenOrFocusTab(state, {
     serverId: input.serverId,
     workspaceId: input.workspaceId,
+    scope: input.scope,
     target: { kind: "draft", draftId: normalizedDraftId },
     now: input.now,
   });
@@ -258,7 +302,8 @@ export function applyOpenDraftTab(
 
 export interface CloseTabInput {
   serverId: string;
-  workspaceId: string;
+  workspaceId?: string;
+  scope?: SurfaceScope;
   tabId: string;
 }
 
@@ -266,10 +311,7 @@ export function applyCloseTab(
   state: WorkspaceTabsCoreState,
   input: CloseTabInput,
 ): WorkspaceTabsCoreState {
-  const key = buildWorkspaceTabPersistenceKey({
-    serverId: input.serverId,
-    workspaceId: input.workspaceId,
-  });
+  const key = buildWorkspaceTabsSurfacePersistenceKey(input);
   const normalizedTabId = trimNonEmpty(input.tabId);
   if (!key || !normalizedTabId) {
     return state;
@@ -329,7 +371,8 @@ export function applyCloseTab(
 
 export interface RetargetTabInput {
   serverId: string;
-  workspaceId: string;
+  workspaceId?: string;
+  scope?: SurfaceScope;
   tabId: string;
   target: WorkspaceTabTarget;
 }
@@ -338,10 +381,7 @@ export function applyRetargetTab(
   state: WorkspaceTabsCoreState,
   input: RetargetTabInput,
 ): EnsureTabResult {
-  const key = buildWorkspaceTabPersistenceKey({
-    serverId: input.serverId,
-    workspaceId: input.workspaceId,
-  });
+  const key = buildWorkspaceTabsSurfacePersistenceKey(input);
   const normalizedTabId = trimNonEmpty(input.tabId);
   const normalizedTarget = normalizeWorkspaceTabTarget(input.target);
   if (!key || !normalizedTabId || !normalizedTarget) {
@@ -374,7 +414,8 @@ export function applyRetargetTab(
 
 export interface ReorderTabsInput {
   serverId: string;
-  workspaceId: string;
+  workspaceId?: string;
+  scope?: SurfaceScope;
   tabIds: string[];
 }
 
@@ -382,10 +423,7 @@ export function applyReorderTabs(
   state: WorkspaceTabsCoreState,
   input: ReorderTabsInput,
 ): WorkspaceTabsCoreState {
-  const key = buildWorkspaceTabPersistenceKey({
-    serverId: input.serverId,
-    workspaceId: input.workspaceId,
-  });
+  const key = buildWorkspaceTabsSurfacePersistenceKey(input);
   if (!key) {
     return state;
   }
@@ -416,17 +454,15 @@ export function applyReorderTabs(
 
 export interface PurgeWorkspaceInput {
   serverId: string;
-  workspaceId: string;
+  workspaceId?: string;
+  scope?: SurfaceScope;
 }
 
 export function applyPurgeWorkspace(
   state: WorkspaceTabsCoreState,
   input: PurgeWorkspaceInput,
 ): WorkspaceTabsCoreState {
-  const key = buildWorkspaceTabPersistenceKey({
-    serverId: input.serverId,
-    workspaceId: input.workspaceId,
-  });
+  const key = buildWorkspaceTabsSurfacePersistenceKey(input);
   if (!key) {
     return state;
   }
@@ -450,9 +486,9 @@ export function applyPurgeWorkspace(
 
 export function selectWorkspaceTabs(
   state: WorkspaceTabsCoreState,
-  input: { serverId: string; workspaceId: string },
+  input: { serverId: string; workspaceId?: string; scope?: SurfaceScope },
 ): WorkspaceTab[] {
-  const key = buildWorkspaceTabPersistenceKey(input);
+  const key = buildWorkspaceTabsSurfacePersistenceKey(input);
   if (!key) {
     return [];
   }
@@ -497,18 +533,18 @@ function extractMigrationRawSources(persistedState: unknown): MigrationRawSource
 function coerceWorkspaceTabTarget(raw: Record<string, unknown>): WorkspaceTabTarget | null {
   const kind = typeof raw.kind === "string" ? raw.kind : null;
   if (kind === "draft" && typeof raw.draftId === "string") {
-    const setup = normalizeWorkspaceDraftTabSetup(raw.setup);
-    return normalizeWorkspaceTabTarget({
-      kind: "draft",
-      draftId: raw.draftId,
-      ...(setup ? { setup } : {}),
-    });
+    return coerceDraftWorkspaceTabTarget(raw);
   }
   if (kind === "agent" && typeof raw.agentId === "string") {
     return normalizeWorkspaceTabTarget({ kind: "agent", agentId: raw.agentId });
   }
   if (kind === "terminal" && typeof raw.terminalId === "string") {
-    return normalizeWorkspaceTabTarget({ kind: "terminal", terminalId: raw.terminalId });
+    return normalizeWorkspaceTabTarget({
+      kind: "terminal",
+      terminalId: raw.terminalId,
+      cwd: typeof raw.cwd === "string" ? raw.cwd : null,
+      sourceAgentId: typeof raw.sourceAgentId === "string" ? raw.sourceAgentId : null,
+    });
   }
   if (kind === "browser" && typeof raw.browserId === "string") {
     return normalizeWorkspaceTabTarget({ kind: "browser", browserId: raw.browserId });
@@ -524,7 +560,21 @@ function coerceWorkspaceTabTarget(raw: Record<string, unknown>): WorkspaceTabTar
   if (kind === "setup" && typeof raw.workspaceId === "string") {
     return normalizeWorkspaceTabTarget({ kind: "setup", workspaceId: raw.workspaceId });
   }
+  if (isProjectWorkspaceTabKind(kind) && typeof raw.groupId === "string") {
+    return normalizeWorkspaceTabTarget({ kind, groupId: raw.groupId });
+  }
   return null;
+}
+
+function coerceDraftWorkspaceTabTarget(raw: Record<string, unknown>): WorkspaceTabTarget | null {
+  const setup = normalizeWorkspaceDraftTabSetup(raw.setup);
+  return normalizeWorkspaceTabTarget({
+    kind: "draft",
+    draftId: typeof raw.draftId === "string" ? raw.draftId : "",
+    cwd: typeof raw.cwd === "string" ? raw.cwd : null,
+    projectGroupId: typeof raw.projectGroupId === "string" ? raw.projectGroupId : null,
+    ...(setup ? { setup } : {}),
+  });
 }
 
 function migrateSingleTab(rawTab: unknown, now: number): WorkspaceTab | null {

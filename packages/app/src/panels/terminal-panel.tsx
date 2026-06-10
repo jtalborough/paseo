@@ -30,15 +30,41 @@ function trimNonEmpty(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function resolveTerminalCwd(input: {
+  targetCwd?: string | null;
+  workspaceDirectory: string | null;
+}): string | null {
+  return trimNonEmpty(input.targetCwd) ?? input.workspaceDirectory;
+}
+
+function resolveAgentTerminalLabel(input: {
+  title?: string | null;
+  agentId?: string | null;
+}): string | null {
+  const agentId = trimNonEmpty(input.agentId);
+  if (!agentId) {
+    return null;
+  }
+  return `${trimNonEmpty(input.title) ?? "Agent"} (${agentId.slice(0, 8)})`;
+}
+
 function useTerminalPanelDescriptor(
-  target: { kind: "terminal"; terminalId: string },
+  target: {
+    kind: "terminal";
+    terminalId: string;
+    cwd?: string | null;
+    sourceAgentId?: string | null;
+  },
   context: { serverId: string; workspaceId: string },
 ): PanelDescriptor {
   const client = useSessionStore((state) => state.sessions[context.serverId]?.client ?? null);
   const workspaceAuthority = useWorkspaceExecutionAuthority(context.serverId, context.workspaceId)!;
-  const workspaceDirectory = workspaceAuthority.ok
-    ? workspaceAuthority.authority.workspaceDirectory
-    : null;
+  const workspaceDirectory = resolveTerminalCwd({
+    targetCwd: target.cwd,
+    workspaceDirectory: workspaceAuthority.ok
+      ? workspaceAuthority.authority.workspaceDirectory
+      : null,
+  });
   const terminalsQuery = useQuery(
     {
       queryKey: ["terminals", context.serverId, workspaceDirectory] as const,
@@ -59,10 +85,23 @@ function useTerminalPanelDescriptor(
   );
   const terminal =
     terminalsQuery.data?.terminals.find((entry) => entry.id === target.terminalId) ?? null;
+  const linkedAgentId = trimNonEmpty(target.sourceAgentId) ?? trimNonEmpty(terminal?.linkedAgentId);
+  const linkedAgentLabel = useSessionStore((state) => {
+    if (!linkedAgentId) {
+      return null;
+    }
+    const session = state.sessions[context.serverId];
+    const agent = session?.agents?.get(linkedAgentId) ?? session?.agentDetails?.get(linkedAgentId);
+    return resolveAgentTerminalLabel({ title: agent?.title, agentId: linkedAgentId });
+  });
 
   return {
-    label: trimNonEmpty(terminal?.title ?? terminal?.name ?? null) ?? "Terminal",
-    subtitle: "Terminal",
+    label: linkedAgentLabel
+      ? `Linked: ${linkedAgentLabel}`
+      : (trimNonEmpty(terminal?.title ?? terminal?.name ?? null) ?? "Terminal"),
+    subtitle: linkedAgentLabel
+      ? `Terminal ${target.terminalId.slice(0, 8)}`
+      : (trimNonEmpty(terminal?.title ?? terminal?.name ?? null) ?? "Terminal"),
     titleState: "ready",
     icon: Terminal,
     statusBucket: null,
@@ -73,13 +112,31 @@ function TerminalPanel() {
   const { serverId, workspaceId, target, openFileInWorkspace } = usePaneContext();
   const { isWorkspaceFocused, isPaneFocused } = usePaneFocus();
   const workspaceAuthority = useWorkspaceExecutionAuthority(serverId, workspaceId)!;
-  const workspaceDirectory = workspaceAuthority.ok
-    ? workspaceAuthority.authority.workspaceDirectory
-    : null;
+  const workspaceDirectory = resolveTerminalCwd({
+    targetCwd: target.kind === "terminal" ? target.cwd : null,
+    workspaceDirectory: workspaceAuthority.ok
+      ? workspaceAuthority.authority.workspaceDirectory
+      : null,
+  });
   const isGitCheckout = workspaceAuthority.ok
     ? workspaceAuthority.authority.workspace.projectKind === "git"
     : false;
   const openFileExplorerForCheckout = usePanelStore((state) => state.openFileExplorerForCheckout);
+  const linkedAgentLabel = useSessionStore((state) => {
+    if (target.kind !== "terminal") {
+      return null;
+    }
+    const agentId = trimNonEmpty(target.sourceAgentId);
+    if (!agentId) {
+      return null;
+    }
+    const session = state.sessions[serverId];
+    const agent = session?.agents?.get(agentId) ?? session?.agentDetails?.get(agentId);
+    return resolveAgentTerminalLabel({ title: agent?.title, agentId });
+  });
+  const linkedTerminalLabel = linkedAgentLabel
+    ? `Linked to ${linkedAgentLabel} · Terminal ${target.kind === "terminal" ? target.terminalId.slice(0, 8) : ""}`
+    : null;
   const handleOpenFileExplorer = useCallback(() => {
     if (!workspaceDirectory) {
       return;
@@ -116,6 +173,7 @@ function TerminalPanel() {
       isPaneFocused={isPaneFocused}
       onOpenFileExplorer={handleOpenFileExplorer}
       onOpenWorkspaceFile={openFileInWorkspace}
+      linkedAgentLabel={linkedTerminalLabel}
     />
   );
 }

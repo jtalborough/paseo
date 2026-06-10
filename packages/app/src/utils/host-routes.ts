@@ -347,12 +347,81 @@ export function buildHostSessionsRoute(serverId: string) {
   return `${base}/sessions` as const;
 }
 
+export function buildHostTasksRoute(serverId: string) {
+  const base = buildHostRootRoute(serverId);
+  if (base === "/") {
+    return "/" as const;
+  }
+  return `${base}/tasks` as const;
+}
+
+export function buildHostTaskRoute(serverId: string, projectGroupId: string, taskId: string) {
+  const base = buildHostTasksRoute(serverId);
+  const normalizedProjectGroupId = trimNonEmpty(projectGroupId);
+  const normalizedTaskId = trimNonEmpty(taskId);
+  if (base === "/" || !normalizedProjectGroupId || !normalizedTaskId) {
+    return base;
+  }
+  return `${base}?taskProjectGroupId=${encodeURIComponent(
+    normalizedProjectGroupId,
+  )}&taskId=${encodeURIComponent(normalizedTaskId)}` as const;
+}
+
 export function buildHostOpenProjectRoute(serverId: string) {
   const base = buildHostRootRoute(serverId);
   if (base === "/") {
     return "/" as const;
   }
   return `${base}/open-project` as const;
+}
+
+export function buildHostProjectRoute(serverId: string, groupId: string) {
+  const base = buildHostRootRoute(serverId);
+  const normalizedGroupId = trimNonEmpty(groupId);
+  if (base === "/" || !normalizedGroupId) {
+    return "/" as const;
+  }
+  return `${base}/project/${encodeSegment(normalizedGroupId)}` as const;
+}
+
+export function buildHostProjectFilesRoute(serverId: string, groupId: string) {
+  const projectRoute = buildHostProjectRoute(serverId, groupId);
+  if (projectRoute === "/") {
+    return "/" as const;
+  }
+  return `${projectRoute}/files` as const;
+}
+
+export function buildHostProjectTasksRoute(serverId: string, groupId: string) {
+  const projectRoute = buildHostProjectRoute(serverId, groupId);
+  if (projectRoute === "/") {
+    return "/" as const;
+  }
+  return `${projectRoute}/tasks` as const;
+}
+
+export function buildHostProjectNotesRoute(serverId: string, groupId: string) {
+  const projectRoute = buildHostProjectRoute(serverId, groupId);
+  if (projectRoute === "/") {
+    return "/" as const;
+  }
+  return `${projectRoute}/notes` as const;
+}
+
+export function buildHostProjectAgentsRoute(serverId: string, groupId: string) {
+  const projectRoute = buildHostProjectRoute(serverId, groupId);
+  if (projectRoute === "/") {
+    return "/" as const;
+  }
+  return `${projectRoute}/agents` as const;
+}
+
+export function buildHostNewProjectAgentRoute(serverId: string, groupId: string) {
+  const projectRoute = buildHostProjectRoute(serverId, groupId);
+  if (projectRoute === "/") {
+    return "/" as const;
+  }
+  return `${projectRoute}/new-agent` as const;
 }
 
 export function buildHostNewWorkspaceRoute(
@@ -475,6 +544,9 @@ export function mapPathnameToServer(pathname: string, nextServerId: string) {
   }
   if (suffix.startsWith("open-project")) {
     return `${base}/open-project` as const;
+  }
+  if (suffix.startsWith("project/")) {
+    return `${base}/${suffix}` as const;
   }
   const workspaceRoute = parseHostWorkspaceRouteFromPathname(pathname);
   if (workspaceRoute) {

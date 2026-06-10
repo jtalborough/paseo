@@ -700,7 +700,7 @@ test("normalizes workspace_setup_progress into a workspace-scoped daemon event",
   });
 });
 
-test("sends create_agent_request with string workspace ids", async () => {
+test("sends create_agent_request with explicit Workspace and Project placement", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();
 
@@ -721,6 +721,7 @@ test("sends create_agent_request with string workspace ids", async () => {
     provider: "codex",
     cwd: "/tmp/project/.paseo/worktrees/feature-a",
     workspaceId: "ws-feature-a",
+    projectGroupId: "grp_product",
     title: "Compat agent",
     modeId: "default",
   });
@@ -731,6 +732,7 @@ test("sends create_agent_request with string workspace ids", async () => {
     expect.objectContaining({
       type: "create_agent_request",
       workspaceId: "ws-feature-a",
+      projectGroupId: "grp_product",
     }),
   );
 

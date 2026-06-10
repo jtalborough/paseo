@@ -1,7 +1,7 @@
 import type { Agent } from "@/stores/session-store";
 import type { WorkspaceDraftTabSetup } from "@/stores/workspace-tabs-store";
 
-export type ClientSlashCommandKind = "archive-agent" | "replace-agent-with-draft";
+export type ClientSlashCommandKind = "archive-agent" | "replace-agent-with-draft" | "open-terminal";
 export type ClientSlashCommandExecution = "immediate" | "insert";
 
 export interface ClientSlashCommand {
@@ -28,6 +28,14 @@ export const CLIENT_SLASH_COMMANDS: readonly ClientSlashCommand[] = [
     description: "Archive this agent and start a fresh draft",
     argumentHint: "",
     kind: "replace-agent-with-draft",
+    execution: "immediate",
+  },
+  {
+    name: "terminal",
+    aliases: ["term"],
+    description: "Open a terminal in this agent's cwd",
+    argumentHint: "",
+    kind: "open-terminal",
     execution: "immediate",
   },
 ];

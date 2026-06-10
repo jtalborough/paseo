@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { WorkspaceTabTarget } from "@/stores/workspace-tabs-store";
+import type { SurfaceScope } from "@/surfaces/surface-scope";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 
 export interface PanelIconProps {
@@ -17,6 +18,7 @@ export interface PanelDescriptor {
 
 export interface PanelDescriptorContext {
   serverId: string;
+  scope: SurfaceScope;
   workspaceId: string;
 }
 

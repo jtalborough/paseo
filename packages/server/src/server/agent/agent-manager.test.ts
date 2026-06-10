@@ -547,6 +547,44 @@ test("createAgent injects daemon append system prompt at runtime only", async ()
   expect(record?.config).not.toHaveProperty("daemonAppendSystemPrompt");
 });
 
+test("createAgent injects Project task guidance at runtime only", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+  const client = new TestAgentClient();
+  const manager = new AgentManager({
+    clients: {
+      codex: client,
+    },
+    registry: storage,
+    logger,
+    appendSystemPrompt: "Daemon instructions.",
+    idFactory: () => "00000000-0000-4000-8000-000000000105",
+  });
+
+  const snapshot = await manager.createAgent(
+    {
+      provider: "codex",
+      cwd: workdir,
+    },
+    undefined,
+    {
+      projectGroupId: "grp_product",
+    },
+  );
+  const record = await storage.get(snapshot.id);
+  const runtimePrompt = client.createdConfigs[0]?.daemonAppendSystemPrompt;
+
+  expect(runtimePrompt).toContain("Daemon instructions.");
+  expect(runtimePrompt).toContain("Project group id: grp_product");
+  expect(runtimePrompt).toContain("list_project_tasks");
+  expect(runtimePrompt).toContain("create_project_task");
+  expect(runtimePrompt).toContain("update_project_task");
+  expect(snapshot.config.daemonAppendSystemPrompt).toBe(runtimePrompt);
+  expect(record?.projectGroupId).toBe("grp_product");
+  expect(record?.config).not.toHaveProperty("daemonAppendSystemPrompt");
+});
+
 test("daemon append system prompt is injected into Pi configs", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
   const storagePath = join(workdir, "agents");
@@ -1310,6 +1348,7 @@ test("resumeAgentFromPersistence keeps metadata config, applies overrides, and p
     },
     registry: storage,
     logger,
+    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
     idFactory: () => "00000000-0000-4000-8000-000000000106",
   });
 
@@ -1333,21 +1372,18 @@ test("resumeAgentFromPersistence keeps metadata config, applies overrides, and p
   const resumed = await manager.resumeAgentFromPersistence(handle, {
     cwd: workdir,
     systemPrompt: "new prompt",
-    mcpServers: {
-      paseo: {
-        type: "stdio",
-        command: "node",
-        args: ["/tmp/mcp-bridge.mjs", "--socket", "/tmp/paseo.sock"],
-      },
-    },
   });
 
   expect(resumed.config.systemPrompt).toBe("new prompt");
   expect(resumed.config.mcpServers).toEqual({
     paseo: {
+      type: "http",
+      url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${resumed.id}`,
+    },
+    legacy: {
       type: "stdio",
-      command: "node",
-      args: ["/tmp/mcp-bridge.mjs", "--socket", "/tmp/paseo.sock"],
+      command: "legacy-bridge",
+      args: ["/tmp/legacy.sock"],
     },
   });
   expect(client.lastResumeOverrides).toMatchObject({
@@ -1356,9 +1392,13 @@ test("resumeAgentFromPersistence keeps metadata config, applies overrides, and p
     systemPrompt: "new prompt",
     mcpServers: {
       paseo: {
+        type: "http",
+        url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${resumed.id}`,
+      },
+      legacy: {
         type: "stdio",
-        command: "node",
-        args: ["/tmp/mcp-bridge.mjs", "--socket", "/tmp/paseo.sock"],
+        command: "legacy-bridge",
+        args: ["/tmp/legacy.sock"],
       },
     },
   });
@@ -1366,6 +1406,30 @@ test("resumeAgentFromPersistence keeps metadata config, applies overrides, and p
     agentId: resumed.id,
     env: {
       PASEO_AGENT_ID: resumed.id,
+    },
+  });
+
+  const resumedWithOverride = await manager.resumeAgentFromPersistence(
+    handle,
+    {
+      cwd: workdir,
+      systemPrompt: "new prompt",
+      mcpServers: {
+        paseo: {
+          type: "stdio",
+          command: "node",
+          args: ["/tmp/mcp-bridge.mjs", "--socket", "/tmp/paseo.sock"],
+        },
+      },
+    },
+    "00000000-0000-4000-8000-000000000107",
+  );
+
+  expect(resumedWithOverride.config.mcpServers).toEqual({
+    paseo: {
+      type: "stdio",
+      command: "node",
+      args: ["/tmp/mcp-bridge.mjs", "--socket", "/tmp/paseo.sock"],
     },
   });
 });

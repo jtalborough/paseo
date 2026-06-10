@@ -1,7 +1,10 @@
 import type { WorkspaceDescriptor } from "@/stores/session-store";
 import { buildHostAgentDetailRoute } from "@/utils/host-routes";
+import type {
+  NavigateToPreparedProjectTabInput,
+  NavigateToPreparedWorkspaceTabInput,
+} from "@/utils/prepare-workspace-tab";
 import { resolveWorkspaceIdByExecutionDirectory } from "@/utils/workspace-execution";
-import type { NavigateToPreparedWorkspaceTabInput } from "@/utils/prepare-workspace-tab";
 
 export interface NavigateToAgentInput {
   serverId: string;
@@ -13,11 +16,13 @@ export interface NavigateToAgentInput {
 export interface AgentNavTarget {
   workspaces: Iterable<WorkspaceDescriptor> | null | undefined;
   agentCwd: string | null | undefined;
+  projectGroupId?: string | null;
 }
 
 export interface NavigateToAgentDeps {
   readAgentNavTarget: (input: { serverId: string; agentId: string }) => AgentNavTarget;
   navigateToHostAgent: (route: string) => void;
+  navigateToPreparedProjectTab: (input: NavigateToPreparedProjectTabInput) => string;
   navigateToPreparedWorkspaceTab: (input: NavigateToPreparedWorkspaceTabInput) => string;
 }
 
@@ -25,10 +30,20 @@ export function resolveNavigateToAgent(
   input: NavigateToAgentInput,
   deps: NavigateToAgentDeps,
 ): string {
-  const { workspaces, agentCwd } = deps.readAgentNavTarget({
+  const { workspaces, agentCwd, projectGroupId } = deps.readAgentNavTarget({
     serverId: input.serverId,
     agentId: input.agentId,
   });
+  if (projectGroupId) {
+    return deps.navigateToPreparedProjectTab({
+      serverId: input.serverId,
+      groupId: projectGroupId,
+      target: { kind: "agent", agentId: input.agentId },
+      currentPathname: input.currentPathname,
+      pin: input.pin,
+    });
+  }
+
   const workspaceId = resolveWorkspaceIdByExecutionDirectory({
     workspaces,
     workspaceDirectory: agentCwd,

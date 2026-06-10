@@ -897,7 +897,14 @@ function RootStack() {
       <Stack.Screen name="h/[serverId]/agent/[agentId]" options={AGENT_SCREEN_OPTIONS} />
       <Stack.Screen name="h/[serverId]/index" />
       <Stack.Screen name="h/[serverId]/sessions" />
+      <Stack.Screen name="h/[serverId]/tasks" />
       <Stack.Screen name="h/[serverId]/open-project" />
+      <Stack.Screen name="h/[serverId]/project/[groupId]" />
+      <Stack.Screen name="h/[serverId]/project/[groupId]/files" />
+      <Stack.Screen name="h/[serverId]/project/[groupId]/agents" />
+      <Stack.Screen name="h/[serverId]/project/[groupId]/notes" />
+      <Stack.Screen name="h/[serverId]/project/[groupId]/tasks" />
+      <Stack.Screen name="h/[serverId]/project/[groupId]/new-agent" />
       <Stack.Screen name="h/[serverId]/settings" />
       <Stack.Screen name="settings/hosts/[serverId]/index" />
       <Stack.Screen name="settings/hosts/[serverId]/[hostSection]" />

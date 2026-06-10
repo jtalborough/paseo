@@ -148,6 +148,14 @@ function resolveMessagePlaceholder(isDesktopWebBreakpoint: boolean): string {
   return isDesktopWebBreakpoint ? DESKTOP_MESSAGE_PLACEHOLDER : MOBILE_MESSAGE_PLACEHOLDER;
 }
 
+function appendWireMessageContext(text: string, context: string | null): string | undefined {
+  const normalizedContext = context?.trim();
+  if (!normalizedContext) {
+    return undefined;
+  }
+  return `${text}\n\n${normalizedContext}`;
+}
+
 function resolveGithubSearchEnabled(
   isGithubPickerOpen: boolean,
   isConnected: boolean,
@@ -255,11 +263,12 @@ interface RenderAttachmentTrayArgs {
 function renderComposerFooter(
   footer: ReactNode,
   footerInlineContent: ReactNode,
+  footerContentStyle: object,
 ): ReactElement | null {
   if (!footer && !footerInlineContent) return null;
   return (
     <View style={styles.footer}>
-      <View style={styles.footerContent}>
+      <View style={footerContentStyle}>
         <View style={styles.footerLeft}>
           {footer}
           {footerInlineContent}
@@ -267,6 +276,13 @@ function renderComposerFooter(
       </View>
     </View>
   );
+}
+
+function resolveComposerWidthStyles(fullWidth: boolean) {
+  return {
+    inputAreaContentStyle: fullWidth ? styles.inputAreaContentFullWidth : styles.inputAreaContent,
+    footerContentStyle: fullWidth ? styles.footerContentFullWidth : styles.footerContent,
+  };
 }
 
 function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | null {
@@ -675,6 +691,8 @@ interface ComposerProps {
   commandDraftConfig?: DraftCommandConfig;
   /** Called when a message is about to be sent (any path: keyboard, dictation, queued). */
   onMessageSent?: () => void;
+  /** Optional hidden context appended to the wire message without changing visible transcript text. */
+  buildWireMessageContext?: (input: { text: string; cwd: string }) => string | null;
   onComposerHeightChange?: (height: number) => void;
   onAttentionInputFocus?: () => void;
   onAttentionPromptSend?: () => void;
@@ -688,6 +706,8 @@ interface ComposerProps {
   externalKeyboardShift?: boolean;
   /** Optional panel/container layout breakpoint. Defaults to the screen breakpoint. */
   isCompactLayout?: boolean;
+  /** When true, the composer uses the full pane width instead of the readable max width. */
+  fullWidth?: boolean;
 }
 
 const EMPTY_ARRAY: readonly QueuedMessage[] = [];
@@ -876,6 +896,7 @@ export function Composer({
   onFocusInput,
   commandDraftConfig,
   onMessageSent,
+  buildWireMessageContext,
   onComposerHeightChange,
   onAttentionInputFocus,
   onAttentionPromptSend,
@@ -884,6 +905,7 @@ export function Composer({
   footer,
   externalKeyboardShift,
   isCompactLayout: isCompactLayoutOverride,
+  fullWidth,
 }: ComposerProps) {
   const buttonIconSize = resolveComposerButtonIconSize();
   const client = useHostRuntimeClient(serverId);
@@ -1025,6 +1047,7 @@ export function Composer({
 
   const { pickImages } = useImageAttachmentPicker();
   const agentIdRef = useRef(agentId);
+  const buildWireMessageContextRef = useRef(buildWireMessageContext);
   const sendAgentMessageRef = useRef<
     ((agentId: string, text: string, attachments: ComposerAttachment[]) => Promise<void>) | null
   >(null);
@@ -1080,6 +1103,10 @@ export function Composer({
   }, [agentId]);
 
   useEffect(() => {
+    buildWireMessageContextRef.current = buildWireMessageContext;
+  }, [buildWireMessageContext]);
+
+  useEffect(() => {
     sendAgentMessageRef.current = async (
       targetAgentId: string,
       text: string,
@@ -1098,13 +1125,17 @@ export function Composer({
         client,
         agentId: targetAgentId,
         text,
+        wireText: appendWireMessageContext(
+          text,
+          buildWireMessageContextRef.current?.({ text, cwd }) ?? null,
+        ),
         attachments: sendAttachments,
         encodeImages,
         stream,
       });
       onAttentionPromptSend?.();
     };
-  }, [client, onAttentionPromptSend, serverId, setAgentStreamTail, setAgentStreamHead]);
+  }, [client, cwd, onAttentionPromptSend, serverId, setAgentStreamTail, setAgentStreamHead]);
 
   useEffect(() => {
     onSubmitMessageRef.current = onSubmitMessage;
@@ -1661,13 +1692,16 @@ export function Composer({
     ? "Searching..."
     : "No results found.";
   const autocompleteVisible = autocomplete.isVisible && isPaneFocused;
+  const { inputAreaContentStyle, footerContentStyle } = resolveComposerWidthStyles(
+    Boolean(fullWidth),
+  );
 
   return (
     <Animated.View style={composerContainerStyle}>
       <AttachmentLightbox metadata={lightboxMetadata} onClose={handleLightboxClose} />
       {/* Input area */}
       <View style={inputAreaContainerStyle}>
-        <View style={styles.inputAreaContent}>
+        <View style={inputAreaContentStyle}>
           {queueList}
           {sendErrorNode}
 
@@ -1743,7 +1777,7 @@ export function Composer({
           </View>
         </View>
       </View>
-      {renderComposerFooter(footer, footerInlineContent)}
+      {renderComposerFooter(footer, footerInlineContent, footerContentStyle)}
     </Animated.View>
   );
 }
@@ -1775,6 +1809,10 @@ const styles = StyleSheet.create((theme: Theme) => ({
     maxWidth: MAX_CONTENT_WIDTH,
     gap: theme.spacing[3],
   },
+  inputAreaContentFullWidth: {
+    width: "100%",
+    gap: theme.spacing[3],
+  },
   footer: {
     width: "100%",
     paddingHorizontal: theme.spacing[4],
@@ -1798,6 +1836,20 @@ const styles = StyleSheet.create((theme: Theme) => ({
     justifyContent: "space-between",
     // On mobile, the negative margins below cancel each glyph's internal padding
     // to reach the composer border; this inset adds a small visual gap from it.
+    paddingLeft: {
+      xs: 5,
+      md: 10,
+    },
+    paddingRight: {
+      xs: 5,
+      md: 10,
+    },
+  },
+  footerContentFullWidth: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingLeft: {
       xs: 5,
       md: 10,

@@ -1,6 +1,14 @@
 import { execSync } from "child_process";
 import { EventEmitter } from "events";
-import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "fs";
 import { homedir, tmpdir } from "os";
 import { join, resolve as resolvePath } from "path";
 import pino from "pino";
@@ -226,7 +234,8 @@ interface SessionForTestOptions {
     resolveRepoRoot?: ReturnType<typeof vi.fn>;
     getWorkspaceGitMetadata?: ReturnType<typeof vi.fn>;
   };
-  workspaceRegistry?: { get: ReturnType<typeof vi.fn> };
+  workspaceRegistry?: { get: ReturnType<typeof vi.fn>; list?: ReturnType<typeof vi.fn> };
+  groupRegistry?: SessionOptions["groupRegistry"];
   projectRegistry?: Partial<SessionOptions["projectRegistry"]>;
   terminalManager?: SessionOptions["terminalManager"];
   serviceProxy?: SessionOptions["serviceProxy"];
@@ -238,6 +247,7 @@ interface SessionForTestOptions {
   voice?: SessionOptions["voice"];
   messages?: unknown[];
   binaryMessages?: Uint8Array[];
+  paseoHome?: string;
 }
 
 function createSessionForTest(options: SessionForTestOptions = {}): Session {
@@ -272,7 +282,7 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
     logger,
     downloadTokenStore: asDownloadTokenStore(),
     pushTokenStore: asPushTokenStore(),
-    paseoHome: "/tmp/paseo-home",
+    paseoHome: options.paseoHome ?? "/tmp/paseo-home",
     agentManager: asAgentManager({
       listAgents: vi.fn(() => []),
       subscribe: vi.fn(() => () => {}),
@@ -293,6 +303,7 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
       get: vi.fn(),
       list: vi.fn().mockResolvedValue([]),
     },
+    groupRegistry: options.groupRegistry,
     chatService: asChatService(),
     scheduleService: asScheduleService(),
     loopService: asLoopService(),
@@ -526,12 +537,38 @@ describe("file explorer binary responses", () => {
     return root;
   }
 
+  function createAuthorizedSession(options: {
+    cwd: string;
+    messages: unknown[];
+    binaryMessages: Uint8Array[];
+  }): Session {
+    return createSessionForTest({
+      messages: options.messages,
+      binaryMessages: options.binaryMessages,
+      workspaceRegistry: {
+        get: vi.fn(),
+        list: vi.fn().mockResolvedValue([
+          {
+            workspaceId: "workspace-1",
+            projectId: "project-1",
+            cwd: options.cwd,
+            kind: "directory",
+            displayName: "Workspace",
+            createdAt: "2026-06-07T00:00:00.000Z",
+            updatedAt: "2026-06-07T00:00:00.000Z",
+            archivedAt: null,
+          },
+        ]),
+      },
+    });
+  }
+
   test("old clients get legacy JSON file content from a new daemon", async () => {
     const cwd = makeRoot();
     writeFileSync(join(cwd, "logo.png"), "hello");
     const messages: unknown[] = [];
     const binaryMessages: Uint8Array[] = [];
-    const session = createSessionForTest({ messages, binaryMessages });
+    const session = createAuthorizedSession({ cwd, messages, binaryMessages });
 
     await session.handleMessage({
       type: "file_explorer_request",
@@ -569,7 +606,7 @@ describe("file explorer binary responses", () => {
     writeFileSync(join(cwd, "logo.png"), "hello");
     const messages: unknown[] = [];
     const binaryMessages: Uint8Array[] = [];
-    const session = createSessionForTest({ messages, binaryMessages });
+    const session = createAuthorizedSession({ cwd, messages, binaryMessages });
 
     await session.handleMessage({
       type: "file_explorer_request",
@@ -605,6 +642,214 @@ describe("file explorer binary responses", () => {
       requestId: "req-new-client",
       payload: new Uint8Array(),
     });
+  });
+});
+
+describe("file RPC root authorization", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function makeRoot(prefix: string): string {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+    tempDirs.push(root);
+    return root;
+  }
+
+  test("allows subdirectories inside active managed Project directories", async () => {
+    const paseoHome = makeRoot("file-project-home-");
+    const cwd = join(paseoHome, "projects", "grp_work");
+    const tasksCwd = join(cwd, "tasks");
+    const messages: unknown[] = [];
+    const session = createSessionForTest({
+      paseoHome,
+      messages,
+      groupRegistry: {
+        initialize: vi.fn(),
+        existsOnDisk: vi.fn(),
+        list: vi.fn().mockResolvedValue([
+          {
+            groupId: "grp_work",
+            displayName: "Work",
+            color: null,
+            icon: null,
+            order: null,
+            archetype: null,
+            createdAt: "2026-06-07T00:00:00.000Z",
+            updatedAt: "2026-06-07T00:00:00.000Z",
+            archivedAt: null,
+          },
+        ]),
+        get: vi.fn(),
+        upsert: vi.fn(),
+        archive: vi.fn(),
+        remove: vi.fn(),
+      },
+    });
+    mkdirSync(tasksCwd, { recursive: true });
+    writeFileSync(join(tasksCwd, "README.md"), "# Tasks\n");
+
+    await session.handleMessage({
+      type: "file_explorer_request",
+      cwd: tasksCwd,
+      path: "README.md",
+      mode: "file",
+      requestId: "project-file",
+    });
+
+    expect(messages).toContainEqual({
+      type: "file_explorer_response",
+      payload: expect.objectContaining({
+        cwd: tasksCwd,
+        path: "README.md",
+        mode: "file",
+        error: null,
+        requestId: "project-file",
+      }),
+    });
+  });
+
+  test("rejects unknown roots for read, write, and download", async () => {
+    const cwd = makeRoot("file-unknown-root-");
+    writeFileSync(join(cwd, "secret.txt"), "secret");
+    const messages: unknown[] = [];
+    const session = createSessionForTest({ messages });
+
+    await session.handleMessage({
+      type: "file_explorer_request",
+      cwd,
+      path: "secret.txt",
+      mode: "file",
+      requestId: "unknown-read",
+    });
+    await session.handleMessage({
+      type: "fs.file.write.request",
+      cwd,
+      path: "secret.txt",
+      content: "changed",
+      requestId: "unknown-write",
+    });
+    await session.handleMessage({
+      type: "file_download_token_request",
+      cwd,
+      path: "secret.txt",
+      requestId: "unknown-download",
+    });
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        type: "file_explorer_response",
+        payload: expect.objectContaining({
+          error: "cwd is not an active Workspace or Project directory",
+          requestId: "unknown-read",
+        }),
+      }),
+      expect.objectContaining({
+        type: "fs.file.write.response",
+        payload: expect.objectContaining({
+          outcome: "error",
+          error: "cwd is not an active Workspace or Project directory",
+          requestId: "unknown-write",
+        }),
+      }),
+      expect.objectContaining({
+        type: "file_download_token_response",
+        payload: expect.objectContaining({
+          error: "cwd is not an active Workspace or Project directory",
+          requestId: "unknown-download",
+        }),
+      }),
+    ]);
+  });
+});
+
+describe("structured Project Task RPCs", () => {
+  const roots: string[] = [];
+
+  afterEach(() => {
+    for (const root of roots.splice(0)) {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("creates, lists, and queries Tasks contained by an active Project", async () => {
+    const paseoHome = realpathSync(mkdtempSync(join(tmpdir(), "task-rpc-session-test-")));
+    roots.push(paseoHome);
+    const messages: unknown[] = [];
+    const group = {
+      groupId: "grp_work",
+      displayName: "Work",
+      color: null,
+      icon: null,
+      order: null,
+      archetype: null,
+      createdAt: "2026-06-08T00:00:00.000Z",
+      updatedAt: "2026-06-08T00:00:00.000Z",
+      archivedAt: null,
+    };
+    const session = createSessionForTest({
+      paseoHome,
+      messages,
+      groupRegistry: {
+        initialize: vi.fn(),
+        existsOnDisk: vi.fn(),
+        list: vi.fn().mockResolvedValue([group]),
+        get: vi
+          .fn()
+          .mockImplementation(async (groupId: string) =>
+            groupId === group.groupId ? group : null,
+          ),
+        upsert: vi.fn(),
+        archive: vi.fn(),
+        remove: vi.fn(),
+      },
+    });
+
+    await session.handleMessage({
+      type: "task.create.request",
+      requestId: "create-task",
+      input: {
+        projectGroupId: group.groupId,
+        title: "Ship structured Tasks",
+        priority: "high",
+        body: "Keep Markdown authoritative.",
+      },
+    });
+    await session.handleMessage({
+      type: "task.list.request",
+      requestId: "list-tasks",
+      projectGroupId: group.groupId,
+    });
+    await session.handleMessage({ type: "tasks.query.request", requestId: "query-tasks" });
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        type: "task.create.response",
+        payload: expect.objectContaining({
+          requestId: "create-task",
+          task: expect.objectContaining({
+            metadata: expect.objectContaining({
+              projectGroupId: "grp_work",
+              title: "Ship structured Tasks",
+              priority: "high",
+            }),
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        type: "task.list.response",
+        payload: expect.objectContaining({ requestId: "list-tasks", tasks: [expect.any(Object)] }),
+      }),
+      expect.objectContaining({
+        type: "tasks.query.response",
+        payload: expect.objectContaining({ requestId: "query-tasks", tasks: [expect.any(Object)] }),
+      }),
+    ]);
+    expect(existsSync(join(paseoHome, "projects", "grp_work", "tasks"))).toBe(true);
   });
 });
 

@@ -13,6 +13,7 @@ export interface WorkerTerminalInfo {
   name: string;
   cwd: string;
   title?: string;
+  linkedAgentId?: string;
 }
 
 export interface WorkerCreateTerminalOptions {
@@ -20,6 +21,7 @@ export interface WorkerCreateTerminalOptions {
   cwd: string;
   name?: string;
   title?: string;
+  linkedAgentId?: string;
   env?: Record<string, string>;
   command?: string;
   args?: string[];

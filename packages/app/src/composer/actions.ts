@@ -125,6 +125,7 @@ export interface DispatchComposerAgentMessageInput {
   client: ComposerSendClient;
   agentId: string;
   text: string;
+  wireText?: string;
   attachments: ComposerAttachment[];
   encodeImages: (
     images: AttachmentMetadata[],
@@ -146,7 +147,7 @@ export async function dispatchComposerAgentMessage(
   });
   appendUserMessageToStream(input.agentId, userMessage, input.stream);
   const imagesData = await input.encodeImages(wirePayload.images);
-  await input.client.sendAgentMessage(input.agentId, input.text, {
+  await input.client.sendAgentMessage(input.agentId, input.wireText ?? input.text, {
     messageId,
     images: imagesData ?? [],
     attachments: wirePayload.attachments,

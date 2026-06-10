@@ -18,49 +18,75 @@ import {
   type WorkspaceTabsCoreState,
   type WorkspaceTabTarget,
 } from "./state";
+import type { SurfaceScope } from "@/surfaces/surface-scope";
 
-export { buildWorkspaceTabPersistenceKey } from "./state";
+export { buildWorkspaceTabPersistenceKey, buildWorkspaceTabsSurfacePersistenceKey } from "./state";
 export type { WorkspaceDraftTabSetup, WorkspaceTab, WorkspaceTabTarget } from "./state";
+export type { SurfaceScope } from "@/surfaces/surface-scope";
 
 interface WorkspaceTabsState extends WorkspaceTabsCoreState {
   openDraftTab: (input: {
     serverId: string;
-    workspaceId: string;
+    workspaceId?: string;
+    scope?: SurfaceScope;
     draftId: string;
   }) => string | null;
   ensureTab: (input: {
     serverId: string;
-    workspaceId: string;
+    workspaceId?: string;
+    scope?: SurfaceScope;
     target: WorkspaceTabTarget;
   }) => string | null;
   openOrFocusTab: (input: {
     serverId: string;
-    workspaceId: string;
+    workspaceId?: string;
+    scope?: SurfaceScope;
     target: WorkspaceTabTarget;
   }) => string | null;
-  focusTab: (input: { serverId: string; workspaceId: string; tabId: string }) => void;
-  closeTab: (input: { serverId: string; workspaceId: string; tabId: string }) => void;
+  focusTab: (input: {
+    serverId: string;
+    workspaceId?: string;
+    scope?: SurfaceScope;
+    tabId: string;
+  }) => void;
+  closeTab: (input: {
+    serverId: string;
+    workspaceId?: string;
+    scope?: SurfaceScope;
+    tabId: string;
+  }) => void;
   retargetTab: (input: {
     serverId: string;
-    workspaceId: string;
+    workspaceId?: string;
+    scope?: SurfaceScope;
     tabId: string;
     target: WorkspaceTabTarget;
   }) => string | null;
-  reorderTabs: (input: { serverId: string; workspaceId: string; tabIds: string[] }) => void;
-  getWorkspaceTabs: (input: { serverId: string; workspaceId: string }) => WorkspaceTab[];
-  purgeWorkspace: (input: { serverId: string; workspaceId: string }) => void;
+  reorderTabs: (input: {
+    serverId: string;
+    workspaceId?: string;
+    scope?: SurfaceScope;
+    tabIds: string[];
+  }) => void;
+  getWorkspaceTabs: (input: {
+    serverId: string;
+    workspaceId?: string;
+    scope?: SurfaceScope;
+  }) => WorkspaceTab[];
+  purgeWorkspace: (input: { serverId: string; workspaceId?: string; scope?: SurfaceScope }) => void;
 }
 
 export const useWorkspaceTabsStore = create<WorkspaceTabsState>()(
   persist(
     (set, get) => ({
       ...initialWorkspaceTabsCoreState,
-      openDraftTab: ({ serverId, workspaceId, draftId }) => {
+      openDraftTab: ({ serverId, workspaceId, scope, draftId }) => {
         let resolved: string | null = null;
         set((state) => {
           const result = applyOpenDraftTab(state, {
             serverId,
             workspaceId,
+            scope,
             draftId,
             now: Date.now(),
           });
@@ -69,12 +95,13 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsState>()(
         });
         return resolved;
       },
-      ensureTab: ({ serverId, workspaceId, target }) => {
+      ensureTab: ({ serverId, workspaceId, scope, target }) => {
         let resolved: string | null = null;
         set((state) => {
           const result = applyEnsureTab(state, {
             serverId,
             workspaceId,
+            scope,
             target,
             now: Date.now(),
           });
@@ -83,12 +110,13 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsState>()(
         });
         return resolved;
       },
-      openOrFocusTab: ({ serverId, workspaceId, target }) => {
+      openOrFocusTab: ({ serverId, workspaceId, scope, target }) => {
         let resolved: string | null = null;
         set((state) => {
           const result = applyOpenOrFocusTab(state, {
             serverId,
             workspaceId,
+            scope,
             target,
             now: Date.now(),
           });
@@ -99,10 +127,10 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsState>()(
       },
       focusTab: (input) => set((state) => applyFocusTab(state, input)),
       closeTab: (input) => set((state) => applyCloseTab(state, input)),
-      retargetTab: ({ serverId, workspaceId, tabId, target }) => {
+      retargetTab: ({ serverId, workspaceId, scope, tabId, target }) => {
         let resolved: string | null = null;
         set((state) => {
-          const result = applyRetargetTab(state, { serverId, workspaceId, tabId, target });
+          const result = applyRetargetTab(state, { serverId, workspaceId, scope, tabId, target });
           resolved = result.tabId;
           return result.state;
         });

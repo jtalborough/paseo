@@ -91,7 +91,7 @@ describe("buildSidebarProjectRowModel", () => {
     expect(result).not.toHaveProperty("selected");
   });
 
-  it("keeps single-workspace git projects as sections with the new worktree action", () => {
+  it("flattens single-workspace git projects into a direct workspace row with the new worktree action", () => {
     const onlyWorkspace = workspace({
       workspaceId: "ws-main",
       workspaceKind: "checkout",
@@ -106,8 +106,9 @@ describe("buildSidebarProjectRowModel", () => {
     });
 
     expect(result).toEqual({
-      kind: "project_section",
-      chevron: "expand",
+      kind: "workspace_link",
+      workspace: onlyWorkspace,
+      chevron: null,
       trailingAction: "new_worktree",
     });
   });
@@ -133,10 +134,10 @@ describe("buildSidebarProjectRowModel", () => {
 });
 
 describe("isSidebarProjectFlattened", () => {
-  it("returns true only for single-workspace non-git projects", () => {
+  it("returns true for any single-workspace project", () => {
     expect(
       isSidebarProjectFlattened(project({ projectKind: "git", workspaces: [workspace()] })),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isSidebarProjectFlattened(project({ projectKind: "directory", workspaces: [workspace()] })),
     ).toBe(true);

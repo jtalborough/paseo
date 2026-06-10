@@ -86,6 +86,7 @@ interface SplitContainerProps {
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onClearTerminalOutput?: (terminalId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string, paneTabs: WorkspaceTabDescriptor[]) => Promise<void> | void;
   onCloseTabsToRight: (tabId: string, paneTabs: WorkspaceTabDescriptor[]) => Promise<void> | void;
@@ -93,7 +94,11 @@ interface SplitContainerProps {
   onCreateDraftTab: (input: { paneId?: string }) => void;
   onCreateTerminalTab: (input: { paneId?: string }) => void;
   onCreateBrowserTab: (input: { paneId?: string }) => void;
+  onCreateTasksTab?: (input: { paneId?: string }) => void;
+  onCreateNotesTab?: (input: { paneId?: string }) => void;
   showCreateBrowserTab?: boolean;
+  showCreateTasksTab?: boolean;
+  showCreateNotesTab?: boolean;
   buildPaneContentModel: (input: {
     paneId: string;
     tab: WorkspaceTabDescriptor;
@@ -364,6 +369,7 @@ export function SplitContainer({
   onCopyResumeCommand,
   onCopyAgentId,
   onReloadAgent,
+  onClearTerminalOutput,
   onRenameTab,
   onCloseTabsToLeft,
   onCloseTabsToRight,
@@ -371,7 +377,11 @@ export function SplitContainer({
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateTasksTab,
+  onCreateNotesTab,
   showCreateBrowserTab,
+  showCreateTasksTab,
+  showCreateNotesTab,
   buildPaneContentModel,
   onFocusPane,
   onSplitPane,
@@ -580,6 +590,7 @@ export function SplitContainer({
           onCopyResumeCommand={onCopyResumeCommand}
           onCopyAgentId={onCopyAgentId}
           onReloadAgent={onReloadAgent}
+          onClearTerminalOutput={onClearTerminalOutput}
           onRenameTab={onRenameTab}
           onCloseTabsToLeft={onCloseTabsToLeft}
           onCloseTabsToRight={onCloseTabsToRight}
@@ -587,7 +598,11 @@ export function SplitContainer({
           onCreateDraftTab={onCreateDraftTab}
           onCreateTerminalTab={onCreateTerminalTab}
           onCreateBrowserTab={onCreateBrowserTab}
+          onCreateTasksTab={onCreateTasksTab}
+          onCreateNotesTab={onCreateNotesTab}
           showCreateBrowserTab={showCreateBrowserTab}
+          showCreateTasksTab={showCreateTasksTab}
+          showCreateNotesTab={showCreateNotesTab}
           buildPaneContentModel={buildPaneContentModel}
           onFocusPane={onFocusPane}
           onSplitPane={onSplitPane}
@@ -720,6 +735,7 @@ function SplitNodeView({
   onCopyResumeCommand,
   onCopyAgentId,
   onReloadAgent,
+  onClearTerminalOutput,
   onRenameTab,
   onCloseTabsToLeft,
   onCloseTabsToRight,
@@ -727,7 +743,11 @@ function SplitNodeView({
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateTasksTab,
+  onCreateNotesTab,
   showCreateBrowserTab,
+  showCreateTasksTab,
+  showCreateNotesTab,
   buildPaneContentModel,
   onFocusPane,
   onSplitPane,
@@ -772,6 +792,7 @@ function SplitNodeView({
         onCopyResumeCommand={onCopyResumeCommand}
         onCopyAgentId={onCopyAgentId}
         onReloadAgent={onReloadAgent}
+        onClearTerminalOutput={onClearTerminalOutput}
         onRenameTab={onRenameTab}
         onCloseTabsToLeft={onCloseTabsToLeft}
         onCloseTabsToRight={onCloseTabsToRight}
@@ -779,7 +800,11 @@ function SplitNodeView({
         onCreateDraftTab={onCreateDraftTab}
         onCreateTerminalTab={onCreateTerminalTab}
         onCreateBrowserTab={onCreateBrowserTab}
+        onCreateTasksTab={onCreateTasksTab}
+        onCreateNotesTab={onCreateNotesTab}
         showCreateBrowserTab={showCreateBrowserTab}
+        showCreateTasksTab={showCreateTasksTab}
+        showCreateNotesTab={showCreateNotesTab}
         buildPaneContentModel={buildPaneContentModel}
         onFocusPane={onFocusPane}
         onSplitPane={onSplitPane}
@@ -817,6 +842,7 @@ function SplitNodeView({
               onCopyResumeCommand={onCopyResumeCommand}
               onCopyAgentId={onCopyAgentId}
               onReloadAgent={onReloadAgent}
+              onClearTerminalOutput={onClearTerminalOutput}
               onRenameTab={onRenameTab}
               onCloseTabsToLeft={onCloseTabsToLeft}
               onCloseTabsToRight={onCloseTabsToRight}
@@ -824,7 +850,11 @@ function SplitNodeView({
               onCreateDraftTab={onCreateDraftTab}
               onCreateTerminalTab={onCreateTerminalTab}
               onCreateBrowserTab={onCreateBrowserTab}
+              onCreateTasksTab={onCreateTasksTab}
+              onCreateNotesTab={onCreateNotesTab}
               showCreateBrowserTab={showCreateBrowserTab}
+              showCreateTasksTab={showCreateTasksTab}
+              showCreateNotesTab={showCreateNotesTab}
               buildPaneContentModel={buildPaneContentModel}
               onFocusPane={onFocusPane}
               onSplitPane={onSplitPane}
@@ -868,6 +898,7 @@ function SplitPaneView({
   onCopyResumeCommand,
   onCopyAgentId,
   onReloadAgent,
+  onClearTerminalOutput,
   onRenameTab,
   onCloseTabsToLeft,
   onCloseTabsToRight,
@@ -875,7 +906,11 @@ function SplitPaneView({
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateTasksTab,
+  onCreateNotesTab,
   showCreateBrowserTab,
+  showCreateTasksTab,
+  showCreateNotesTab,
   buildPaneContentModel,
   onFocusPane,
   onSplitPane: _onSplitPane,
@@ -1009,6 +1044,7 @@ function SplitPaneView({
             onCopyResumeCommand={onCopyResumeCommand}
             onCopyAgentId={onCopyAgentId}
             onReloadAgent={onReloadAgent}
+            onClearTerminalOutput={onClearTerminalOutput}
             onRenameTab={onRenameTab}
             onCloseTabsToLeft={handleCloseTabsToLeft}
             onCloseTabsToRight={handleCloseTabsToRight}
@@ -1016,7 +1052,11 @@ function SplitPaneView({
             onCreateDraftTab={onCreateDraftTab}
             onCreateTerminalTab={onCreateTerminalTab}
             onCreateBrowserTab={onCreateBrowserTab}
+            onCreateTasksTab={onCreateTasksTab}
+            onCreateNotesTab={onCreateNotesTab}
             showCreateBrowserTab={showCreateBrowserTab}
+            showCreateTasksTab={showCreateTasksTab}
+            showCreateNotesTab={showCreateNotesTab}
             onReorderTabs={handleReorderTabs}
             onSplitRight={handleSplitRight}
             onSplitDown={handleSplitDown}

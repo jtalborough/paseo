@@ -1085,6 +1085,8 @@ export class VoiceAssistantWebSocketServer {
         gitLog: true,
         // COMPAT(projectGroups): added in v0.1.90, remove gate after 2026-12-15.
         projectGroups: true,
+        // COMPAT(tasks): added in v0.1.90, remove gate after 2026-12-15.
+        tasks: true,
       },
     };
   }

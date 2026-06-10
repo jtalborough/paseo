@@ -56,6 +56,7 @@ interface TerminalPaneProps {
   isPaneFocused: boolean;
   onOpenFileExplorer: () => void;
   onOpenWorkspaceFile: (request: WorkspaceFileOpenRequest) => void;
+  linkedAgentLabel?: string | null;
 }
 
 const TERMINAL_REFIT_DELAYS_MS = [0, 48, 144, 320];
@@ -168,6 +169,7 @@ export function TerminalPane({
   isPaneFocused,
   onOpenFileExplorer,
   onOpenWorkspaceFile,
+  linkedAgentLabel,
 }: TerminalPaneProps) {
   const isAppVisible = useAppVisible();
   const { theme } = useUnistyles();
@@ -298,6 +300,11 @@ export function TerminalPane({
     lastSentTerminalSizeRef.current = null;
     requestTerminalReflow();
   }, [requestTerminalReflow]);
+  const handleClearTerminalOutput = useCallback(() => {
+    workspaceTerminalSession.snapshots.clear({ terminalId });
+    emulatorRef.current?.clear();
+    requestTerminalFocus();
+  }, [requestTerminalFocus, terminalId, workspaceTerminalSession.snapshots]);
 
   const clearKeyboardRefitTimeouts = useCallback(() => {
     if (keyboardRefitTimeoutsRef.current.length === 0) {
@@ -322,6 +329,13 @@ export function TerminalPane({
   useEffect(() => {
     return () => clearKeyboardRefitTimeouts();
   }, [clearKeyboardRefitTimeouts]);
+
+  useEffect(() => {
+    return workspaceTerminalSession.controls.subscribeClear({
+      terminalId,
+      listener: handleClearTerminalOutput,
+    });
+  }, [handleClearTerminalOutput, terminalId, workspaceTerminalSession.controls]);
 
   useAnimatedReaction(
     () => keyboardShift.value > 0,
@@ -757,6 +771,13 @@ export function TerminalPane({
 
   return (
     <Animated.View style={containerStyle}>
+      {linkedAgentLabel ? (
+        <View style={styles.linkedAgentBar}>
+          <Text numberOfLines={1} style={styles.linkedAgentText}>
+            {linkedAgentLabel}
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.outputContainer}>
         {isWorkspaceFocused ? (
           <View style={styles.terminalGestureContainer}>
@@ -876,6 +897,19 @@ const styles = StyleSheet.create((theme) => ({
     minHeight: 0,
     position: "relative",
     backgroundColor: theme.colors.background,
+  },
+  linkedAgentBar: {
+    minHeight: 26,
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface0,
+  },
+  linkedAgentText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
   },
   terminalGestureContainer: {
     flex: 1,

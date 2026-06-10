@@ -209,6 +209,7 @@ function createTerminalManagerStub(overrides: Partial<TerminalManager> = {}): Te
     killTerminalAndWait: vi.fn().mockResolvedValue(undefined),
     captureTerminal: vi.fn().mockResolvedValue({ lines: [], totalLines: 0 }),
     listDirectories: vi.fn().mockReturnValue([]),
+    getTerminalLinkedAgentId: vi.fn().mockReturnValue(undefined),
     killAll: vi.fn(),
     subscribeTerminalsChanged: vi.fn().mockReturnValue(() => {}),
     ...overrides,
@@ -600,6 +601,141 @@ describe("terminal MCP tools", () => {
       lines: ["from worker scrollback"],
       totalLines: 42,
     });
+  });
+
+  it("includes linked agent ownership in terminal listings", async () => {
+    const { agentManager, agentStorage } = createTestDeps();
+    const terminalManager = createTerminalManagerStub({
+      getTerminals: vi.fn().mockResolvedValue([
+        {
+          id: "term-linked",
+          name: "Terminal for Agent",
+          cwd: process.cwd(),
+        },
+      ]),
+      getTerminalLinkedAgentId: vi
+        .fn()
+        .mockImplementation((terminalId: string) =>
+          terminalId === "term-linked" ? "agent-linked" : undefined,
+        ),
+    });
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      terminalManager,
+      logger,
+    });
+    const tool = registeredTool(server, "list_terminals");
+
+    const response = await tool.handler({ cwd: process.cwd() });
+
+    expect(response.structuredContent).toEqual({
+      terminals: [
+        {
+          id: "term-linked",
+          name: "Terminal for Agent",
+          cwd: process.cwd(),
+          linkedAgentId: "agent-linked",
+        },
+      ],
+    });
+  });
+});
+
+describe("Project task MCP tools", () => {
+  const logger = createTestLogger();
+
+  it("creates, lists, and updates tasks in the caller agent Project", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-tasks-"));
+    const paseoHome = join(tempDir, ".paseo");
+    const projectGroupId = "grp_product";
+    try {
+      const { agentManager, agentStorage, spies } = createTestDeps();
+      spies.agentStorage.get.mockResolvedValue({ projectGroupId });
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createOpenCodeManager().manager,
+        callerAgentId: "agent-1",
+        paseoHome,
+        logger,
+      });
+
+      const createTask = registeredTool(server, "create_project_task");
+      const createResponse = await invokeToolWithParsedInput(createTask, {
+        title: "Capture follow-up work",
+        body: "Acceptance criteria live here.",
+        priority: "high",
+        run: "agent",
+        doDate: "2026-06-10",
+      });
+
+      const createdTask = createResponse.structuredContent.task as {
+        metadata: { id: string; projectGroupId: string; title: string; priority: string };
+        body: string;
+      };
+      expect(createdTask.metadata.projectGroupId).toBe(projectGroupId);
+      expect(createdTask.metadata.title).toBe("Capture follow-up work");
+      expect(createdTask.metadata.priority).toBe("high");
+      expect(createdTask.body).toBe("Acceptance criteria live here.");
+
+      const listTasks = registeredTool(server, "list_project_tasks");
+      const listResponse = await invokeToolWithParsedInput(listTasks, {});
+      expect(listResponse.structuredContent.projectGroupId).toBe(projectGroupId);
+      expect((listResponse.structuredContent.tasks as unknown[]).length).toBe(1);
+
+      const updateTask = registeredTool(server, "update_project_task");
+      const updateResponse = await invokeToolWithParsedInput(updateTask, {
+        id: createdTask.metadata.id,
+        actionState: "done",
+        body: "Completed by the agent.",
+      });
+      const updatedTask = updateResponse.structuredContent.task as {
+        metadata: { actionState: string };
+        body: string;
+      };
+      expect(updatedTask.metadata.actionState).toBe("done");
+      expect(updatedTask.body).toBe("Completed by the agent.");
+
+      const activeOnlyResponse = await invokeToolWithParsedInput(listTasks, {});
+      expect(activeOnlyResponse.structuredContent.tasks).toEqual([]);
+
+      const includeDoneResponse = await invokeToolWithParsedInput(listTasks, { includeDone: true });
+      expect((includeDoneResponse.structuredContent.tasks as unknown[]).length).toBe(1);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("requires an explicit Project outside an agent-scoped session", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-tasks-"));
+    try {
+      const { agentManager, agentStorage } = createTestDeps();
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createOpenCodeManager().manager,
+        paseoHome: join(tempDir, ".paseo"),
+        logger,
+      });
+      const createTask = registeredTool(server, "create_project_task");
+
+      await expect(createTask.handler({ title: "Needs Project" })).rejects.toThrow(
+        "projectGroupId is required outside an agent-scoped session",
+      );
+
+      const response = await invokeToolWithParsedInput(createTask, {
+        projectGroupId: "grp_explicit",
+        title: "Create explicit task",
+      });
+      expect(
+        (response.structuredContent.task as { metadata: { projectGroupId: string } }).metadata
+          .projectGroupId,
+      ).toBe("grp_explicit");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -3220,6 +3356,7 @@ describe("agent snapshot MCP serialization", () => {
           effectiveThinkingOptionId: "high",
           status: "idle",
           cwd: REPO_CWD,
+          projectGroupId: null,
           createdAt: expect.any(String),
           updatedAt: expect.any(String),
           lastUserMessageAt: null,
@@ -3575,6 +3712,7 @@ describe("agent snapshot MCP serialization", () => {
       effectiveThinkingOptionId: null,
       status: "closed",
       cwd: REPO_CWD,
+      projectGroupId: null,
       createdAt: "2026-04-11T00:00:00.000Z",
       updatedAt: now,
       lastUserMessageAt: null,

@@ -23,9 +23,19 @@ Freedom and flexibility. Every design decision follows from this:
 
 ### Projects and workspaces
 
-Projects are grouped in the sidebar, detected automatically from your filesystem and tagged by git remote when available.
+Projects are user-authored contexts for a body of work. A Project owns plain-Markdown tasks,
+notes, and other domain content in a portable Paseo-managed directory, and can reference multiple
+external Folders.
 
-Each project opens as a workspace. For git projects, the default workspace is the main checkout. Users can create additional workspaces, which are isolated copies (git worktrees) where agents work without affecting main.
+Folders are detected from the filesystem and contain Workspaces. For git Folders, users can create
+additional Workspaces as isolated git worktrees where agents work without affecting main.
+
+Projects combine a durable agent workspace with live development tools. Chats and agents can
+retrieve relevant Project knowledge for discovery, while capable agents can also inspect and act on
+the authoritative current filesystem through explicit tools. Retrieval never replaces reading the
+live file before acting on it.
+
+See [projects.md](projects.md) for the Project directory and ownership model.
 
 ### Inside a workspace
 

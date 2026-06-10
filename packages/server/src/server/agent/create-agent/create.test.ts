@@ -45,3 +45,55 @@ test("session create forwards clientMessageId to the initial prompt run options"
     messageId: "msg-create-1",
   });
 });
+
+test("MCP child creation inherits Project placement even when detached", async () => {
+  const parent = {
+    id: "parent-agent",
+    provider: "codex",
+    cwd: "/tmp/project",
+    config: { provider: "codex", cwd: "/tmp/project" },
+  } as ManagedAgent;
+  const child = {
+    id: "child-agent",
+    provider: "codex",
+    cwd: "/tmp/project",
+    runtimeInfo: null,
+  } as ManagedAgent;
+  const createAgent = vi.fn(async () => child);
+  const dependencies: Parameters<typeof createAgentCommand>[0] = {
+    agentManager: {
+      createAgent,
+      getAgent: vi.fn((agentId) => (agentId === parent.id ? parent : child)),
+      tryRunOutOfBand: vi.fn(() => false),
+      hasInFlightRun: vi.fn(() => false),
+      streamAgent: vi.fn(() => (async function* noop() {})()),
+      waitForAgentRunStart: vi.fn(async () => undefined),
+    } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],
+    agentStorage: {
+      get: vi.fn(async (agentId) =>
+        agentId === parent.id ? { projectGroupId: "grp_product" } : null,
+      ),
+    } as unknown as Parameters<typeof createAgentCommand>[0]["agentStorage"],
+    logger: createTestLogger(),
+    providerSnapshotManager: {
+      resolveCreateConfig: vi.fn(async () => ({ modeId: undefined, featureValues: undefined })),
+    } as unknown as Parameters<typeof createAgentCommand>[0]["providerSnapshotManager"],
+  };
+
+  await createAgentCommand(dependencies, {
+    kind: "mcp",
+    provider: "codex/gpt-test",
+    title: "Detached child",
+    initialPrompt: "",
+    background: true,
+    notifyOnFinish: false,
+    detached: true,
+    callerAgentId: parent.id,
+  });
+
+  expect(createAgent).toHaveBeenCalledWith(
+    expect.objectContaining({ provider: "codex", cwd: parent.cwd }),
+    undefined,
+    { projectGroupId: "grp_product" },
+  );
+});

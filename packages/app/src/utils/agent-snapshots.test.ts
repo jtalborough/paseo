@@ -12,6 +12,7 @@ function createSnapshot(
     id: input.id ?? "agent-1",
     provider: input.provider ?? "codex",
     cwd: input.cwd ?? "/repo",
+    projectGroupId: input.projectGroupId,
     model: input.model ?? null,
     createdAt: input.createdAt ?? "2026-04-20T00:00:00.000Z",
     updatedAt: input.updatedAt ?? "2026-04-20T00:01:00.000Z",
@@ -45,6 +46,15 @@ describe("normalizeAgentSnapshot", () => {
 
     expect(agent.parentAgentId).toBe("parent-1");
     expect(agent.labels).toEqual(labels);
+  });
+
+  it("preserves explicit Project placement", () => {
+    const agent = normalizeAgentSnapshot(
+      createSnapshot({ projectGroupId: "grp_product" }),
+      "server-1",
+    );
+
+    expect(agent.projectGroupId).toBe("grp_product");
   });
 
   it("trims whitespace around the parent label", () => {

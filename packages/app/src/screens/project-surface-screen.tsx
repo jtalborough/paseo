@@ -98,6 +98,7 @@ export function ProjectSurfaceScreen({
     persistenceKey ? (state.layoutByWorkspace[persistenceKey] ?? null) : null,
   );
   const openLayoutTabFocused = useWorkspaceLayoutStore((state) => state.openTabFocused);
+  const openLayoutTabInSplit = useWorkspaceLayoutStore((state) => state.openTabInSplit);
   const focusLayoutTab = useWorkspaceLayoutStore((state) => state.focusTab);
   const closeLayoutTab = useWorkspaceLayoutStore((state) => state.closeTab);
   const retargetLayoutTab = useWorkspaceLayoutStore((state) => state.retargetTab);
@@ -269,7 +270,11 @@ export function ProjectSurfaceScreen({
           toast.error("Unable to create terminal");
           return;
         }
-        openProjectTarget({ kind: "terminal", terminalId: payload.terminal.id });
+        openProjectTarget({
+          kind: "terminal",
+          terminalId: payload.terminal.id,
+          cwd: payload.terminal.cwd,
+        });
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to create terminal");
       }
@@ -331,9 +336,25 @@ export function ProjectSurfaceScreen({
         tab: input.tab,
         normalizedServerId: serverId,
         normalizedWorkspaceId: executionWorkspaceId,
+        scope: scope ?? undefined,
         onOpenTab: (target) => {
           focusPaneBeforeCreate(input.paneId);
           openProjectTarget(target);
+        },
+        onOpenTabInSplit: (target, options) => {
+          if (!persistenceKey) {
+            return;
+          }
+          const tabId = openLayoutTabInSplit(persistenceKey, target, {
+            targetPaneId: input.paneId,
+            position: options?.position ?? "right",
+            parentTabId: input.tab.tabId,
+          });
+          if (!tabId) {
+            focusPaneBeforeCreate(input.paneId);
+            openProjectTarget(target);
+            return;
+          }
         },
         onCloseCurrentTab: () => {
           handleCloseTab(input.tab.tabId);
@@ -351,10 +372,12 @@ export function ProjectSurfaceScreen({
       executionWorkspaceId,
       focusPaneBeforeCreate,
       handleCloseTab,
+      openLayoutTabInSplit,
       openProjectTarget,
       persistenceKey,
       retargetLayoutTab,
       serverId,
+      scope,
     ],
   );
 

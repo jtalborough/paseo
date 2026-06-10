@@ -203,6 +203,49 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(onRenameTab).toHaveBeenCalledWith(terminalTab);
   });
 
+  it("includes clear output for terminal tabs when a clear handler is available", () => {
+    const onClearTerminalOutput = vi.fn();
+    const terminalTab: WorkspaceTabDescriptor = {
+      key: "terminal_abc",
+      tabId: "terminal_abc",
+      kind: "terminal",
+      target: { kind: "terminal", terminalId: "terminal-abc" },
+    };
+    const entries = buildWorkspaceTabMenuEntries({
+      surface: "desktop",
+      tab: terminalTab,
+      index: 0,
+      tabCount: 1,
+      menuTestIDBase: "workspace-tab-context-terminal_abc",
+      onCopyResumeCommand: vi.fn(),
+      onCopyAgentId: vi.fn(),
+      onReloadAgent: vi.fn(),
+      onClearTerminalOutput,
+      onRenameTab: vi.fn(),
+      onCloseTab: vi.fn(),
+      onCloseTabsBefore: vi.fn(),
+      onCloseTabsAfter: vi.fn(),
+      onCloseOtherTabs: vi.fn(),
+    });
+
+    const labels = entries.filter((entry) => entry.kind === "item").map((entry) => entry.label);
+    expect(labels.slice(0, 2)).toEqual(["Rename", "Clear output"]);
+
+    const clearEntry = entries.find(
+      (entry) => entry.kind === "item" && entry.key === "clear-terminal-output",
+    );
+    if (!clearEntry || clearEntry.kind !== "item") {
+      throw new Error("Clear output entry missing");
+    }
+    expect(clearEntry).toMatchObject({
+      icon: "terminal",
+      testID: "workspace-tab-context-terminal_abc-clear-output",
+    });
+
+    clearEntry.onSelect();
+    expect(onClearTerminalOutput).toHaveBeenCalledWith("terminal-abc");
+  });
+
   it("uses the same rename entry shape for agent and terminal tabs", () => {
     const terminalTab: WorkspaceTabDescriptor = {
       key: "terminal_abc",

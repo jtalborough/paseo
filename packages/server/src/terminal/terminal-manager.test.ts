@@ -72,6 +72,23 @@ it("returns existing terminals on subsequent calls", async () => {
   expect(second.length).toBe(1);
 });
 
+it("tracks linked agent ownership for created terminals", async () => {
+  manager = createTerminalManager();
+  const cwd = realpathSync(tmpdir());
+  const events: Parameters<Parameters<TerminalManager["subscribeTerminalsChanged"]>[0]>[0][] = [];
+  const unsubscribe = manager.subscribeTerminalsChanged((event) => events.push(event));
+  const created = await manager.createTerminal({ cwd, linkedAgentId: "agent-linked" });
+
+  expect(manager.getTerminalLinkedAgentId(created.id)).toBe("agent-linked");
+  expect(events.at(-1)?.terminals).toContainEqual(
+    expect.objectContaining({
+      id: created.id,
+      linkedAgentId: "agent-linked",
+    }),
+  );
+  unsubscribe();
+});
+
 it("throws for relative paths", async () => {
   manager = createTerminalManager();
   await expect(manager.getTerminals("tmp")).rejects.toThrow("cwd must be absolute path");

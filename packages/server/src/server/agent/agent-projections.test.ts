@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { AGENT_LIFECYCLE_STATUSES } from "./agent-manager.js";
 import {
+  buildStoredAgentPayload,
   toAgentPayload,
   toRecentProviderSessionDescriptorPayload,
   toStoredAgentRecord,
@@ -179,6 +180,14 @@ describe("toStoredAgentRecord", () => {
     expect(agent.config.extra!.claude!.tone).toBe("friendly");
     record.persistence!.sessionId = "mutated";
     expect(agent.persistence!.sessionId).toBe("persist-2");
+  });
+
+  it("persists and projects explicit Project placement", () => {
+    const agent = createManagedAgent();
+    const record = toStoredAgentRecord(agent, { projectGroupId: "grp_product" });
+
+    expect(record.projectGroupId).toBe("grp_product");
+    expect(buildStoredAgentPayload(record, ["claude"]).projectGroupId).toBe("grp_product");
   });
 
   it("falls back to config mode when current mode is null and handles null title", () => {

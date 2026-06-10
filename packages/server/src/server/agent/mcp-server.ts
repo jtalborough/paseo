@@ -47,6 +47,15 @@ import {
   type ScheduleCadence,
   type UpdateScheduleInput,
 } from "@getpaseo/protocol/schedule/types";
+import {
+  ActionStateSchema,
+  TaskAttentionSchema,
+  TaskPrioritySchema,
+  TaskRunModeSchema,
+  TaskWireSchema,
+  type CreateTaskInput,
+  type UpdateTaskInput,
+} from "@getpaseo/protocol/task/types";
 import { resolveSnapshotCwd, type ProviderSnapshotManager } from "./provider-snapshot-manager.js";
 import {
   AgentModelSchema,
@@ -80,6 +89,7 @@ import {
   type CreatePaseoWorktreeCommandInput,
   listPaseoWorktreesCommand,
 } from "../worktree/commands.js";
+import { TaskStore } from "../task/store.js";
 
 export interface AgentMcpServerOptions {
   agentManager: AgentManager;
@@ -448,7 +458,24 @@ const TerminalSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
   cwd: z.string(),
+  linkedAgentId: z.string().optional(),
 });
+
+function toTerminalSummary(
+  terminal: { id: string; name: string; cwd: string },
+  terminalManager: TerminalManager,
+): z.infer<typeof TerminalSummarySchema> {
+  const summary: z.infer<typeof TerminalSummarySchema> = {
+    id: terminal.id,
+    name: terminal.name,
+    cwd: terminal.cwd,
+  };
+  const linkedAgentId = terminalManager.getTerminalLinkedAgentId(terminal.id);
+  if (linkedAgentId) {
+    summary.linkedAgentId = linkedAgentId;
+  }
+  return summary;
+}
 
 const WorktreeSummarySchema = z.object({
   path: z.string(),
@@ -505,6 +532,7 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
   const childLogger = logger.child({ module: "agent", component: "mcp-server" });
   const waitTracker = new WaitForAgentTracker(logger);
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
+  const taskStore = options.paseoHome ? new TaskStore(options.paseoHome) : null;
 
   const server = new McpServer({
     name: "agent-mcp",
@@ -568,6 +596,29 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
     }
 
     return expandUserPath(trimmedCwd);
+  };
+
+  const resolveTaskProjectGroupId = async (requestedProjectGroupId?: string): Promise<string> => {
+    const trimmed = requestedProjectGroupId?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+    if (!callerAgentId) {
+      throw new Error("projectGroupId is required outside an agent-scoped session");
+    }
+    const callerRecord = await agentStorage.get(callerAgentId);
+    const projectGroupId = callerRecord?.projectGroupId?.trim();
+    if (!projectGroupId) {
+      throw new Error("No Project is associated with this agent session");
+    }
+    return projectGroupId;
+  };
+
+  const requireTaskStore = (): TaskStore => {
+    if (!taskStore) {
+      throw new Error("Task tools require a configured PASEO_HOME");
+    }
+    return taskStore;
   };
 
   const buildCallerAgentScheduleConfigExtras = (
@@ -1452,6 +1503,143 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
   );
 
   registerTool(
+    "list_project_tasks",
+    {
+      title: "List Project tasks",
+      description:
+        "List Project Tasks for the current Project. Use this before creating tasks to avoid duplicates.",
+      inputSchema: {
+        projectGroupId: z
+          .string()
+          .optional()
+          .describe("Project group id. Defaults to the current agent's Project."),
+        includeDone: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Include completed tasks. Defaults to active tasks only."),
+      },
+      outputSchema: {
+        projectGroupId: z.string(),
+        tasks: z.array(TaskWireSchema),
+      },
+    },
+    async ({ projectGroupId, includeDone = false }) => {
+      const resolvedProjectGroupId = await resolveTaskProjectGroupId(projectGroupId);
+      const tasks = await requireTaskStore().list(resolvedProjectGroupId);
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          projectGroupId: resolvedProjectGroupId,
+          tasks: includeDone ? tasks : tasks.filter((task) => task.metadata.actionState !== "done"),
+        }),
+      };
+    },
+  );
+
+  registerTool(
+    "create_project_task",
+    {
+      title: "Create Project task",
+      description:
+        "Create a Project Task when durable work is discovered. Prefer this over leaving follow-up work only in chat.",
+      inputSchema: {
+        projectGroupId: z
+          .string()
+          .optional()
+          .describe("Project group id. Defaults to the current agent's Project."),
+        title: z.string().trim().min(1).describe("Short imperative task title."),
+        body: z.string().optional().describe("Markdown body with acceptance criteria or context."),
+        actionState: ActionStateSchema.optional(),
+        run: TaskRunModeSchema.optional(),
+        priority: TaskPrioritySchema.nullable().optional(),
+        type: z.string().nullable().optional(),
+        context: z.string().nullable().optional(),
+        attention: TaskAttentionSchema.nullable().optional(),
+        doDate: z.string().nullable().optional(),
+        links: z.array(z.string()).optional(),
+        github: z.string().nullable().optional(),
+      },
+      outputSchema: {
+        task: TaskWireSchema,
+      },
+    },
+    async ({ projectGroupId, ...input }) => {
+      const resolvedProjectGroupId = await resolveTaskProjectGroupId(projectGroupId);
+      const taskInput: CreateTaskInput = {
+        projectGroupId: resolvedProjectGroupId,
+        title: input.title,
+        ...(input.body !== undefined ? { body: input.body } : {}),
+        ...(input.actionState !== undefined ? { actionState: input.actionState } : {}),
+        ...(input.run !== undefined ? { run: input.run } : {}),
+        ...(input.priority !== undefined ? { priority: input.priority } : {}),
+        ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.context !== undefined ? { context: input.context } : {}),
+        ...(input.attention !== undefined ? { attention: input.attention } : {}),
+        ...(input.doDate !== undefined ? { doDate: input.doDate } : {}),
+        ...(input.links !== undefined ? { links: input.links } : {}),
+        ...(input.github !== undefined ? { github: input.github } : {}),
+      };
+      const task = await requireTaskStore().create(taskInput);
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ task }),
+      };
+    },
+  );
+
+  registerTool(
+    "update_project_task",
+    {
+      title: "Update Project task",
+      description:
+        "Update a Project Task as work changes. Use actionState=done only when the work is actually complete.",
+      inputSchema: {
+        projectGroupId: z
+          .string()
+          .optional()
+          .describe("Project group id. Defaults to the current agent's Project."),
+        id: z.string().min(1),
+        title: z.string().trim().min(1).optional(),
+        body: z.string().optional(),
+        actionState: ActionStateSchema.optional(),
+        run: TaskRunModeSchema.optional(),
+        priority: TaskPrioritySchema.nullable().optional(),
+        type: z.string().nullable().optional(),
+        context: z.string().nullable().optional(),
+        attention: TaskAttentionSchema.nullable().optional(),
+        doDate: z.string().nullable().optional(),
+        links: z.array(z.string()).optional(),
+        github: z.string().nullable().optional(),
+      },
+      outputSchema: {
+        task: TaskWireSchema,
+      },
+    },
+    async ({ projectGroupId, id, ...patch }) => {
+      const resolvedProjectGroupId = await resolveTaskProjectGroupId(projectGroupId);
+      const taskPatch: UpdateTaskInput = {
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.body !== undefined ? { body: patch.body } : {}),
+        ...(patch.actionState !== undefined ? { actionState: patch.actionState } : {}),
+        ...(patch.run !== undefined ? { run: patch.run } : {}),
+        ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
+        ...(patch.type !== undefined ? { type: patch.type } : {}),
+        ...(patch.context !== undefined ? { context: patch.context } : {}),
+        ...(patch.attention !== undefined ? { attention: patch.attention } : {}),
+        ...(patch.doDate !== undefined ? { doDate: patch.doDate } : {}),
+        ...(patch.links !== undefined ? { links: patch.links } : {}),
+        ...(patch.github !== undefined ? { github: patch.github } : {}),
+      };
+      const task = await requireTaskStore().update(resolvedProjectGroupId, id, taskPatch);
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ task }),
+      };
+    },
+  );
+
+  registerTool(
     "list_terminals",
     {
       title: "List terminals",
@@ -1475,21 +1663,17 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
       const terminals = all
         ? (
             await Promise.all(
-              terminalManager.listDirectories().map(async (directory) =>
-                (await terminalManager.getTerminals(directory)).map((terminal) => ({
-                  id: terminal.id,
-                  name: terminal.name,
-                  cwd: terminal.cwd,
-                })),
-              ),
+              terminalManager
+                .listDirectories()
+                .map(async (directory) =>
+                  (await terminalManager.getTerminals(directory)).map((terminal) =>
+                    toTerminalSummary(terminal, terminalManager),
+                  ),
+                ),
             )
           ).flat()
         : (await terminalManager.getTerminals(resolveScopedCwd(cwd, { required: true }))).map(
-            (terminal) => ({
-              id: terminal.id,
-              name: terminal.name,
-              cwd: terminal.cwd,
-            }),
+            (terminal) => toTerminalSummary(terminal, terminalManager),
           );
 
       return {
@@ -1526,9 +1710,7 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
       return {
         content: [],
         structuredContent: ensureValidJson({
-          id: terminal.id,
-          name: terminal.name,
-          cwd: terminal.cwd,
+          ...toTerminalSummary(terminal, terminalManager),
         }),
       };
     },

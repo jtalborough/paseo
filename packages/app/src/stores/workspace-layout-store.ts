@@ -29,6 +29,7 @@ import {
   normalizeLayout,
   openTabInLayoutBackground,
   openTabInLayoutFocused,
+  openTabInLayoutSplit,
   reconcileWorkspaceTabs,
   removePaneFromTree,
   removeTabFromTree,
@@ -80,6 +81,15 @@ interface WorkspaceLayoutStore {
     workspaceKey: string,
     target: WorkspaceTabTarget,
     parentTabId: string,
+  ) => string | null;
+  openTabInSplit: (
+    workspaceKey: string,
+    target: WorkspaceTabTarget,
+    input: {
+      targetPaneId: string;
+      position: "left" | "right" | "top" | "bottom";
+      parentTabId?: string | null;
+    },
   ) => string | null;
   openTabInBackground: (workspaceKey: string, target: WorkspaceTabTarget) => string | null;
   closeTab: (workspaceKey: string, tabId: string) => void;
@@ -273,6 +283,53 @@ export function createWorkspaceLayoutStore(
             target: normalizedTarget,
             now: Date.now(),
           });
+
+          set((state) => {
+            const layout = attachParentTab({
+              layout: result.layout,
+              childTabId: result.tabId,
+              parentTabId: normalizedParentTabId,
+            });
+            return {
+              ...withoutFocusRestoration(state, normalizedWorkspaceKey),
+              hiddenAgentIdsByWorkspace:
+                normalizedTarget.kind !== "agent"
+                  ? state.hiddenAgentIdsByWorkspace
+                  : removeAgentIdFromWorkspaceSet(
+                      state.hiddenAgentIdsByWorkspace,
+                      normalizedWorkspaceKey,
+                      normalizedTarget.agentId,
+                    ),
+              layoutByWorkspace: {
+                ...state.layoutByWorkspace,
+                [normalizedWorkspaceKey]: layout,
+              },
+            };
+          });
+
+          return result.tabId;
+        },
+        openTabInSplit: (workspaceKey, target, input) => {
+          const normalizedWorkspaceKey = trimNonEmpty(workspaceKey);
+          const normalizedTargetPaneId = trimNonEmpty(input.targetPaneId);
+          const normalizedParentTabId = trimNonEmpty(input.parentTabId);
+          const normalizedTarget = normalizeWorkspaceTabTarget(target);
+          if (!normalizedWorkspaceKey || !normalizedTargetPaneId || !normalizedTarget) {
+            return null;
+          }
+
+          const result = openTabInLayoutSplit({
+            layout: getWorkspaceLayout(get().layoutByWorkspace, normalizedWorkspaceKey),
+            target: normalizedTarget,
+            targetPaneId: normalizedTargetPaneId,
+            position: input.position,
+            maxTreeDepth: MAX_TREE_DEPTH,
+            createNodeId: ids.createNodeId,
+            now: Date.now(),
+          });
+          if (!result) {
+            return null;
+          }
 
           set((state) => {
             const layout = attachParentTab({

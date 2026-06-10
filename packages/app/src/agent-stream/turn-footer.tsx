@@ -28,15 +28,17 @@ export const TurnFooter = memo(function TurnFooter({
   inFlightTurnStartedAt,
   host,
   strategy,
+  fullWidth = false,
 }: {
   isRunning: boolean;
   inFlightTurnStartedAt: Date | null;
   host: TurnFooterHost | null;
   strategy: TurnContentStrategy;
+  fullWidth?: boolean;
 }) {
   if (isRunning) {
     return (
-      <TurnFooterRow>
+      <TurnFooterRow fullWidth={fullWidth}>
         <RunningTurnFooter inFlightTurnStartedAt={inFlightTurnStartedAt} />
       </TurnFooterRow>
     );
@@ -50,6 +52,7 @@ export const TurnFooter = memo(function TurnFooter({
       items={host.items}
       timing={host.timing}
       startIndex={host.startIndex}
+      fullWidth={fullWidth}
     />
   );
 });
@@ -59,14 +62,16 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
   items,
   timing,
   startIndex,
+  fullWidth = false,
 }: {
   strategy: TurnContentStrategy;
   items: StreamItem[];
   timing?: TurnTiming;
   startIndex: number;
+  fullWidth?: boolean;
 }) {
   return (
-    <TurnFooterRow>
+    <TurnFooterRow fullWidth={fullWidth}>
       <CompletedTurnFooter
         strategy={strategy}
         items={items}
@@ -137,8 +142,14 @@ function CompletedTurnFooter({
   );
 }
 
-function TurnFooterRow({ children }: { children: ReactNode }) {
-  const rowStyle = useMemo(() => [stylesheet.streamItemWrapper, stylesheet.turnFooterRow], []);
+function TurnFooterRow({ children, fullWidth }: { children: ReactNode; fullWidth: boolean }) {
+  const rowStyle = useMemo(
+    () => [
+      fullWidth ? stylesheet.fullWidthStreamItemWrapper : stylesheet.streamItemWrapper,
+      stylesheet.turnFooterRow,
+    ],
+    [fullWidth],
+  );
   return <View style={rowStyle}>{children}</View>;
 }
 
@@ -147,6 +158,11 @@ const stylesheet = StyleSheet.create((theme) => ({
     width: "100%",
     maxWidth: MAX_CONTENT_WIDTH,
     alignSelf: "center",
+    paddingHorizontal: theme.spacing[2],
+  },
+  fullWidthStreamItemWrapper: {
+    width: "100%",
+    alignSelf: "stretch",
     paddingHorizontal: theme.spacing[2],
   },
   turnFooterRow: {

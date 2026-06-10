@@ -27,6 +27,7 @@ interface ProjectionOptions {
   title?: string | null;
   createdAt?: string;
   internal?: boolean;
+  projectGroupId?: string | null;
 }
 
 interface RecentProviderSessionProjectionOptions {
@@ -76,6 +77,7 @@ export function toStoredAgentRecord(
     id: agent.id,
     provider: agent.provider,
     cwd: agent.cwd,
+    projectGroupId: options?.projectGroupId,
     createdAt,
     updatedAt: agent.updatedAt.toISOString(),
     lastActivityAt: agent.updatedAt.toISOString(),
@@ -213,6 +215,7 @@ export function buildStoredAgentPayload(
     id: record.id,
     provider: record.provider,
     cwd: record.cwd,
+    projectGroupId: record.projectGroupId ?? null,
     model: record.config?.model ?? null,
     thinkingOptionId: record.config?.thinkingOptionId ?? null,
     effectiveThinkingOptionId: resolveEffectiveThinkingOptionId({
@@ -250,6 +253,7 @@ export function toAgentListItemPayload(agent: AgentSnapshotPayload): AgentListIt
     effectiveThinkingOptionId: agent.effectiveThinkingOptionId,
     status: agent.status,
     cwd: agent.cwd,
+    projectGroupId: agent.projectGroupId ?? null,
     createdAt: agent.createdAt,
     updatedAt: agent.updatedAt,
     lastUserMessageAt: agent.lastUserMessageAt,

@@ -2,15 +2,24 @@ import { describe, expect, it } from "vitest";
 import {
   buildHostAgentDetailRoute,
   buildHostNewWorkspaceRoute,
+  buildHostNewProjectAgentRoute,
+  buildHostProjectAgentsRoute,
+  buildHostProjectNotesRoute,
+  buildHostProjectFilesRoute,
+  buildHostProjectRoute,
+  buildHostProjectTasksRoute,
   buildHostRootRoute,
+  buildHostTaskRoute,
   buildHostWorkspaceOpenRoute,
   buildHostWorkspaceRoute,
+  buildHostTasksRoute,
   buildProjectSettingsRoute,
   buildProjectsSettingsRoute,
   decodeFilePathFromPathSegment,
   decodeWorkspaceIdFromPathSegment,
   encodeFilePathForPathSegment,
   encodeWorkspaceIdForPathSegment,
+  mapPathnameToServer,
   normalizeHostSectionSlug,
   parseHostAgentRouteFromPathname,
   parseHostWorkspaceOpenIntentFromPathname,
@@ -125,6 +134,13 @@ describe("workspace route parsing", () => {
     expect(buildHostNewWorkspaceRoute("local")).toBe("/h/local/new");
   });
 
+  it("builds the host Tasks route", () => {
+    expect(buildHostTasksRoute("local")).toBe("/h/local/tasks");
+    expect(buildHostTaskRoute("local", "grp_123", "task one")).toBe(
+      "/h/local/tasks?taskProjectGroupId=grp_123&taskId=task%20one",
+    );
+  });
+
   it("builds a project shortcut new workspace route with initial project context", () => {
     expect(
       buildHostNewWorkspaceRoute("local", "/repo/project", {
@@ -132,6 +148,21 @@ describe("workspace route parsing", () => {
         projectId: "project-1",
       }),
     ).toBe("/h/local/new?dir=%2Frepo%2Fproject&name=Project&projectId=project-1");
+  });
+
+  it("builds host Project home routes", () => {
+    expect(buildHostProjectRoute("local", "grp_1")).toBe("/h/local/project/grp_1");
+    expect(buildHostProjectFilesRoute("local", "grp_1")).toBe("/h/local/project/grp_1/files");
+    expect(buildHostProjectTasksRoute("local", "grp_1")).toBe("/h/local/project/grp_1/tasks");
+    expect(buildHostProjectNotesRoute("local", "grp_1")).toBe("/h/local/project/grp_1/notes");
+    expect(buildHostProjectAgentsRoute("local", "grp_1")).toBe("/h/local/project/grp_1/agents");
+    expect(buildHostNewProjectAgentRoute("local", "grp_1")).toBe(
+      "/h/local/project/grp_1/new-agent",
+    );
+  });
+
+  it("maps host Project home routes to another host", () => {
+    expect(mapPathnameToServer("/h/local/project/grp_1", "remote")).toBe("/h/remote/project/grp_1");
   });
 
   it("round-trips URL-safe IDs through encode/decode", () => {

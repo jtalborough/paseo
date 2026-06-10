@@ -353,6 +353,80 @@ describe("workspace-layout-store actions", () => {
     ]);
   });
 
+  it("opens a child tab directly into a new split pane", () => {
+    useWorkspaceLayoutIds(
+      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    );
+    const workspaceKey = createWorkspaceKey();
+    const store = workspaceLayoutStore.getState();
+
+    const agentTabId = store.openTabFocused(workspaceKey, {
+      kind: "agent",
+      agentId: "agent-one",
+    });
+    const terminalTabId = store.openTabInSplit(
+      workspaceKey,
+      {
+        kind: "terminal",
+        terminalId: "terminal-one",
+        cwd: "/repo/worktree",
+        sourceAgentId: "agent-one",
+      },
+      {
+        targetPaneId: "main",
+        position: "right",
+        parentTabId: agentTabId,
+      },
+    );
+
+    const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    const root = expectGroup(layout.root);
+    const leftPane = root.group.children[0];
+    const rightPane = root.group.children[1];
+
+    expect(agentTabId).toBe("agent_agent-one");
+    expect(terminalTabId).toBe("terminal_terminal-one");
+    expect(root.group.direction).toBe("horizontal");
+    expect(leftPane).toMatchObject({
+      kind: "pane",
+      pane: {
+        id: "main",
+        tabIds: ["agent_agent-one"],
+        focusedTabId: "agent_agent-one",
+        tabs: [
+          {
+            tabId: "agent_agent-one",
+            target: { kind: "agent", agentId: "agent-one" },
+          },
+        ],
+      },
+    });
+    expect(rightPane).toMatchObject({
+      kind: "pane",
+      pane: {
+        id: "pane_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        tabIds: ["terminal_terminal-one"],
+        focusedTabId: "terminal_terminal-one",
+        tabs: [
+          {
+            tabId: "terminal_terminal-one",
+            target: {
+              kind: "terminal",
+              terminalId: "terminal-one",
+              cwd: "/repo/worktree",
+              sourceAgentId: "agent-one",
+            },
+          },
+        ],
+      },
+    });
+    expect(layout.focusedPaneId).toBe("pane_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    expect(layout.parentTabIdByTabId).toEqual({
+      "terminal_terminal-one": "agent_agent-one",
+    });
+  });
+
   it("updates an existing file tab when opening the same path at a new line range", () => {
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();

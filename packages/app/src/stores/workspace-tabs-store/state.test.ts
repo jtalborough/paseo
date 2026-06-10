@@ -7,6 +7,7 @@ import {
   applyOpenOrFocusTab,
   applyRetargetTab,
   buildWorkspaceTabPersistenceKey,
+  buildWorkspaceTabsSurfacePersistenceKey,
   initialWorkspaceTabsCoreState,
   type WorkspaceTabsCoreState,
 } from "./state";
@@ -33,6 +34,24 @@ describe("buildWorkspaceTabPersistenceKey", () => {
         workspaceId: "  setup\\workspace\\  ",
       }),
     ).toBe("server-1:setup\\workspace\\");
+  });
+
+  it("keeps workspace surface keys byte-identical with legacy workspace keys", () => {
+    expect(
+      buildWorkspaceTabsSurfacePersistenceKey({
+        serverId: SERVER_ID,
+        scope: { kind: "workspace", workspaceId: WORKSPACE_ID },
+      }),
+    ).toBe(WORKSPACE_KEY);
+  });
+
+  it("builds a separate key namespace for project surfaces", () => {
+    expect(
+      buildWorkspaceTabsSurfacePersistenceKey({
+        serverId: SERVER_ID,
+        scope: { kind: "project", groupId: "grp_123" },
+      }),
+    ).toBe("server-1:project:grp_123");
   });
 });
 
@@ -89,21 +108,80 @@ describe("workspace-tabs-store reducers", () => {
     const ensured = applyEnsureTab(state, {
       serverId: SERVER_ID,
       workspaceId: WORKSPACE_ID,
-      target: { kind: "terminal", terminalId: "term-1" },
+      target: { kind: "terminal", terminalId: "term-1", cwd: "/repo/agent-cwd" },
       now: NOW,
     });
     state = ensured.state;
     expect(ensured.tabId).toBe("terminal_term-1");
+    expect(state.uiTabsByWorkspace[WORKSPACE_KEY]?.[0]?.target).toEqual({
+      kind: "terminal",
+      terminalId: "term-1",
+      cwd: "/repo/agent-cwd",
+    });
     expect(state.focusedTabIdByWorkspace[WORKSPACE_KEY]).toBeUndefined();
 
     const focused = applyOpenOrFocusTab(state, {
       serverId: SERVER_ID,
       workspaceId: WORKSPACE_ID,
-      target: { kind: "terminal", terminalId: "term-1" },
+      target: { kind: "terminal", terminalId: "term-1", cwd: "/repo/agent-cwd" },
       now: NOW,
     });
     expect(focused.tabId).toBe("terminal_term-1");
     expect(focused.state.focusedTabIdByWorkspace[WORKSPACE_KEY]).toBe("terminal_term-1");
+  });
+
+  it("can address tabs through an explicit workspace surface scope", () => {
+    const ensured = applyEnsureTab(emptyState(), {
+      serverId: SERVER_ID,
+      scope: { kind: "workspace", workspaceId: WORKSPACE_ID },
+      target: { kind: "terminal", terminalId: "term-1" },
+      now: NOW,
+    });
+
+    expect(ensured.tabId).toBe("terminal_term-1");
+    expect(ensured.state.uiTabsByWorkspace[WORKSPACE_KEY]).toHaveLength(1);
+  });
+
+  it("opens generic Project content tabs in the scoped Project tab namespace", () => {
+    let state = emptyState();
+    const projectScope = { kind: "project" as const, groupId: "grp_123" };
+    const projectKey = `${SERVER_ID}:project:grp_123`;
+
+    const tasks = applyEnsureTab(state, {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: { kind: "tasks", groupId: "grp_123" },
+      now: NOW,
+    });
+    state = tasks.state;
+
+    const legacyTasks = applyEnsureTab(state, {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: { kind: "project-tasks", groupId: "grp_123" },
+      now: NOW,
+    });
+    state = legacyTasks.state;
+
+    const notes = applyEnsureTab(state, {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: { kind: "notes", groupId: "grp_123" },
+      now: NOW,
+    });
+
+    expect(tasks.tabId).toBe("tasks_grp_123");
+    expect(legacyTasks.tabId).toBe("project-tasks_grp_123");
+    expect(notes.tabId).toBe("notes_grp_123");
+    expect(notes.state.uiTabsByWorkspace[projectKey]).toEqual([
+      { tabId: "tasks_grp_123", target: { kind: "tasks", groupId: "grp_123" }, createdAt: NOW },
+      {
+        tabId: "project-tasks_grp_123",
+        target: { kind: "project-tasks", groupId: "grp_123" },
+        createdAt: NOW,
+      },
+      { tabId: "notes_grp_123", target: { kind: "notes", groupId: "grp_123" }, createdAt: NOW },
+    ]);
   });
 
   it("ensureTab deduplicates by target when a retargeted tab already exists", () => {
@@ -259,6 +337,43 @@ describe("workspace-tabs-store reducers", () => {
         thinkingOptionId: null,
         featureValues: {},
       },
+    });
+  });
+
+  it("keeps Project context on draft tabs and treats it as part of the target", () => {
+    let state = emptyState();
+    const first = applyEnsureTab(state, {
+      serverId: SERVER_ID,
+      workspaceId: WORKSPACE_ID,
+      target: {
+        kind: "draft",
+        draftId: "draft-1",
+        cwd: "/repo/project-a",
+        projectGroupId: "grp_a",
+      },
+      now: NOW,
+    });
+    state = first.state;
+
+    const second = applyEnsureTab(state, {
+      serverId: SERVER_ID,
+      workspaceId: WORKSPACE_ID,
+      target: {
+        kind: "draft",
+        draftId: "draft-1",
+        cwd: "/repo/project-b",
+        projectGroupId: "grp_b",
+      },
+      now: NOW,
+    });
+
+    expect(second.tabId).toBe(first.tabId);
+    expect(second.state.uiTabsByWorkspace[WORKSPACE_KEY]).toHaveLength(1);
+    expect(second.state.uiTabsByWorkspace[WORKSPACE_KEY]?.[0]?.target).toEqual({
+      kind: "draft",
+      draftId: "draft-1",
+      cwd: "/repo/project-b",
+      projectGroupId: "grp_b",
     });
   });
 

@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -26,6 +27,9 @@ import {
   RotateCw,
   Rows2,
   Globe,
+  ListTodo,
+  NotebookText,
+  Plus,
   SquarePen,
   SquareTerminal,
   X,
@@ -44,6 +48,13 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -66,6 +77,7 @@ import { RenderProfile } from "@/utils/render-profiler";
 
 const DROPDOWN_WIDTH = 220;
 const LOADING_TAB_LABEL_SKELETON_WIDTH = 80;
+const COLLAPSED_NEW_TAB_ACTIONS_WIDTH = 560;
 
 const ThemedActivityIndicator = withUnistyles(ActivityIndicator);
 const ThemedX = withUnistyles(X);
@@ -78,14 +90,37 @@ const ThemedPencil = withUnistyles(Pencil);
 const ThemedSquarePen = withUnistyles(SquarePen);
 const ThemedSquareTerminal = withUnistyles(SquareTerminal);
 const ThemedGlobe = withUnistyles(Globe);
+const ThemedListTodo = withUnistyles(ListTodo);
+const ThemedNotebookText = withUnistyles(NotebookText);
+const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
 const ThemedRows2 = withUnistyles(Rows2);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const newAgentLeadingIcon = <ThemedSquarePen size={16} uniProps={mutedColorMapping} />;
+const newTerminalLeadingIcon = <ThemedSquareTerminal size={16} uniProps={mutedColorMapping} />;
+const newBrowserLeadingIcon = <ThemedGlobe size={16} uniProps={mutedColorMapping} />;
+const tasksLeadingIcon = <ThemedListTodo size={16} uniProps={mutedColorMapping} />;
+const notesLeadingIcon = <ThemedNotebookText size={16} uniProps={mutedColorMapping} />;
 
 function newTabActionButtonStyle({ hovered, pressed }: PressableStateCallbackType) {
   return [styles.newTabActionButton, (hovered || pressed) && styles.newTabActionButtonHovered];
+}
+
+function newTabActionButtonDisabledStyle({ hovered, pressed }: PressableStateCallbackType) {
+  return [...newTabActionButtonStyle({ hovered, pressed }), styles.newTabActionButtonDisabled];
+}
+
+function newTabMenuTriggerStyle({
+  hovered,
+  pressed,
+  open,
+}: PressableStateCallbackType & { open?: boolean }) {
+  return [
+    styles.newTabActionButton,
+    (hovered || pressed || open) && styles.newTabActionButtonHovered,
+  ];
 }
 
 function TabContextMenuItem({
@@ -105,6 +140,8 @@ function TabContextMenuItem({
         return <ThemedArrowRightToLine size={16} uniProps={mutedColorMapping} />;
       case "copy-x":
         return <ThemedCopyX size={16} uniProps={mutedColorMapping} />;
+      case "terminal":
+        return <ThemedSquareTerminal size={16} uniProps={mutedColorMapping} />;
       case "pencil":
         return <ThemedPencil size={16} uniProps={mutedColorMapping} />;
       case "x":
@@ -155,6 +192,7 @@ interface WorkspaceDesktopTabsRowProps {
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onClearTerminalOutput?: (terminalId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
   onCloseTabsToRight: (tabId: string) => Promise<void> | void;
@@ -162,7 +200,13 @@ interface WorkspaceDesktopTabsRowProps {
   onCreateDraftTab: (input: { paneId?: string }) => void;
   onCreateTerminalTab: (input: { paneId?: string }) => void;
   onCreateBrowserTab: (input: { paneId?: string }) => void;
+  onCreateTasksTab?: (input: { paneId?: string }) => void;
+  onCreateNotesTab?: (input: { paneId?: string }) => void;
+  showCreateAgentTab?: boolean;
+  showCreateTerminalTab?: boolean;
   showCreateBrowserTab?: boolean;
+  showCreateTasksTab?: boolean;
+  showCreateNotesTab?: boolean;
   disableCreateTerminal?: boolean;
   isWaitingOnTerminalReadiness?: boolean;
   onReorderTabs: (nextTabs: WorkspaceTabDescriptor[]) => void;
@@ -174,6 +218,45 @@ interface WorkspaceDesktopTabsRowProps {
   showPaneSplitActions?: boolean;
 }
 
+interface WorkspaceDesktopTabsRowActionsProps {
+  paneId?: string;
+  onLayout: (event: LayoutChangeEvent) => void;
+  onCreateDraftTab: (input: { paneId?: string }) => void;
+  onCreateTerminalTab: (input: { paneId?: string }) => void;
+  onCreateBrowserTab: (input: { paneId?: string }) => void;
+  onCreateTasksTab?: (input: { paneId?: string }) => void;
+  onCreateNotesTab?: (input: { paneId?: string }) => void;
+  showCreateAgentTab: boolean;
+  showCreateTerminalTab: boolean;
+  showCreateBrowserTab: boolean;
+  showCreateTasksTab: boolean;
+  showCreateNotesTab: boolean;
+  disableCreateTerminal: boolean;
+  isWaitingOnTerminalReadiness: boolean;
+  collapseCreateActions: boolean;
+  showPaneSplitActions: boolean;
+  onSplitRight: () => void;
+  onSplitDown: () => void;
+}
+
+interface NewTabActionsProps {
+  paneId?: string;
+  onCreateDraftTab: (input: { paneId?: string }) => void;
+  onCreateTerminalTab: (input: { paneId?: string }) => void;
+  onCreateBrowserTab: (input: { paneId?: string }) => void;
+  onCreateTasksTab?: (input: { paneId?: string }) => void;
+  onCreateNotesTab?: (input: { paneId?: string }) => void;
+  showCreateAgentTab: boolean;
+  showCreateTerminalTab: boolean;
+  showCreateBrowserTab: boolean;
+  showCreateTasksTab: boolean;
+  showCreateNotesTab: boolean;
+  disableCreateTerminal: boolean;
+  isWaitingOnTerminalReadiness: boolean;
+}
+
+type NewTabActionIcon = "agent" | "terminal" | "browser" | "tasks" | "notes";
+
 function getFallbackTabLabel(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "draft") {
     return "New Agent";
@@ -184,10 +267,405 @@ function getFallbackTabLabel(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "terminal") {
     return "Terminal";
   }
+  if (tab.target.kind === "browser") {
+    return "Browser";
+  }
   if (tab.target.kind === "file") {
     return tab.target.path.split("/").findLast(Boolean) ?? tab.target.path;
   }
+  if (tab.target.kind === "project-overview") {
+    return "Overview";
+  }
+  if (tab.target.kind === "tasks") {
+    return "Tasks";
+  }
+  if (tab.target.kind === "notes") {
+    return "Notes";
+  }
+  if (tab.target.kind === "project-tasks") {
+    return "Tasks";
+  }
+  if (tab.target.kind === "project-notes") {
+    return "Notes";
+  }
+  if (tab.target.kind === "project-agents") {
+    return "Agents";
+  }
+  if (tab.target.kind === "project-files") {
+    return "Files";
+  }
   return "Agent";
+}
+
+function getNewTabActionIcon(icon: NewTabActionIcon) {
+  switch (icon) {
+    case "agent":
+      return <ThemedSquarePen size={14} uniProps={mutedColorMapping} />;
+    case "terminal":
+      return <ThemedSquareTerminal size={14} uniProps={mutedColorMapping} />;
+    case "browser":
+      return <ThemedGlobe size={14} uniProps={mutedColorMapping} />;
+    case "tasks":
+      return <ThemedListTodo size={14} uniProps={mutedColorMapping} />;
+    case "notes":
+      return <ThemedNotebookText size={14} uniProps={mutedColorMapping} />;
+  }
+}
+
+function NewTabActionButton({
+  testID,
+  label,
+  tooltipLabel = label,
+  shortcutKeys,
+  icon,
+  disabled,
+  onPress,
+}: {
+  testID: string;
+  label: string;
+  tooltipLabel?: string;
+  shortcutKeys?: ComponentProps<typeof Shortcut>["chord"] | null;
+  icon: NewTabActionIcon;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger
+        testID={testID}
+        disabled={disabled}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={disabled ? newTabActionButtonDisabledStyle : newTabActionButtonStyle}
+      >
+        {getNewTabActionIcon(icon)}
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="center" offset={8}>
+        <View style={styles.newTabTooltipRow}>
+          <Text style={styles.newTabTooltipText}>{tooltipLabel}</Text>
+          {shortcutKeys ? (
+            <Shortcut chord={shortcutKeys} style={styles.newTabTooltipShortcut} />
+          ) : null}
+        </View>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ExpandedNewTabActions({
+  paneId,
+  onCreateDraftTab,
+  onCreateTerminalTab,
+  onCreateBrowserTab,
+  onCreateTasksTab,
+  onCreateNotesTab,
+  showCreateAgentTab,
+  showCreateTerminalTab,
+  showCreateBrowserTab,
+  showCreateTasksTab,
+  showCreateNotesTab,
+  disableCreateTerminal,
+  isWaitingOnTerminalReadiness,
+}: NewTabActionsProps) {
+  const newTabKeys = useShortcutKeys("workspace-tab-new");
+  const newTerminalKeys = useShortcutKeys("workspace-terminal-new");
+  const terminalDisabled = disableCreateTerminal || isWaitingOnTerminalReadiness;
+  const handleCreateAgentTab = useCallback(() => {
+    onCreateDraftTab({ paneId });
+  }, [onCreateDraftTab, paneId]);
+  const handleCreateTerminal = useCallback(() => {
+    onCreateTerminalTab({ paneId });
+  }, [onCreateTerminalTab, paneId]);
+  const handleCreateBrowser = useCallback(() => {
+    onCreateBrowserTab({ paneId });
+  }, [onCreateBrowserTab, paneId]);
+  const handleCreateTasks = useCallback(() => {
+    onCreateTasksTab?.({ paneId });
+  }, [onCreateTasksTab, paneId]);
+  const handleCreateNotes = useCallback(() => {
+    onCreateNotesTab?.({ paneId });
+  }, [onCreateNotesTab, paneId]);
+
+  return (
+    <>
+      {showCreateAgentTab ? (
+        <NewTabActionButton
+          testID="workspace-new-agent-tab"
+          label="New agent tab"
+          tooltipLabel="New agent"
+          shortcutKeys={newTabKeys}
+          icon="agent"
+          onPress={handleCreateAgentTab}
+        />
+      ) : null}
+      {showCreateTerminalTab ? (
+        <NewTabActionButton
+          testID="workspace-new-terminal"
+          label="New terminal"
+          tooltipLabel={isWaitingOnTerminalReadiness ? "Preparing terminal..." : "New terminal"}
+          shortcutKeys={newTerminalKeys}
+          icon="terminal"
+          disabled={terminalDisabled}
+          onPress={handleCreateTerminal}
+        />
+      ) : null}
+      {showCreateBrowserTab ? (
+        <NewTabActionButton
+          testID="workspace-new-browser"
+          label="New browser tab"
+          tooltipLabel="New browser"
+          icon="browser"
+          onPress={handleCreateBrowser}
+        />
+      ) : null}
+      {showCreateTasksTab ? (
+        <NewTabActionButton
+          testID="workspace-new-tasks"
+          label="New tasks tab"
+          tooltipLabel="Tasks"
+          icon="tasks"
+          onPress={handleCreateTasks}
+        />
+      ) : null}
+      {showCreateNotesTab ? (
+        <NewTabActionButton
+          testID="workspace-new-notes"
+          label="New notes tab"
+          tooltipLabel="Notes"
+          icon="notes"
+          onPress={handleCreateNotes}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function NewTabDropdown({
+  paneId,
+  onCreateDraftTab,
+  onCreateTerminalTab,
+  onCreateBrowserTab,
+  onCreateTasksTab,
+  onCreateNotesTab,
+  showCreateAgentTab,
+  showCreateTerminalTab,
+  showCreateBrowserTab,
+  showCreateTasksTab,
+  showCreateNotesTab,
+  disableCreateTerminal,
+  isWaitingOnTerminalReadiness,
+}: NewTabActionsProps) {
+  const newTabKeys = useShortcutKeys("workspace-tab-new");
+  const newTerminalKeys = useShortcutKeys("workspace-terminal-new");
+  const terminalDisabled = disableCreateTerminal || isWaitingOnTerminalReadiness;
+  const handleCreateAgentTab = useCallback(() => {
+    onCreateDraftTab({ paneId });
+  }, [onCreateDraftTab, paneId]);
+  const handleCreateTerminal = useCallback(() => {
+    onCreateTerminalTab({ paneId });
+  }, [onCreateTerminalTab, paneId]);
+  const handleCreateBrowser = useCallback(() => {
+    onCreateBrowserTab({ paneId });
+  }, [onCreateBrowserTab, paneId]);
+  const handleCreateTasks = useCallback(() => {
+    onCreateTasksTab?.({ paneId });
+  }, [onCreateTasksTab, paneId]);
+  const handleCreateNotes = useCallback(() => {
+    onCreateNotesTab?.({ paneId });
+  }, [onCreateNotesTab, paneId]);
+  const newAgentShortcut = useMemo(
+    () =>
+      newTabKeys ? <Shortcut chord={newTabKeys} style={styles.newTabTooltipShortcut} /> : null,
+    [newTabKeys],
+  );
+  const newTerminalShortcut = useMemo(
+    () =>
+      newTerminalKeys ? (
+        <Shortcut chord={newTerminalKeys} style={styles.newTabTooltipShortcut} />
+      ) : null,
+    [newTerminalKeys],
+  );
+  const hasCreateActions =
+    showCreateAgentTab ||
+    showCreateTerminalTab ||
+    showCreateBrowserTab ||
+    showCreateTasksTab ||
+    showCreateNotesTab;
+  const showProjectContentSeparator =
+    (showCreateTasksTab || showCreateNotesTab) &&
+    (showCreateAgentTab || showCreateTerminalTab || showCreateBrowserTab);
+
+  if (!hasCreateActions) {
+    return null;
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        testID="workspace-new-tab-menu"
+        accessibilityRole="button"
+        accessibilityLabel="New tab"
+        style={newTabMenuTriggerStyle}
+      >
+        <ThemedPlus size={14} uniProps={mutedColorMapping} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" width={220}>
+        {showCreateAgentTab ? (
+          <DropdownMenuItem
+            testID="workspace-new-agent-tab"
+            leading={newAgentLeadingIcon}
+            trailing={newAgentShortcut}
+            onSelect={handleCreateAgentTab}
+          >
+            New agent
+          </DropdownMenuItem>
+        ) : null}
+        {showCreateTerminalTab ? (
+          <DropdownMenuItem
+            testID="workspace-new-terminal"
+            disabled={terminalDisabled}
+            leading={newTerminalLeadingIcon}
+            trailing={newTerminalShortcut}
+            tooltip={isWaitingOnTerminalReadiness ? "Preparing terminal..." : undefined}
+            onSelect={handleCreateTerminal}
+          >
+            {isWaitingOnTerminalReadiness ? "Preparing terminal..." : "New terminal"}
+          </DropdownMenuItem>
+        ) : null}
+        {showCreateBrowserTab ? (
+          <DropdownMenuItem
+            testID="workspace-new-browser"
+            leading={newBrowserLeadingIcon}
+            onSelect={handleCreateBrowser}
+          >
+            New browser
+          </DropdownMenuItem>
+        ) : null}
+        {showProjectContentSeparator ? <DropdownMenuSeparator /> : null}
+        {showCreateTasksTab ? (
+          <DropdownMenuItem
+            testID="workspace-new-tasks"
+            leading={tasksLeadingIcon}
+            onSelect={handleCreateTasks}
+          >
+            Tasks
+          </DropdownMenuItem>
+        ) : null}
+        {showCreateNotesTab ? (
+          <DropdownMenuItem
+            testID="workspace-new-notes"
+            leading={notesLeadingIcon}
+            onSelect={handleCreateNotes}
+          >
+            Notes
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function WorkspaceDesktopTabsRowActions({
+  paneId,
+  onLayout,
+  onCreateDraftTab,
+  onCreateTerminalTab,
+  onCreateBrowserTab,
+  onCreateTasksTab,
+  onCreateNotesTab,
+  showCreateAgentTab,
+  showCreateTerminalTab,
+  showCreateBrowserTab,
+  showCreateTasksTab,
+  showCreateNotesTab,
+  disableCreateTerminal,
+  isWaitingOnTerminalReadiness,
+  collapseCreateActions,
+  showPaneSplitActions,
+  onSplitRight,
+  onSplitDown,
+}: WorkspaceDesktopTabsRowActionsProps) {
+  const splitRightKeys = useShortcutKeys("workspace-pane-split-right");
+  const splitDownKeys = useShortcutKeys("workspace-pane-split-down");
+
+  return (
+    <View style={styles.tabsActions} onLayout={onLayout}>
+      {collapseCreateActions ? (
+        <NewTabDropdown
+          paneId={paneId}
+          onCreateDraftTab={onCreateDraftTab}
+          onCreateTerminalTab={onCreateTerminalTab}
+          onCreateBrowserTab={onCreateBrowserTab}
+          onCreateTasksTab={onCreateTasksTab}
+          onCreateNotesTab={onCreateNotesTab}
+          showCreateAgentTab={showCreateAgentTab}
+          showCreateTerminalTab={showCreateTerminalTab}
+          showCreateBrowserTab={showCreateBrowserTab}
+          showCreateTasksTab={showCreateTasksTab}
+          showCreateNotesTab={showCreateNotesTab}
+          disableCreateTerminal={disableCreateTerminal}
+          isWaitingOnTerminalReadiness={isWaitingOnTerminalReadiness}
+        />
+      ) : (
+        <ExpandedNewTabActions
+          paneId={paneId}
+          onCreateDraftTab={onCreateDraftTab}
+          onCreateTerminalTab={onCreateTerminalTab}
+          onCreateBrowserTab={onCreateBrowserTab}
+          onCreateTasksTab={onCreateTasksTab}
+          onCreateNotesTab={onCreateNotesTab}
+          showCreateAgentTab={showCreateAgentTab}
+          showCreateTerminalTab={showCreateTerminalTab}
+          showCreateBrowserTab={showCreateBrowserTab}
+          showCreateTasksTab={showCreateTasksTab}
+          showCreateNotesTab={showCreateNotesTab}
+          disableCreateTerminal={disableCreateTerminal}
+          isWaitingOnTerminalReadiness={isWaitingOnTerminalReadiness}
+        />
+      )}
+      {showPaneSplitActions ? (
+        <>
+          <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+            <TooltipTrigger
+              onPress={onSplitRight}
+              accessibilityRole="button"
+              accessibilityLabel="Split pane right"
+              style={newTabActionButtonStyle}
+            >
+              <ThemedColumns2 size={14} uniProps={mutedColorMapping} />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="center" offset={8}>
+              <View style={styles.newTabTooltipRow}>
+                <Text style={styles.newTabTooltipText}>Split pane right</Text>
+                {splitRightKeys ? (
+                  <Shortcut chord={splitRightKeys} style={styles.newTabTooltipShortcut} />
+                ) : null}
+              </View>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+            <TooltipTrigger
+              onPress={onSplitDown}
+              accessibilityRole="button"
+              accessibilityLabel="Split pane down"
+              style={newTabActionButtonStyle}
+            >
+              <ThemedRows2 size={14} uniProps={mutedColorMapping} />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="center" offset={8}>
+              <View style={styles.newTabTooltipRow}>
+                <Text style={styles.newTabTooltipText}>Split pane down</Text>
+                {splitDownKeys ? (
+                  <Shortcut chord={splitDownKeys} style={styles.newTabTooltipShortcut} />
+                ) : null}
+              </View>
+            </TooltipContent>
+          </Tooltip>
+        </>
+      ) : null}
+    </View>
+  );
 }
 
 function useMiddleClickClose(onClose: () => void) {
@@ -466,6 +944,7 @@ export function WorkspaceDesktopTabsRow({
   onCopyResumeCommand,
   onCopyAgentId,
   onReloadAgent,
+  onClearTerminalOutput,
   onRenameTab,
   onCloseTabsToLeft,
   onCloseTabsToRight,
@@ -473,7 +952,13 @@ export function WorkspaceDesktopTabsRow({
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateTasksTab,
+  onCreateNotesTab,
+  showCreateAgentTab = true,
+  showCreateTerminalTab = true,
   showCreateBrowserTab = false,
+  showCreateTasksTab = false,
+  showCreateNotesTab = false,
   disableCreateTerminal = false,
   isWaitingOnTerminalReadiness = false,
   onReorderTabs,
@@ -484,12 +969,10 @@ export function WorkspaceDesktopTabsRow({
   tabDropPreviewIndex = null,
   showPaneSplitActions = true,
 }: WorkspaceDesktopTabsRowProps) {
-  const newTabKeys = useShortcutKeys("workspace-tab-new");
-  const newTerminalKeys = useShortcutKeys("workspace-terminal-new");
-  const splitRightKeys = useShortcutKeys("workspace-pane-split-right");
-  const splitDownKeys = useShortcutKeys("workspace-pane-split-down");
   const [tabsContainerWidth, setTabsContainerWidth] = useState<number>(0);
   const [tabsActionsWidth, setTabsActionsWidth] = useState<number>(0);
+  const collapseCreateActions =
+    tabsContainerWidth > 0 && tabsContainerWidth < COLLAPSED_NEW_TAB_ACTIONS_WIDTH;
 
   const handleTabsContainerLayout = useCallback((event: LayoutChangeEvent) => {
     const nextWidth = Math.round(event.nativeEvent.layout.width);
@@ -547,28 +1030,6 @@ export function WorkspaceDesktopTabsRow({
     });
   }, [paneId]);
 
-  const handleCreateAgentTab = useCallback(() => {
-    onCreateDraftTab({ paneId });
-  }, [onCreateDraftTab, paneId]);
-
-  const handleCreateTerminal = useCallback(() => {
-    onCreateTerminalTab({ paneId });
-  }, [onCreateTerminalTab, paneId]);
-
-  const handleCreateBrowser = useCallback(() => {
-    onCreateBrowserTab({ paneId });
-  }, [onCreateBrowserTab, paneId]);
-
-  const terminalDisabled = disableCreateTerminal || isWaitingOnTerminalReadiness;
-  const newTerminalActionButtonStyle = useCallback(
-    ({ hovered, pressed }: PressableStateCallbackType) => [
-      styles.newTabActionButton,
-      terminalDisabled && styles.newTabActionButtonDisabled,
-      (hovered || pressed) && styles.newTabActionButtonHovered,
-    ],
-    [terminalDisabled],
-  );
-
   const renderTab = useCallback(
     ({
       item,
@@ -599,6 +1060,7 @@ export function WorkspaceDesktopTabsRow({
           onCopyResumeCommand={onCopyResumeCommand}
           onCopyAgentId={onCopyAgentId}
           onReloadAgent={onReloadAgent}
+          onClearTerminalOutput={onClearTerminalOutput}
           onRenameTab={onRenameTab}
           onCloseTabsToLeft={onCloseTabsToLeft}
           onCloseTabsToRight={onCloseTabsToRight}
@@ -628,6 +1090,7 @@ export function WorkspaceDesktopTabsRow({
       onCloseTabsToRight,
       onCopyAgentId,
       onCopyResumeCommand,
+      onClearTerminalOutput,
       onNavigateTab,
       onReloadAgent,
       onRenameTab,
@@ -673,109 +1136,26 @@ export function WorkspaceDesktopTabsRow({
           renderItem={renderTab}
         />
       </ScrollView>
-      <View style={styles.tabsActions} onLayout={handleTabsActionsLayout}>
-        <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-          <TooltipTrigger
-            testID="workspace-new-agent-tab"
-            onPress={handleCreateAgentTab}
-            accessibilityRole="button"
-            accessibilityLabel="New agent tab"
-            style={newTabActionButtonStyle}
-          >
-            <ThemedSquarePen size={14} uniProps={mutedColorMapping} />
-          </TooltipTrigger>
-          <TooltipContent side="bottom" align="center" offset={8}>
-            <View style={styles.newTabTooltipRow}>
-              <Text style={styles.newTabTooltipText}>New agent tab</Text>
-              {newTabKeys ? (
-                <Shortcut chord={newTabKeys} style={styles.newTabTooltipShortcut} />
-              ) : null}
-            </View>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-          <TooltipTrigger
-            testID="workspace-new-terminal"
-            onPress={handleCreateTerminal}
-            disabled={terminalDisabled}
-            accessibilityRole="button"
-            accessibilityLabel={
-              isWaitingOnTerminalReadiness ? "Preparing terminal tab" : "New terminal tab"
-            }
-            style={newTerminalActionButtonStyle}
-          >
-            <ThemedSquareTerminal size={14} uniProps={mutedColorMapping} />
-          </TooltipTrigger>
-          <TooltipContent side="bottom" align="center" offset={8}>
-            <View style={styles.newTabTooltipRow}>
-              <Text style={styles.newTabTooltipText}>
-                {isWaitingOnTerminalReadiness ? "Preparing terminal..." : "New terminal tab"}
-              </Text>
-              {newTerminalKeys ? (
-                <Shortcut chord={newTerminalKeys} style={styles.newTabTooltipShortcut} />
-              ) : null}
-            </View>
-          </TooltipContent>
-        </Tooltip>
-        {showCreateBrowserTab ? (
-          <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-            <TooltipTrigger
-              testID="workspace-new-browser"
-              onPress={handleCreateBrowser}
-              accessibilityRole="button"
-              accessibilityLabel="New browser tab"
-              style={newTabActionButtonStyle}
-            >
-              <ThemedGlobe size={14} uniProps={mutedColorMapping} />
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="center" offset={8}>
-              <View style={styles.newTabTooltipRow}>
-                <Text style={styles.newTabTooltipText}>New browser tab</Text>
-              </View>
-            </TooltipContent>
-          </Tooltip>
-        ) : null}
-        {showPaneSplitActions ? (
-          <>
-            <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-              <TooltipTrigger
-                onPress={onSplitRight}
-                accessibilityRole="button"
-                accessibilityLabel="Split pane right"
-                style={newTabActionButtonStyle}
-              >
-                <ThemedColumns2 size={14} uniProps={mutedColorMapping} />
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="center" offset={8}>
-                <View style={styles.newTabTooltipRow}>
-                  <Text style={styles.newTabTooltipText}>Split pane right</Text>
-                  {splitRightKeys ? (
-                    <Shortcut chord={splitRightKeys} style={styles.newTabTooltipShortcut} />
-                  ) : null}
-                </View>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-              <TooltipTrigger
-                onPress={onSplitDown}
-                accessibilityRole="button"
-                accessibilityLabel="Split pane down"
-                style={newTabActionButtonStyle}
-              >
-                <ThemedRows2 size={14} uniProps={mutedColorMapping} />
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="center" offset={8}>
-                <View style={styles.newTabTooltipRow}>
-                  <Text style={styles.newTabTooltipText}>Split pane down</Text>
-                  {splitDownKeys ? (
-                    <Shortcut chord={splitDownKeys} style={styles.newTabTooltipShortcut} />
-                  ) : null}
-                </View>
-              </TooltipContent>
-            </Tooltip>
-          </>
-        ) : null}
-      </View>
+      <WorkspaceDesktopTabsRowActions
+        paneId={paneId}
+        onLayout={handleTabsActionsLayout}
+        onCreateDraftTab={onCreateDraftTab}
+        onCreateTerminalTab={onCreateTerminalTab}
+        onCreateBrowserTab={onCreateBrowserTab}
+        onCreateTasksTab={onCreateTasksTab}
+        onCreateNotesTab={onCreateNotesTab}
+        showCreateAgentTab={showCreateAgentTab}
+        showCreateTerminalTab={showCreateTerminalTab}
+        showCreateBrowserTab={showCreateBrowserTab}
+        showCreateTasksTab={showCreateTasksTab}
+        showCreateNotesTab={showCreateNotesTab}
+        disableCreateTerminal={disableCreateTerminal}
+        isWaitingOnTerminalReadiness={isWaitingOnTerminalReadiness}
+        collapseCreateActions={collapseCreateActions}
+        showPaneSplitActions={showPaneSplitActions}
+        onSplitRight={onSplitRight}
+        onSplitDown={onSplitDown}
+      />
     </View>
   );
 
@@ -792,6 +1172,7 @@ function ResolvedDesktopTabChip({
   onCopyResumeCommand,
   onCopyAgentId,
   onReloadAgent,
+  onClearTerminalOutput,
   onRenameTab,
   onCloseTabsToLeft,
   onCloseTabsToRight,
@@ -816,6 +1197,7 @@ function ResolvedDesktopTabChip({
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onClearTerminalOutput?: (terminalId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
   onCloseTabsToRight: (tabId: string) => Promise<void> | void;
@@ -839,6 +1221,7 @@ function ResolvedDesktopTabChip({
         onCopyResumeCommand,
         onCopyAgentId,
         onReloadAgent,
+        onClearTerminalOutput,
         onRenameTab,
         onCloseTab,
         onCloseTabsToLeft,
@@ -854,6 +1237,7 @@ function ResolvedDesktopTabChip({
       onCloseTabsToRight,
       onCopyAgentId,
       onCopyResumeCommand,
+      onClearTerminalOutput,
       onReloadAgent,
       onRenameTab,
       tabCount,

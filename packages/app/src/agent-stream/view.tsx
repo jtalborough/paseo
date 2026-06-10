@@ -83,6 +83,7 @@ import { recordRenderProfileReasons } from "@/utils/render-profiler";
 function renderLiveAuxiliaryNode(input: {
   pendingPermissions: ReactNode;
   turnFooter: ReactNode;
+  fullWidth: boolean;
 }): ReactNode {
   if (!input.pendingPermissions && !input.turnFooter) {
     return null;
@@ -91,7 +92,9 @@ function renderLiveAuxiliaryNode(input: {
     <>
       {input.turnFooter}
       {input.pendingPermissions ? (
-        <View style={stylesheet.contentWrapper}>
+        <View
+          style={input.fullWidth ? stylesheet.fullWidthContentWrapper : stylesheet.contentWrapper}
+        >
           <View style={stylesheet.listHeaderContent}>{input.pendingPermissions}</View>
         </View>
       ) : null}
@@ -119,6 +122,7 @@ function renderStreamItemWithTurnFooter(input: {
   content: ReactNode;
   layoutItem: StreamLayoutItem;
   strategy: TurnContentStrategy;
+  fullWidth: boolean;
 }): ReactNode {
   if (!input.content) {
     return null;
@@ -131,10 +135,13 @@ function renderStreamItemWithTurnFooter(input: {
       items={footerHost.items}
       timing={footerHost.timing}
       startIndex={footerHost.startIndex}
+      fullWidth={input.fullWidth}
     />
   ) : null;
   const content = (
-    <StreamItemWrapper gapBelow={input.layoutItem.gapBelow}>{input.content}</StreamItemWrapper>
+    <StreamItemWrapper gapBelow={input.layoutItem.gapBelow} fullWidth={input.fullWidth}>
+      {input.content}
+    </StreamItemWrapper>
   );
 
   if (input.layoutItem.frameOrder === "footer-then-content") {
@@ -214,6 +221,7 @@ export interface AgentStreamViewProps {
   isAuthoritativeHistoryReady?: boolean;
   toast?: ToastApi | null;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
+  fullWidth?: boolean;
 }
 
 const AGENT_CAPABILITY_FLAG_KEYS: (keyof AgentCapabilityFlags)[] = [
@@ -242,6 +250,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       isAuthoritativeHistoryReady = true,
       toast,
       onOpenWorkspaceFile,
+      fullWidth = false,
     },
     ref,
   ) {
@@ -588,9 +597,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           content,
           layoutItem,
           strategy: streamRenderStrategy,
+          fullWidth,
         });
       },
-      [renderStreamItemContent, streamRenderStrategy],
+      [fullWidth, renderStreamItemContent, streamRenderStrategy],
     );
 
     const pendingPermissionItems = useMemo(
@@ -615,12 +625,14 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             inFlightTurnStartedAt={baseRenderModel.turnTiming.runningStartedAt}
             host={bottomTurnFooterHost}
             strategy={streamRenderStrategy}
+            fullWidth={fullWidth}
           />
         ) : null,
       [
         showRunningTurnFooter,
         baseRenderModel.turnTiming.runningStartedAt,
         bottomTurnFooterHost,
+        fullWidth,
         streamRenderStrategy,
       ],
     );
@@ -635,7 +647,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       };
     }, [baseRenderModel, pendingPermissionsNode, turnFooterNode]);
 
-    const emptyStateStyle = useMemo(() => [stylesheet.emptyState, stylesheet.contentWrapper], []);
+    const contentWrapperStyle = fullWidth
+      ? stylesheet.fullWidthContentWrapper
+      : stylesheet.contentWrapper;
+    const emptyStateStyle = useMemo(
+      () => [stylesheet.emptyState, contentWrapperStyle],
+      [contentWrapperStyle],
+    );
     const listEmptyComponent = useMemo(
       () => renderListEmptyComponent({ renderModel, emptyStateStyle }),
       [renderModel, emptyStateStyle],
@@ -689,8 +707,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       return renderLiveAuxiliaryNode({
         pendingPermissions: auxiliary.pendingPermissions,
         turnFooter: auxiliary.turnFooter,
+        fullWidth,
       });
-    }, [auxiliary.pendingPermissions, auxiliary.turnFooter]);
+    }, [auxiliary.pendingPermissions, auxiliary.turnFooter, fullWidth]);
 
     const renderers = useMemo<StreamSegmentRenderers>(
       () => ({
@@ -816,6 +835,7 @@ function agentStreamViewPropsEqual(
   }
   if (left.toast !== right.toast) reasons.push("toast");
   if (left.onOpenWorkspaceFile !== right.onOpenWorkspaceFile) reasons.push("onOpenWorkspaceFile");
+  if (left.fullWidth !== right.fullWidth) reasons.push("fullWidth");
   recordRenderProfileReasons(`AgentStreamView:${right.agentId}`, reasons);
   return reasons.length === 0;
 }
@@ -1121,6 +1141,11 @@ const stylesheet = StyleSheet.create((theme) => ({
     alignSelf: "center",
     paddingHorizontal: theme.spacing[2],
   },
+  fullWidthContentWrapper: {
+    width: "100%",
+    alignSelf: "stretch",
+    paddingHorizontal: theme.spacing[2],
+  },
   listContentContainer: {
     paddingVertical: 0,
     flexGrow: 1,
@@ -1140,6 +1165,11 @@ const stylesheet = StyleSheet.create((theme) => ({
     width: "100%",
     maxWidth: MAX_CONTENT_WIDTH,
     alignSelf: "center",
+    paddingHorizontal: theme.spacing[2],
+  },
+  fullWidthStreamItemWrapper: {
+    width: "100%",
+    alignSelf: "stretch",
     paddingHorizontal: theme.spacing[2],
   },
   emptyState: {
@@ -1277,13 +1307,17 @@ const optionTextPrimaryStyle = [permissionStyles.optionText, permissionStyles.op
 
 interface StreamItemWrapperProps {
   gapBelow: number;
+  fullWidth: boolean;
   children: ReactNode;
 }
 
-function StreamItemWrapper({ gapBelow, children }: StreamItemWrapperProps) {
+function StreamItemWrapper({ gapBelow, fullWidth, children }: StreamItemWrapperProps) {
   const wrapperStyle = useMemo(
-    () => [stylesheet.streamItemWrapper, { marginBottom: gapBelow }],
-    [gapBelow],
+    () => [
+      fullWidth ? stylesheet.fullWidthStreamItemWrapper : stylesheet.streamItemWrapper,
+      { marginBottom: gapBelow },
+    ],
+    [fullWidth, gapBelow],
   );
   return <View style={wrapperStyle}>{children}</View>;
 }

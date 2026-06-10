@@ -7,6 +7,7 @@ import { SyncedLoader } from "@/components/synced-loader";
 import { ensurePanelsRegistered } from "@/panels/register-panels";
 import { getPanelRegistration } from "@/panels/panel-registry";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
+import { workspaceSurfaceScope } from "@/surfaces/surface-scope";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { isEmphasizedStatusDotBucket } from "@/utils/status-dot-color";
 import { shouldRenderSyncedStatusLoader } from "@/utils/status-loader";
@@ -68,8 +69,11 @@ function WorkspaceTabPresentationResolverInner({
   workspaceId,
   children,
 }: WorkspaceTabPresentationResolverInnerProps): ReactElement {
+  const scope = workspaceSurfaceScope(workspaceId);
+  invariant(scope, "Workspace tab presentation requires a workspace scope");
   const descriptor = registration.useDescriptor(tab.target as never, {
     serverId,
+    scope,
     workspaceId,
   });
 

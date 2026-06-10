@@ -37,11 +37,7 @@ import {
   useWorkspaceAttachmentScopeKey,
 } from "@/attachments/workspace-attachments-store";
 import type { UserMessageImageAttachment } from "@/types/stream";
-import {
-  COMPACT_FORM_FACTOR_WIDTH,
-  MAX_CONTENT_WIDTH,
-  useIsCompactFormFactor,
-} from "@/constants/layout";
+import { COMPACT_FORM_FACTOR_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
 import type { WorkspaceDraftTabSetup } from "@/stores/workspace-tabs-store";
 
@@ -121,6 +117,7 @@ async function submitDraftCreateRequest(input: {
   client: DaemonClient | null;
   workspaceDirectory: string | null;
   workspaceExecutionAuthority: { workspaceId: string } | null;
+  projectGroupId: string | null;
   autoSubmitConfig: AutoSubmitConfig | null;
   composerState: {
     selectedProvider: string | null;
@@ -139,6 +136,7 @@ async function submitDraftCreateRequest(input: {
     client,
     workspaceDirectory,
     workspaceExecutionAuthority,
+    projectGroupId,
     autoSubmitConfig,
     composerState,
   } = input;
@@ -173,6 +171,7 @@ async function submitDraftCreateRequest(input: {
   const result = await client.createAgent({
     config,
     workspaceId: workspaceExecutionAuthority.workspaceId,
+    ...(projectGroupId ? { projectGroupId } : {}),
     ...(text ? { initialPrompt: text } : {}),
     clientMessageId: attempt.clientMessageId,
     ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
@@ -190,6 +189,7 @@ function buildDraftAgentSnapshot(input: {
   serverId: string;
   tabId: string;
   workspaceDirectory: string | null;
+  projectGroupId: string | null;
   autoSubmitConfig: AutoSubmitConfig | null;
   composerState: {
     effectiveModelId: string | null;
@@ -200,7 +200,15 @@ function buildDraftAgentSnapshot(input: {
     agentControls: { features?: Agent["features"] };
   };
 }): Agent {
-  const { attempt, serverId, tabId, workspaceDirectory, autoSubmitConfig, composerState } = input;
+  const {
+    attempt,
+    serverId,
+    tabId,
+    workspaceDirectory,
+    projectGroupId,
+    autoSubmitConfig,
+    composerState,
+  } = input;
   invariant(workspaceDirectory, "Workspace directory is required");
   const now = attempt.timestamp;
   const model = autoSubmitConfig?.model ?? (composerState.effectiveModelId || null);
@@ -232,6 +240,7 @@ function buildDraftAgentSnapshot(input: {
     runtimeInfo: { provider, sessionId: null, model, modeId },
     title: "Agent",
     cwd: workspaceDirectory,
+    projectGroupId,
     model,
     features: composerState.agentControls.features,
     thinkingOptionId,
@@ -261,8 +270,12 @@ function buildDraftInitialValues(input: {
 
 function resolveDraftWorkingDirectory(input: {
   workspaceDirectory: string | null;
+  initialCwd: string | null;
   initialSetup: WorkspaceDraftTabSetup | null;
 }): string | null {
+  if (input.initialCwd) {
+    return input.initialCwd;
+  }
   if (input.initialSetup) {
     return input.initialSetup.cwd;
   }
@@ -282,6 +295,8 @@ interface WorkspaceDraftAgentTabProps {
   tabId: string;
   draftId: string;
   initialSetup?: WorkspaceDraftTabSetup;
+  initialCwd?: string | null;
+  projectGroupId?: string | null;
   isPaneFocused: boolean;
   onCreated: (snapshot: AgentSnapshotPayload) => void;
   onOpenWorkspaceFile: (request: WorkspaceFileOpenRequest) => void;
@@ -303,7 +318,9 @@ export function WorkspaceDraftAgentTab({
   workspaceId,
   tabId,
   draftId,
-  initialSetup = undefined,
+  initialSetup,
+  initialCwd,
+  projectGroupId,
   isPaneFocused,
   onCreated,
   onOpenWorkspaceFile,
@@ -316,8 +333,10 @@ export function WorkspaceDraftAgentTab({
   const workspaceExecutionAuthority = workspaceAuthority?.ok ? workspaceAuthority.authority : null;
   const workspaceDirectory = workspaceExecutionAuthority?.workspaceDirectory ?? null;
   const draftSetup = initialSetup ?? null;
+  const draftProjectGroupId = projectGroupId ?? null;
   const draftWorkingDirectory = resolveDraftWorkingDirectory({
     workspaceDirectory,
+    initialCwd: initialCwd ?? null,
     initialSetup: draftSetup,
   });
   const draftInitialValues = buildDraftInitialValues({
@@ -454,6 +473,7 @@ export function WorkspaceDraftAgentTab({
         serverId,
         tabId,
         workspaceDirectory: draftWorkingDirectory,
+        projectGroupId: draftProjectGroupId,
         autoSubmitConfig,
         composerState,
       }),
@@ -466,6 +486,7 @@ export function WorkspaceDraftAgentTab({
         client,
         workspaceDirectory: draftWorkingDirectory,
         workspaceExecutionAuthority,
+        projectGroupId: draftProjectGroupId,
         autoSubmitConfig,
         composerState,
       }),
@@ -657,6 +678,7 @@ export function WorkspaceDraftAgentTab({
                 streamItems={optimisticStreamItems}
                 pendingPermissions={EMPTY_PENDING_PERMISSIONS}
                 onOpenWorkspaceFile={onOpenWorkspaceFile}
+                fullWidth
               />
             </View>
           ) : (
@@ -706,6 +728,7 @@ export function WorkspaceDraftAgentTab({
             agentControls={composerAgentControls}
             footer={composerFooter}
             isCompactLayout={isCompactComposerLayout}
+            fullWidth
           />
         </ReanimatedAnimated.View>
       </View>
@@ -749,7 +772,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   importPillContent: {
     width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
     flexDirection: "row",
   },
   errorContainer: {

@@ -5,7 +5,10 @@ import {
   type AgentNavTarget,
   type NavigateToAgentDeps,
 } from "@/utils/navigate-to-agent/resolve";
-import type { NavigateToPreparedWorkspaceTabInput } from "@/utils/prepare-workspace-tab";
+import type {
+  NavigateToPreparedProjectTabInput,
+  NavigateToPreparedWorkspaceTabInput,
+} from "@/utils/prepare-workspace-tab";
 
 const SERVER_ID = "server-1";
 const WORKSPACE_ID = "workspace-1";
@@ -34,21 +37,29 @@ interface RecordedHostNav {
 }
 
 interface RecordedTabNav extends NavigateToPreparedWorkspaceTabInput {}
+interface RecordedProjectTabNav extends NavigateToPreparedProjectTabInput {}
 
 function createFakeNavigators(target: AgentNavTarget): {
   deps: NavigateToAgentDeps;
   hostNavigations: RecordedHostNav[];
+  projectTabNavigations: RecordedProjectTabNav[];
   tabNavigations: RecordedTabNav[];
 } {
   const hostNavigations: RecordedHostNav[] = [];
+  const projectTabNavigations: RecordedProjectTabNav[] = [];
   const tabNavigations: RecordedTabNav[] = [];
   return {
     hostNavigations,
+    projectTabNavigations,
     tabNavigations,
     deps: {
       readAgentNavTarget: () => target,
       navigateToHostAgent: (route) => {
         hostNavigations.push({ route });
+      },
+      navigateToPreparedProjectTab: (input) => {
+        projectTabNavigations.push(input);
+        return `/h/${input.serverId}/project/${input.groupId}`;
       },
       navigateToPreparedWorkspaceTab: (input) => {
         tabNavigations.push(input);
@@ -93,6 +104,29 @@ describe("resolveNavigateToAgent", () => {
 
     expect(route).toBe("/h/server-1/agent/missing-agent");
     expect(hostNavigations).toEqual([{ route: "/h/server-1/agent/missing-agent" }]);
+    expect(tabNavigations).toEqual([]);
+  });
+
+  it("opens Project agents in the Project surface tab namespace", () => {
+    const { deps, hostNavigations, projectTabNavigations, tabNavigations } = createFakeNavigators({
+      workspaces: [createWorkspace()],
+      agentCwd: "/repo/worktree",
+      projectGroupId: "grp_product",
+    });
+
+    const route = resolveNavigateToAgent({ serverId: SERVER_ID, agentId: AGENT_ID }, deps);
+
+    expect(route).toBe("/h/server-1/project/grp_product");
+    expect(hostNavigations).toEqual([]);
+    expect(projectTabNavigations).toEqual([
+      {
+        serverId: SERVER_ID,
+        groupId: "grp_product",
+        target: { kind: "agent", agentId: AGENT_ID },
+        currentPathname: undefined,
+        pin: undefined,
+      },
+    ]);
     expect(tabNavigations).toEqual([]);
   });
 });

@@ -98,6 +98,7 @@ import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { shouldShowWorkspaceSetup, useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import { useWorkspaceTerminalSessionRetention } from "@/terminal/hooks/use-workspace-terminal-session-retention";
+import { getWorkspaceTerminalSession } from "@/terminal/runtime/workspace-terminal-session";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
 import { checkoutStatusQueryKey } from "@/git/query-keys";
 import { confirmDialog } from "@/utils/confirm-dialog";
@@ -329,7 +330,10 @@ function getFallbackTabOptionDescription(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "browser") {
     return "Browser";
   }
-  return tab.target.path;
+  if (tab.target.kind === "file") {
+    return tab.target.path;
+  }
+  return "Project";
 }
 
 interface MobileWorkspaceTabSwitcherProps {
@@ -344,6 +348,7 @@ interface MobileWorkspaceTabSwitcherProps {
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onClearTerminalOutput: (terminalId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCloseTabsAbove: (tabId: string) => Promise<void> | void;
@@ -482,6 +487,8 @@ function MobileTabDropdownMenuItem({
         return <ThemedArrowRightToLine size={16} uniProps={mutedColorMapping} />;
       case "copy-x":
         return <ThemedCopyX size={16} uniProps={mutedColorMapping} />;
+      case "terminal":
+        return <ThemedSquareTerminal size={16} uniProps={mutedColorMapping} />;
       case "pencil":
         return <ThemedPencil size={16} uniProps={mutedColorMapping} />;
       case "x":
@@ -521,6 +528,7 @@ function MobileWorkspaceTabOption({
   onCopyResumeCommand,
   onCopyAgentId,
   onReloadAgent,
+  onClearTerminalOutput,
   onRenameTab,
   onCloseTab,
   onCloseTabsAbove,
@@ -538,6 +546,7 @@ function MobileWorkspaceTabOption({
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onClearTerminalOutput: (terminalId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCloseTabsAbove: (tabId: string) => Promise<void> | void;
@@ -554,6 +563,7 @@ function MobileWorkspaceTabOption({
     onCopyResumeCommand,
     onCopyAgentId,
     onReloadAgent,
+    onClearTerminalOutput,
     onRenameTab,
     onCloseTab,
     onCloseTabsBefore: onCloseTabsAbove,
@@ -609,6 +619,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
   onCopyResumeCommand,
   onCopyAgentId,
   onReloadAgent,
+  onClearTerminalOutput,
   onRenameTab,
   onCloseTab,
   onCloseTabsAbove,
@@ -663,6 +674,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           onCopyResumeCommand={onCopyResumeCommand}
           onCopyAgentId={onCopyAgentId}
           onReloadAgent={onReloadAgent}
+          onClearTerminalOutput={onClearTerminalOutput}
           onRenameTab={onRenameTab}
           onCloseTab={onCloseTab}
           onCloseTabsAbove={onCloseTabsAbove}
@@ -680,6 +692,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
       onCopyResumeCommand,
       onCopyAgentId,
       onReloadAgent,
+      onClearTerminalOutput,
       onRenameTab,
       onCloseTab,
       onCloseTabsAbove,
@@ -1198,7 +1211,7 @@ function renderWorkspaceContent(input: RenderWorkspaceContentInput): React.React
     return (
       <View style={styles.emptyState}>
         <Text style={styles.emptyStateText}>
-          No tabs are available yet. Use New tab to create an agent or terminal.
+          No tabs are open. Use the tab buttons above to open a working tab.
         </Text>
       </View>
     );
@@ -1564,6 +1577,7 @@ function WorkspaceScreenContent({
     [workspaceId],
   );
   const workspaceDescriptor = useWorkspace(normalizedServerId, normalizedWorkspaceId);
+  const workspaceProjectGroupId = workspaceDescriptor?.projectGroupId ?? null;
   const workspaceScripts = getWorkspaceScripts(workspaceDescriptor);
   const { handleRetryHost, handleManageHost, handleDismissMissingWorkspace } =
     useWorkspaceRouteActions(normalizedServerId);
@@ -1575,6 +1589,17 @@ function WorkspaceScreenContent({
   useWorkspaceTerminalSessionRetention({
     scopeKey: workspaceTerminalScopeKey,
   });
+  const handleClearTerminalOutput = useCallback(
+    (terminalId: string) => {
+      if (!workspaceTerminalScopeKey) {
+        return;
+      }
+      getWorkspaceTerminalSession({ scopeKey: workspaceTerminalScopeKey }).controls.requestClear({
+        terminalId,
+      });
+    },
+    [workspaceTerminalScopeKey],
+  );
 
   const client = useHostRuntimeClient(normalizedServerId);
   const isConnected = useHostRuntimeIsConnected(normalizedServerId);
@@ -1614,6 +1639,7 @@ function WorkspaceScreenContent({
   const openWorkspaceChildTabFocused = useWorkspaceLayoutStore(
     (state) => state.openChildTabFocused,
   );
+  const openWorkspaceTabInSplit = useWorkspaceLayoutStore((state) => state.openTabInSplit);
   const focusWorkspacePane = useWorkspaceLayoutStore((state) => state.focusPane);
   const hasHydratedWorkspaces = useSessionStore(
     (state) => state.sessions[normalizedServerId]?.hasHydratedWorkspaces ?? false,
@@ -2346,6 +2372,38 @@ function WorkspaceScreenContent({
     [focusWorkspacePane, openWorkspaceTabFocused, persistenceKey],
   );
 
+  const handleCreateTasksTab = useCallback(
+    (input?: { paneId?: string }) => {
+      if (!persistenceKey || !workspaceProjectGroupId) {
+        return;
+      }
+      if (input?.paneId) {
+        focusWorkspacePane(persistenceKey, input.paneId);
+      }
+      openWorkspaceTabFocused(persistenceKey, {
+        kind: "tasks",
+        groupId: workspaceProjectGroupId,
+      });
+    },
+    [focusWorkspacePane, openWorkspaceTabFocused, persistenceKey, workspaceProjectGroupId],
+  );
+
+  const handleCreateNotesTab = useCallback(
+    (input?: { paneId?: string }) => {
+      if (!persistenceKey || !workspaceProjectGroupId) {
+        return;
+      }
+      if (input?.paneId) {
+        focusWorkspacePane(persistenceKey, input.paneId);
+      }
+      openWorkspaceTabFocused(persistenceKey, {
+        kind: "notes",
+        groupId: workspaceProjectGroupId,
+      });
+    },
+    [focusWorkspacePane, openWorkspaceTabFocused, persistenceKey, workspaceProjectGroupId],
+  );
+
   const handleOpenUrlInBrowserTab = useCallback(
     (url: string) => {
       if (!persistenceKey || !getIsElectron()) {
@@ -2971,6 +3029,28 @@ function WorkspaceScreenContent({
             navigateToTabId(tabId);
           }
         },
+        onOpenTabInSplit: (target, options) => {
+          if (!persistenceKey || !input.paneId) {
+            return;
+          }
+          const tabId = openWorkspaceTabInSplit(persistenceKey, target, {
+            targetPaneId: input.paneId,
+            position: options?.position ?? "right",
+            parentTabId: input.tab.tabId,
+          });
+          if (!tabId) {
+            const fallbackTabId = openWorkspaceChildTabFocused(
+              persistenceKey,
+              target,
+              input.tab.tabId,
+            );
+            if (fallbackTabId) {
+              navigateToTabId(fallbackTabId);
+            }
+            return;
+          }
+          navigateToTabId(tabId);
+        },
         onCloseCurrentTab: () => {
           void handleCloseTabById(input.tab.tabId);
         },
@@ -2999,6 +3079,7 @@ function WorkspaceScreenContent({
       normalizedWorkspaceId,
       openImportSheet,
       openWorkspaceChildTabFocused,
+      openWorkspaceTabInSplit,
       persistenceKey,
       retargetWorkspaceTab,
     ],
@@ -3147,7 +3228,9 @@ function WorkspaceScreenContent({
   const renderSplitPaneEmptyState = useCallback(function renderSplitPaneEmptyState() {
     return (
       <View style={styles.emptyState}>
-        <Text style={styles.emptyStateText}>No tabs in this pane.</Text>
+        <Text style={styles.emptyStateText}>
+          No tabs in this pane. Use the tab buttons above to add one.
+        </Text>
       </View>
     );
   }, []);
@@ -3325,6 +3408,7 @@ function WorkspaceScreenContent({
     [createTerminalMutation.isPending, pendingTerminalCreateInput],
   );
   const showCreateBrowserTab = getIsElectron();
+  const showCreateProjectContentTabs = Boolean(workspaceProjectGroupId);
   const focusedPaneIdOrUndefined = useMemo(() => focusedPaneId ?? undefined, [focusedPaneId]);
   const desktopFocusModeEnabled = useMemo(
     () => isFocusModeEnabled && !isMobile,
@@ -3356,6 +3440,7 @@ function WorkspaceScreenContent({
         onCopyResumeCommand={handleCopyResumeCommand}
         onCopyAgentId={handleCopyAgentId}
         onReloadAgent={handleReloadAgent}
+        onClearTerminalOutput={handleClearTerminalOutput}
         onRenameTab={handleRenameTab}
         onCloseTabsToLeft={handleCloseTabsToLeftInPane}
         onCloseTabsToRight={handleCloseTabsToRightInPane}
@@ -3363,7 +3448,11 @@ function WorkspaceScreenContent({
         onCreateDraftTab={handleCreateDraftTab}
         onCreateTerminalTab={handleCreateTerminal}
         onCreateBrowserTab={handleCreateBrowserTab}
+        onCreateTasksTab={handleCreateTasksTab}
+        onCreateNotesTab={handleCreateNotesTab}
         showCreateBrowserTab={showCreateBrowserTab}
+        showCreateTasksTab={showCreateProjectContentTabs}
+        showCreateNotesTab={showCreateProjectContentTabs}
         buildPaneContentModel={buildDesktopPaneContentModel}
         onFocusPane={handleFocusPane}
         onSplitPane={handleSplitPane}
@@ -3390,6 +3479,7 @@ function WorkspaceScreenContent({
     handleCopyResumeCommand,
     handleCopyAgentId,
     handleReloadAgent,
+    handleClearTerminalOutput,
     handleRenameTab,
     handleCloseTabsToLeftInPane,
     handleCloseTabsToRightInPane,
@@ -3397,7 +3487,10 @@ function WorkspaceScreenContent({
     handleCreateDraftTab,
     handleCreateTerminal,
     handleCreateBrowserTab,
+    handleCreateTasksTab,
+    handleCreateNotesTab,
     showCreateBrowserTab,
+    showCreateProjectContentTabs,
     buildDesktopPaneContentModel,
     handleFocusPane,
     handleSplitPane,
@@ -3469,6 +3562,7 @@ function WorkspaceScreenContent({
           onCopyResumeCommand={handleCopyResumeCommand}
           onCopyAgentId={handleCopyAgentId}
           onReloadAgent={handleReloadAgent}
+          onClearTerminalOutput={handleClearTerminalOutput}
           onRenameTab={handleRenameTab}
           onCloseTab={handleCloseTabById}
           onCloseTabsAbove={handleCloseTabsToLeft}
@@ -3490,6 +3584,7 @@ function WorkspaceScreenContent({
           onCopyResumeCommand={handleCopyResumeCommand}
           onCopyAgentId={handleCopyAgentId}
           onReloadAgent={handleReloadAgent}
+          onClearTerminalOutput={handleClearTerminalOutput}
           onRenameTab={handleRenameTab}
           onCloseTabsToLeft={handleCloseTabsToLeft}
           onCloseTabsToRight={handleCloseTabsToRight}
@@ -3497,7 +3592,11 @@ function WorkspaceScreenContent({
           onCreateDraftTab={handleCreateDraftTab}
           onCreateTerminalTab={handleCreateTerminal}
           onCreateBrowserTab={handleCreateBrowserTab}
+          onCreateTasksTab={handleCreateTasksTab}
+          onCreateNotesTab={handleCreateNotesTab}
           showCreateBrowserTab={showCreateBrowserTab}
+          showCreateTasksTab={showCreateProjectContentTabs}
+          showCreateNotesTab={showCreateProjectContentTabs}
           disableCreateTerminal={createTerminalMutation.isPending}
           isWaitingOnTerminalReadiness={pendingTerminalCreateInput !== null}
           onReorderTabs={handleReorderTabsInFocusedPane}

@@ -296,6 +296,23 @@ describe("AgentStorage", () => {
     expect(recordAfterSnapshot?.archivedAt).toBe(archivedAt);
   });
 
+  test("applySnapshot preserves explicit Project placement across runtime updates", async () => {
+    const agent = createManagedAgent({ id: "agent-project-placement" });
+    await storage.applySnapshot(agent, { projectGroupId: "grp_product" });
+
+    await storage.applySnapshot(
+      createManagedAgent({
+        id: agent.id,
+        updatedAt: new Date("2025-01-02T00:00:00.000Z"),
+      }),
+    );
+
+    await expect(storage.get(agent.id)).resolves.toMatchObject({
+      projectGroupId: "grp_product",
+      updatedAt: "2025-01-02T00:00:00.000Z",
+    });
+  });
+
   test("stores titles independently of snapshots", async () => {
     await storage.applySnapshot(
       createManagedAgent({

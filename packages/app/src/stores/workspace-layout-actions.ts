@@ -109,6 +109,20 @@ interface OpenTabInLayoutResult {
   tabId: string;
 }
 
+interface OpenTabInLayoutSplitInput {
+  layout: WorkspaceLayout;
+  target: WorkspaceTabTarget;
+  targetPaneId: string;
+  position: "left" | "right" | "top" | "bottom";
+  createNodeId: (prefix: WorkspaceLayoutNodeIdPrefix) => string;
+  maxTreeDepth: number;
+  now: number;
+}
+
+interface OpenTabInLayoutSplitResult extends OpenTabInLayoutResult {
+  paneId: string;
+}
+
 interface RetargetTabInLayoutInput {
   layout: WorkspaceLayout;
   tabId: string;
@@ -1115,6 +1129,61 @@ export function openTabInLayoutBackground(input: OpenTabInLayoutInput): OpenTabI
   }
 
   return insertNewTabIntoFocusedPane({ ...input, focus: false });
+}
+
+export function openTabInLayoutSplit(
+  input: OpenTabInLayoutSplitInput,
+): OpenTabInLayoutSplitResult | null {
+  const layout = asInternalLayout(input.layout);
+  if (!findPaneById(layout.root, input.targetPaneId)) {
+    return null;
+  }
+
+  const existingTab = findExistingTabForTarget(layout.root, input.target);
+  if (existingTab) {
+    const updatedLayout = updateExistingTabTarget(input.layout, existingTab, input.target);
+    const split = splitPaneInLayout({
+      layout: updatedLayout,
+      tabId: existingTab.tabId,
+      targetPaneId: input.targetPaneId,
+      position: input.position,
+      createNodeId: input.createNodeId,
+      maxTreeDepth: input.maxTreeDepth,
+    });
+    return split ? { ...split, tabId: existingTab.tabId } : null;
+  }
+
+  const tabId = buildDeterministicWorkspaceTabId(input.target);
+  const split = splitPaneEmptyInLayout({
+    layout: input.layout,
+    targetPaneId: input.targetPaneId,
+    position: input.position,
+    createNodeId: input.createNodeId,
+    maxTreeDepth: input.maxTreeDepth,
+  });
+  if (!split) {
+    return null;
+  }
+
+  const tab: WorkspaceTab = {
+    tabId,
+    target: input.target,
+    createdAt: input.now,
+  };
+
+  return {
+    tabId,
+    paneId: split.paneId,
+    layout: withNormalizedParentTabMap({
+      root: insertTabIntoPane(asInternalNode(split.layout.root), {
+        paneId: split.paneId,
+        tab,
+        focusTabId: tabId,
+      }),
+      focusedPaneId: split.paneId,
+      parentTabIdByTabId: split.layout.parentTabIdByTabId,
+    }),
+  };
 }
 
 export function closeTabInLayout(input: CloseTabInLayoutInput): WorkspaceLayout | null {

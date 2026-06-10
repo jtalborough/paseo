@@ -32,6 +32,9 @@ function toTerminalInfo(session: TerminalSession): WorkerTerminalInfo {
     name: session.name,
     cwd: session.cwd,
     ...(session.getTitle() ? { title: session.getTitle() } : {}),
+    ...(manager.getTerminalLinkedAgentId(session.id)
+      ? { linkedAgentId: manager.getTerminalLinkedAgentId(session.id) }
+      : {}),
   };
 }
 

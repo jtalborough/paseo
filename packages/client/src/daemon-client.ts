@@ -88,6 +88,13 @@ import type {
   AgentSessionConfig,
 } from "@getpaseo/protocol/agent-types";
 import type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
+import type {
+  CreateTaskInput,
+  StoredTask,
+  TaskConfig,
+  TaskViewDefinition,
+} from "@getpaseo/protocol/task/types";
+import type { TaskUpdateRequestSchema } from "@getpaseo/protocol/task/messages";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import {
   asUint8Array,
@@ -108,6 +115,8 @@ import {
   type DaemonTransportFactory,
   type WebSocketFactory,
 } from "./daemon-client-transport.js";
+
+export type TaskUpdateRpcPatch = z.infer<typeof TaskUpdateRequestSchema>["patch"];
 import { DaemonClientRuntimeMetrics } from "./daemon-client-runtime-metrics.js";
 import { TerminalStreamRouter, type TerminalStreamEvent } from "./terminal-stream-router.js";
 
@@ -253,6 +262,7 @@ export interface CreateAgentRequestOptions extends AgentConfigOverrides {
   cwd?: string;
   env?: CreateAgentRequestMessage["env"];
   workspaceId?: string;
+  projectGroupId?: string;
   initialPrompt?: string;
   clientMessageId?: string;
   outputSchema?: Record<string, unknown>;
@@ -1864,6 +1874,155 @@ export class DaemonClient {
     });
   }
 
+  // COMPAT(tasks): added in v0.1.90, remove gate after 2026-12-15. Gated on
+  // server_info.features.tasks; callers must check the capability first.
+  async taskList(projectGroupId: string, requestId?: string): Promise<StoredTask[]> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.list.response", StoredTask[]>({
+      requestId,
+      message: { type: "task.list.request", projectGroupId },
+      timeout: 15000,
+      selectPayload: (payload) => payload.tasks,
+    });
+  }
+
+  async taskQuery(requestId?: string): Promise<StoredTask[]> {
+    return this.sendNamespacedCorrelatedSessionRequest<"tasks.query.response", StoredTask[]>({
+      requestId,
+      message: { type: "tasks.query.request" },
+      timeout: 15000,
+      selectPayload: (payload) => payload.tasks,
+    });
+  }
+
+  async taskGet(
+    projectGroupId: string,
+    id: string,
+    requestId?: string,
+  ): Promise<StoredTask | null> {
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"task.get.response">({
+      requestId,
+      message: { type: "task.get.request", projectGroupId, id },
+      timeout: 15000,
+    });
+    return payload.task;
+  }
+
+  async taskCreate(input: CreateTaskInput, requestId?: string): Promise<StoredTask> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.create.response", StoredTask>({
+      requestId,
+      message: { type: "task.create.request", input },
+      timeout: 15000,
+      selectPayload: (payload) => payload.task,
+    });
+  }
+
+  async taskUpdate(
+    projectGroupId: string,
+    id: string,
+    patch: TaskUpdateRpcPatch,
+    requestId?: string,
+  ): Promise<StoredTask> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.update.response", StoredTask>({
+      requestId,
+      message: { type: "task.update.request", projectGroupId, id, patch },
+      timeout: 15000,
+      selectPayload: (payload) => payload.task,
+    });
+  }
+
+  async taskMove(
+    projectGroupId: string,
+    id: string,
+    newProjectGroupId: string,
+    requestId?: string,
+  ): Promise<StoredTask> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.move.response", StoredTask>({
+      requestId,
+      message: { type: "task.move.request", projectGroupId, id, newProjectGroupId },
+      timeout: 15000,
+      selectPayload: (payload) => payload.task,
+    });
+  }
+
+  async taskDelete(projectGroupId: string, id: string, requestId?: string): Promise<void> {
+    await this.sendNamespacedCorrelatedSessionRequest<"task.delete.response">({
+      requestId,
+      message: { type: "task.delete.request", projectGroupId, id },
+      timeout: 15000,
+    });
+  }
+
+  async taskTimerStart(
+    projectGroupId: string,
+    id: string,
+    requestId?: string,
+  ): Promise<StoredTask[]> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.timer.start.response", StoredTask[]>({
+      requestId,
+      message: { type: "task.timer.start.request", projectGroupId, id },
+      timeout: 15000,
+      selectPayload: (payload) => payload.tasks,
+    });
+  }
+
+  async taskTimerStop(projectGroupId: string, id: string, requestId?: string): Promise<StoredTask> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.timer.stop.response", StoredTask>({
+      requestId,
+      message: { type: "task.timer.stop.request", projectGroupId, id },
+      timeout: 15000,
+      selectPayload: (payload) => payload.task,
+    });
+  }
+
+  async taskConfigGet(projectGroupId: string, requestId?: string): Promise<TaskConfig> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.config.get.response", TaskConfig>({
+      requestId,
+      message: { type: "task.config.get.request", projectGroupId },
+      timeout: 15000,
+      selectPayload: (payload) => payload.config,
+    });
+  }
+
+  async taskConfigUpdate(
+    projectGroupId: string,
+    config: TaskConfig,
+    requestId?: string,
+  ): Promise<TaskConfig> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.config.update.response", TaskConfig>({
+      requestId,
+      message: { type: "task.config.update.request", projectGroupId, config },
+      timeout: 15000,
+      selectPayload: (payload) => payload.config,
+    });
+  }
+
+  async taskViewsGet(requestId?: string): Promise<TaskViewDefinition[]> {
+    return this.sendNamespacedCorrelatedSessionRequest<
+      "task.views.get.response",
+      TaskViewDefinition[]
+    >({
+      requestId,
+      message: { type: "task.views.get.request" },
+      timeout: 15000,
+      selectPayload: (payload) => payload.views,
+    });
+  }
+
+  async taskViewsUpdate(
+    views: TaskViewDefinition[],
+    requestId?: string,
+  ): Promise<TaskViewDefinition[]> {
+    return this.sendNamespacedCorrelatedSessionRequest<
+      "task.views.update.response",
+      TaskViewDefinition[]
+    >({
+      requestId,
+      message: { type: "task.views.update.request", views },
+      timeout: 15000,
+      selectPayload: (payload) => payload.views,
+    });
+  }
+
   async startWorkspaceScript(
     workspaceId: string,
     scriptName: string,
@@ -1986,6 +2145,7 @@ export class DaemonClient {
       config,
       ...(options.env ? { env: options.env } : {}),
       ...(options.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
+      ...(options.projectGroupId !== undefined ? { projectGroupId: options.projectGroupId } : {}),
       ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
       ...(options.clientMessageId ? { clientMessageId: options.clientMessageId } : {}),
       ...(options.outputSchema ? { outputSchema: options.outputSchema } : {}),
@@ -3921,7 +4081,7 @@ export class DaemonClient {
     cwd: string,
     name?: string,
     requestId?: string,
-    options?: { agentId?: string; command?: string; args?: string[] },
+    options?: { agentId?: string; linkedAgentId?: string; command?: string; args?: string[] },
   ): Promise<CreateTerminalPayload> {
     const resolvedRequestId = this.createRequestId(requestId);
     const message = SessionInboundMessageSchema.parse({
@@ -3929,6 +4089,7 @@ export class DaemonClient {
       cwd,
       name,
       agentId: options?.agentId,
+      linkedAgentId: options?.linkedAgentId,
       command: options?.command,
       args: options?.args,
       requestId: resolvedRequestId,

@@ -1,9 +1,10 @@
 import { generateDraftId } from "@/stores/draft-keys";
 import {
   buildWorkspaceTabPersistenceKey,
+  buildWorkspaceTabsSurfacePersistenceKey,
   type WorkspaceTabTarget,
 } from "@/stores/workspace-tabs-store";
-import { buildHostWorkspaceRoute } from "@/utils/host-routes";
+import { buildHostProjectRoute, buildHostWorkspaceRoute } from "@/utils/host-routes";
 
 export interface PrepareWorkspaceTabInput {
   serverId: string;
@@ -16,6 +17,17 @@ export interface NavigateToPreparedWorkspaceTabInput extends PrepareWorkspaceTab
   currentPathname?: string | null;
 }
 
+export interface PrepareProjectTabInput {
+  serverId: string;
+  groupId: string;
+  target: WorkspaceTabTarget;
+  pin?: boolean;
+}
+
+export interface NavigateToPreparedProjectTabInput extends PrepareProjectTabInput {
+  currentPathname?: string | null;
+}
+
 export interface PrepareWorkspaceTabDeps {
   openTabFocused: (workspaceKey: string, target: WorkspaceTabTarget) => string | null;
   pinAgent: (workspaceKey: string, agentId: string) => void;
@@ -25,6 +37,14 @@ export interface NavigateToPreparedWorkspaceTabDeps extends PrepareWorkspaceTabD
   navigateToWorkspace: (
     serverId: string,
     workspaceId: string,
+    options: { currentPathname?: string | null },
+  ) => void;
+}
+
+export interface NavigateToPreparedProjectTabDeps extends PrepareWorkspaceTabDeps {
+  navigateToProject: (
+    serverId: string,
+    groupId: string,
     options: { currentPathname?: string | null },
   ) => void;
 }
@@ -62,6 +82,37 @@ export function navigateToPreparedWorkspaceTab(
 ): string {
   const route = prepareWorkspaceTab(input, deps);
   deps.navigateToWorkspace(input.serverId, input.workspaceId, {
+    currentPathname: input.currentPathname,
+  });
+  return route;
+}
+
+export function prepareProjectTab(
+  input: PrepareProjectTabInput,
+  deps: PrepareWorkspaceTabDeps,
+): string {
+  const target = getPreparedTarget(input.target);
+  const key =
+    buildWorkspaceTabsSurfacePersistenceKey({
+      serverId: input.serverId,
+      scope: { kind: "project", groupId: input.groupId },
+    }) ?? "";
+
+  deps.openTabFocused(key, target);
+
+  if (input.pin && target.kind === "agent") {
+    deps.pinAgent(key, target.agentId);
+  }
+
+  return buildHostProjectRoute(input.serverId, input.groupId);
+}
+
+export function navigateToPreparedProjectTab(
+  input: NavigateToPreparedProjectTabInput,
+  deps: NavigateToPreparedProjectTabDeps,
+): string {
+  const route = prepareProjectTab(input, deps);
+  deps.navigateToProject(input.serverId, input.groupId, {
     currentPathname: input.currentPathname,
   });
   return route;

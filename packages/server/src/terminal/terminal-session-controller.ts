@@ -290,12 +290,15 @@ export class TerminalSessionController {
     id: string;
     name: string;
     title?: string;
+    linkedAgentId?: string;
   } {
     const title = terminal.getTitle();
+    const linkedAgentId = this.terminalManager?.getTerminalLinkedAgentId(terminal.id);
     return {
       id: terminal.id,
       name: terminal.name,
       ...(title ? { title } : {}),
+      ...(linkedAgentId ? { linkedAgentId } : {}),
     };
   }
 
@@ -426,6 +429,7 @@ export class TerminalSessionController {
       const session = await this.terminalManager.createTerminal({
         cwd: msg.cwd,
         name: msg.name,
+        linkedAgentId: msg.linkedAgentId,
         command: msg.command,
         args: msg.args,
       });
@@ -438,6 +442,9 @@ export class TerminalSessionController {
             name: session.name,
             cwd: session.cwd,
             ...(session.getTitle() ? { title: session.getTitle() } : {}),
+            ...(this.terminalManager.getTerminalLinkedAgentId(session.id)
+              ? { linkedAgentId: this.terminalManager.getTerminalLinkedAgentId(session.id) }
+              : {}),
           },
           error: null,
           requestId: msg.requestId,

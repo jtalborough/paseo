@@ -72,4 +72,33 @@ describe("workspace-terminal-session", () => {
     expect(second).not.toBe(first);
     expect(second.snapshots.get({ terminalId: "term-1" })).toBeNull();
   });
+
+  it("notifies clear subscribers for the matching terminal only", () => {
+    const session = getWorkspaceTerminalSession({
+      scopeKey: "workspace-clear-controls",
+    });
+    const termOneClearEvents: string[] = [];
+    const termTwoClearEvents: string[] = [];
+
+    const unsubscribeTermOne = session.controls.subscribeClear({
+      terminalId: "term-1",
+      listener: () => {
+        termOneClearEvents.push("clear");
+      },
+    });
+    session.controls.subscribeClear({
+      terminalId: "term-2",
+      listener: () => {
+        termTwoClearEvents.push("clear");
+      },
+    });
+
+    session.controls.requestClear({ terminalId: "term-1" });
+    unsubscribeTermOne();
+    session.controls.requestClear({ terminalId: "term-1" });
+    session.controls.requestClear({ terminalId: "term-2" });
+
+    expect(termOneClearEvents).toEqual(["clear"]);
+    expect(termTwoClearEvents).toEqual(["clear"]);
+  });
 });
