@@ -18,7 +18,7 @@ asarUnpack:
 extraResources:
   - from: ../app/dist
     to: app-dist
-  - from: ../../skills
+  - from: ../../.agents/skills
     to: skills
 publish:
   provider: github

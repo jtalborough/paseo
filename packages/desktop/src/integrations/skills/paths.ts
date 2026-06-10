@@ -6,7 +6,7 @@ export function getBundledSkillsDir(): string {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, "skills");
   }
-  return path.join(__dirname, "..", "..", "..", "..", "..", "skills");
+  return path.join(__dirname, "..", "..", "..", "..", "..", ".agents", "skills");
 }
 
 export function getAgentsSkillsDir(): string {

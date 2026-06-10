@@ -28,17 +28,36 @@ export interface SkillTargets {
   codexDir: string;
 }
 
-export const PASEO_SKILL_NAMES = [
-  "paseo",
-  "paseo-advisor",
-  "paseo-chat",
-  "paseo-committee",
-  "paseo-epic",
-  "paseo-handoff",
-  "paseo-loop",
-  "paseo-orchestrate",
-  "paseo-orchestrator",
-] as const;
+// Skills we used to ship and want gone from disk if a prior install left them.
+// The active set is discovered by scanning the bundle (see managedSkillNames),
+// so adding a new skill folder auto-registers it — no edit here. Tombstones only
+// cover renamed/removed skills that a directory scan can no longer see.
+export const RETIRED_PASEO_SKILL_NAMES = ["paseo-chat", "paseo-orchestrator"] as const;
+
+/** Skill folders in `sourceDir` (a dir is a skill iff it contains SKILL.md). */
+async function discoverBundledSkillNames(sourceDir: string): Promise<string[]> {
+  const entries = await fs.readdir(sourceDir, { withFileTypes: true }).catch(() => []);
+  const names: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const hasSkillMd = await fs
+      .access(path.join(sourceDir, entry.name, "SKILL.md"))
+      .then(() => true)
+      .catch(() => false);
+    if (hasSkillMd) names.push(entry.name);
+  }
+  return names;
+}
+
+/**
+ * The full set of names this installer is allowed to touch: the currently
+ * bundled skills plus retired tombstones. Anything outside this set (third-party
+ * skills the user dropped into ~/.claude/skills etc.) is never read or removed.
+ */
+async function managedSkillNames(sourceDir: string): Promise<string[]> {
+  const discovered = await discoverBundledSkillNames(sourceDir);
+  return [...new Set([...discovered, ...RETIRED_PASEO_SKILL_NAMES])].sort(compareStrings);
+}
 
 type SkillFiles = Map<string, string>;
 type TargetSkills = Map<string, SkillFiles>;
@@ -66,18 +85,25 @@ async function hashSkillDir(skillDir: string): Promise<SkillFiles | null> {
   return files;
 }
 
-async function hashSkills(rootDir: string): Promise<Map<string, SkillFiles>> {
+async function hashSkills(
+  rootDir: string,
+  names: readonly string[],
+): Promise<Map<string, SkillFiles>> {
   const out = new Map<string, SkillFiles>();
-  for (const name of PASEO_SKILL_NAMES) {
+  for (const name of names) {
     const files = await hashSkillDir(path.join(rootDir, name));
     if (files !== null) out.set(name, files);
   }
   return out;
 }
 
-function diff(bundle: TargetSkills, disks: readonly TargetSkills[]): SkillOp[] {
+function diff(
+  bundle: TargetSkills,
+  disks: readonly TargetSkills[],
+  names: readonly string[],
+): SkillOp[] {
   const ops: SkillOp[] = [];
-  for (const name of PASEO_SKILL_NAMES) {
+  for (const name of names) {
     const b = bundle.get(name);
     const targetFiles = disks.map((disk) => disk.get(name));
     const installedTargets = targetFiles.filter(
@@ -119,14 +145,15 @@ function compareStrings(a: string, b: string): number {
 
 export async function getSkillsStatus(targets?: SkillTargets): Promise<SkillsStatus> {
   const t = targets ?? resolveSkillTargets();
+  const names = await managedSkillNames(t.sourceDir);
   const [bundle, agentsDisk, claudeDisk, codexDisk] = await Promise.all([
-    hashSkills(t.sourceDir),
-    hashSkills(t.agentsDir),
-    hashSkills(t.claudeDir),
-    hashSkills(t.codexDir),
+    hashSkills(t.sourceDir, names),
+    hashSkills(t.agentsDir, names),
+    hashSkills(t.claudeDir, names),
+    hashSkills(t.codexDir, names),
   ]);
   const disks = [agentsDisk, claudeDisk, codexDisk];
-  const ops = diff(bundle, disks);
+  const ops = diff(bundle, disks, names);
 
   if (!hasInstalledPaseoSkill(disks)) return { state: "not-installed", ops };
   if (ops.length === 0) return { state: "up-to-date", ops };
@@ -181,7 +208,7 @@ export async function autoUpdateInstalledSkills(targets?: SkillTargets): Promise
 
 export async function uninstallSkills(targets?: SkillTargets): Promise<SkillsStatus> {
   const t = targets ?? resolveSkillTargets();
-  for (const name of PASEO_SKILL_NAMES) {
+  for (const name of await managedSkillNames(t.sourceDir)) {
     await removeSkill(name, {
       agentsDir: t.agentsDir,
       claudeDir: t.claudeDir,

@@ -82,3 +82,37 @@ The plan file at `~/.paseo/plans/<slug>.md` is the source of truth. Default mode
 /paseo-epic build the settings import/export flow end to end
 /paseo-epic --autopilot --worktree migrate the relay config UI overnight
 ```
+
+## Agent capability skills
+
+Beyond orchestration, Paseo ships skills that teach an agent to use Paseo's own surfaces — tasks and terminals — through the daemon's tools rather than guessing.
+
+### `/paseo-task`, Project Tasks
+
+Teaches an agent to keep a visible, shared backlog. Use it when planning or tracking Project work, turning chat decisions into tasks, marking work done, or deciding whether something belongs in docs or tasks.
+
+Project Tasks are Markdown files (`$PASEO_HOME/projects/<groupId>/tasks/<id>.md`) the daemon lists, queries, and runs. The skill covers Project resolution, the `list/create/update_project_task` tools (and the underlying `task.*` RPCs), and a file fallback. Both humans and agents share the same backlog — `run: self` marks owner/manual work, `run: agent` marks delegable work.
+
+```
+/paseo-task capture the follow-ups from this thread as Project tasks
+```
+
+### `/paseo-notion-tasks`, Notion-backed Project Tasks
+
+Teaches agents how to import and maintain Notion-backed Project Tasks without making Notion the runtime source of truth. Use it when a task starts in Notion, when a local task carries Notion provenance, or when an agent needs to audit imported Notion links.
+
+The skill covers the `import_notion_project_task` MCP tool, the Notion-to-Paseo field mapping, `sources[]` provenance, and bundled scripts for converting Notion page JSON into tool input or listing imported task sources.
+
+```
+/paseo-notion-tasks import this Notion task into the current Project backlog
+```
+
+### `/paseo-terminal`, Terminals
+
+Teaches an agent to inspect and control Paseo's daemon-owned terminal tabs. Use it when an agent needs to see, run in, or answer whether it can share a terminal.
+
+Terminals are not visible live by default; the skill enforces a list → capture → send → capture loop using `list_terminals`, `capture_terminal`, and `send_terminal_keys`, and explains terminal ownership labels (`linkedAgentId`).
+
+```
+/paseo-terminal can you see the dev server output? check the linked terminal
+```

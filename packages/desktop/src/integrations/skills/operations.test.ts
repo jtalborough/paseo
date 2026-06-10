@@ -14,7 +14,7 @@ import {
   autoUpdateInstalledSkills,
   getSkillsStatus,
   installSkills,
-  PASEO_SKILL_NAMES,
+  RETIRED_PASEO_SKILL_NAMES,
   type SkillTargets,
   uninstallSkills,
   updateSkills,
@@ -349,7 +349,7 @@ describe("uninstallSkills", () => {
     const status = await uninstallSkills(sandbox.targets);
 
     expect(status.state).toBe("not-installed");
-    for (const name of PASEO_SKILL_NAMES) {
+    for (const name of ["paseo", "paseo-loop", ...RETIRED_PASEO_SKILL_NAMES]) {
       expect(await pathExists(path.join(sandbox.targets.agentsDir, name))).toBe(false);
       expect(await pathExists(path.join(sandbox.targets.claudeDir, name))).toBe(false);
       expect(await pathExists(path.join(sandbox.targets.codexDir, name))).toBe(false);
