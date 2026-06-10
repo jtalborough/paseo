@@ -50,6 +50,7 @@ function projectTargetForTab(tab: ProjectSurfaceTab, groupId: string): Workspace
   if (tab === "tasks") return { kind: "tasks", groupId };
   if (tab === "notes") return { kind: "notes", groupId };
   if (tab === "agents") return { kind: "project-agents", groupId };
+  if (tab === "context") return { kind: "project-context", groupId };
   if (tab === "files") return { kind: "project-files", groupId };
   return null;
 }

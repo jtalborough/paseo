@@ -6,7 +6,14 @@ import { ScreenTitle } from "@/components/headers/screen-title";
 import { SidebarMenuToggle } from "@/components/headers/menu-header";
 import type { Theme } from "@/styles/theme";
 
-export type ProjectSurfaceTab = "overview" | "tasks" | "notes" | "agents" | "files" | "browser";
+export type ProjectSurfaceTab =
+  | "overview"
+  | "tasks"
+  | "notes"
+  | "agents"
+  | "context"
+  | "files"
+  | "browser";
 
 interface ProjectSurfaceHeaderProps {
   title: string;

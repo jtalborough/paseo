@@ -5,6 +5,7 @@ import { filePanelRegistration } from "@/panels/file-panel";
 import {
   notesPanelRegistration,
   projectAgentsPanelRegistration,
+  projectContextPanelRegistration,
   projectFilesPanelRegistration,
   projectNotesPanelRegistration,
   projectOverviewPanelRegistration,
@@ -33,6 +34,7 @@ export function ensurePanelsRegistered(): void {
   registerPanel(projectTasksPanelRegistration);
   registerPanel(projectNotesPanelRegistration);
   registerPanel(projectAgentsPanelRegistration);
+  registerPanel(projectContextPanelRegistration);
   registerPanel(projectFilesPanelRegistration);
   panelsRegistered = true;
 }

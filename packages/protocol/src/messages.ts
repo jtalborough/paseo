@@ -52,6 +52,10 @@ import {
   LoopLogsResponseSchema,
   LoopStopResponseSchema,
 } from "@getpaseo/protocol/loop/rpc-schemas";
+import {
+  ProjectContextRequestSchemas,
+  ProjectContextResponseSchemas,
+} from "@getpaseo/protocol/project-context/messages";
 import { TaskRequestSchemas, TaskResponseSchemas } from "@getpaseo/protocol/task/messages";
 import {
   PaseoConfigRawSchema,
@@ -2125,6 +2129,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectRequestSchema,
   LoopLogsRequestSchema,
   LoopStopRequestSchema,
+  ...ProjectContextRequestSchemas,
   // COMPAT(tasks): added in v0.1.90, remove gate after 2026-12-15.
   ...TaskRequestSchemas,
 ]);
@@ -4036,6 +4041,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectResponseSchema,
   LoopLogsResponseSchema,
   LoopStopResponseSchema,
+  ...ProjectContextResponseSchemas,
   // COMPAT(tasks): added in v0.1.90, remove gate after 2026-12-15.
   ...TaskResponseSchemas,
 ]);

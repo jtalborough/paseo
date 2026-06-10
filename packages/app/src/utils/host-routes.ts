@@ -408,6 +408,14 @@ export function buildHostProjectNotesRoute(serverId: string, groupId: string) {
   return `${projectRoute}/notes` as const;
 }
 
+export function buildHostProjectContextRoute(serverId: string, groupId: string) {
+  const projectRoute = buildHostProjectRoute(serverId, groupId);
+  if (projectRoute === "/") {
+    return "/" as const;
+  }
+  return `${projectRoute}/context` as const;
+}
+
 export function buildHostProjectAgentsRoute(serverId: string, groupId: string) {
   const projectRoute = buildHostProjectRoute(serverId, groupId);
   if (projectRoute === "/") {

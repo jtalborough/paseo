@@ -902,6 +902,7 @@ function RootStack() {
       <Stack.Screen name="h/[serverId]/project/[groupId]" />
       <Stack.Screen name="h/[serverId]/project/[groupId]/files" />
       <Stack.Screen name="h/[serverId]/project/[groupId]/agents" />
+      <Stack.Screen name="h/[serverId]/project/[groupId]/context" />
       <Stack.Screen name="h/[serverId]/project/[groupId]/notes" />
       <Stack.Screen name="h/[serverId]/project/[groupId]/tasks" />
       <Stack.Screen name="h/[serverId]/project/[groupId]/new-agent" />

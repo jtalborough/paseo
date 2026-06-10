@@ -4,6 +4,7 @@ import {
   buildHostNewWorkspaceRoute,
   buildHostNewProjectAgentRoute,
   buildHostProjectAgentsRoute,
+  buildHostProjectContextRoute,
   buildHostProjectNotesRoute,
   buildHostProjectFilesRoute,
   buildHostProjectRoute,
@@ -155,6 +156,7 @@ describe("workspace route parsing", () => {
     expect(buildHostProjectFilesRoute("local", "grp_1")).toBe("/h/local/project/grp_1/files");
     expect(buildHostProjectTasksRoute("local", "grp_1")).toBe("/h/local/project/grp_1/tasks");
     expect(buildHostProjectNotesRoute("local", "grp_1")).toBe("/h/local/project/grp_1/notes");
+    expect(buildHostProjectContextRoute("local", "grp_1")).toBe("/h/local/project/grp_1/context");
     expect(buildHostProjectAgentsRoute("local", "grp_1")).toBe("/h/local/project/grp_1/agents");
     expect(buildHostNewProjectAgentRoute("local", "grp_1")).toBe(
       "/h/local/project/grp_1/new-agent",

@@ -5473,6 +5473,62 @@ test("project groups: create then list round-trips and persists to disk", async 
   }
 });
 
+test("project context packets: list returns durable packet files", async () => {
+  const h = createProjectGroupHarness();
+  try {
+    await h.session.handleMessage({
+      type: "project.group.create.request",
+      displayName: "Work",
+      requestId: "c1",
+    });
+    const groupId = (
+      lastPayloadOfType(h.emitted, "project.group.create.response").group as {
+        groupId: string;
+      }
+    ).groupId;
+    const packetDir = path.join(h.workdir, "projects", groupId, "context", "packets");
+    mkdirSync(packetDir, { recursive: true });
+    writeFileSync(
+      path.join(packetDir, "run-1.yaml"),
+      [
+        "id: run-1",
+        `projectGroupId: ${groupId}`,
+        "createdAt: '2026-06-10T12:00:00.000Z'",
+        "launchReason: Run task",
+        "task: tasks/task-1.md",
+        "folderGrants:",
+        "  - projectId: project-1",
+        "    path: .",
+        "    mode: read-write",
+        "",
+      ].join("\n"),
+    );
+
+    await h.session.handleMessage({
+      type: "project.context.packets.list.request",
+      projectGroupId: groupId,
+      requestId: "ctx1",
+    });
+
+    expect(lastPayloadOfType(h.emitted, "project.context.packets.list.response")).toMatchObject({
+      requestId: "ctx1",
+      packets: [
+        {
+          path: "context/packets/run-1.yaml",
+          packet: {
+            id: "run-1",
+            projectGroupId: groupId,
+            task: "tasks/task-1.md",
+            folderGrants: [{ projectId: "project-1", path: ".", mode: "read-write" }],
+          },
+        },
+      ],
+    });
+  } finally {
+    rmSync(h.workdir, { recursive: true, force: true });
+  }
+});
+
 test("project groups: create rejects an empty name", async () => {
   const h = createProjectGroupHarness();
   try {

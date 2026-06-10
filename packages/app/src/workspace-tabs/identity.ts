@@ -12,6 +12,7 @@ type ProjectWorkspaceTabTarget = Extract<
       | "project-tasks"
       | "project-notes"
       | "project-agents"
+      | "project-context"
       | "project-files";
   }
 >;
@@ -24,6 +25,7 @@ const PROJECT_WORKSPACE_TAB_KINDS = new Set<string>([
   "project-tasks",
   "project-notes",
   "project-agents",
+  "project-context",
   "project-files",
 ]);
 

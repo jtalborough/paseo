@@ -95,6 +95,7 @@ import type {
   TaskViewDefinition,
 } from "@getpaseo/protocol/task/types";
 import type { TaskUpdateRequestSchema } from "@getpaseo/protocol/task/messages";
+import type { ProjectContextPacket } from "@getpaseo/protocol/project-context/types";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import {
   asUint8Array,
@@ -124,6 +125,11 @@ export interface TaskRunResult {
   task: StoredTask;
   agentId: string;
   contextPacket: string;
+}
+
+export interface ProjectContextPacketEntry {
+  path: string;
+  packet: ProjectContextPacket;
 }
 
 export interface Logger {
@@ -2004,6 +2010,21 @@ export class DaemonClient {
           contextPacket: payload.contextPacket,
         };
       },
+    });
+  }
+
+  async projectContextPacketList(
+    projectGroupId: string,
+    requestId?: string,
+  ): Promise<ProjectContextPacketEntry[]> {
+    return this.sendNamespacedCorrelatedSessionRequest<
+      "project.context.packets.list.response",
+      ProjectContextPacketEntry[]
+    >({
+      requestId,
+      message: { type: "project.context.packets.list.request", projectGroupId },
+      timeout: 15000,
+      selectPayload: (payload) => payload.packets,
     });
   }
 

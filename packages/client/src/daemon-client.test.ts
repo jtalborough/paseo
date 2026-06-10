@@ -279,6 +279,65 @@ test("sends task.run requests and resolves launched agent context", async () => 
   });
 });
 
+test("lists Project context packets", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const promise = client.projectContextPacketList("grp_project");
+
+  expect(mock.sent).toHaveLength(1);
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request).toMatchObject({
+    type: "project.context.packets.list.request",
+    projectGroupId: "grp_project",
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "project.context.packets.list.response",
+      payload: {
+        requestId: request.requestId,
+        packets: [
+          {
+            path: "context/packets/run-1.yaml",
+            packet: {
+              id: "run-1",
+              projectGroupId: "grp_project",
+              createdAt: "2026-06-10T12:00:00.000Z",
+              launchReason: "Run task",
+              task: "tasks/task-1.md",
+            },
+          },
+        ],
+      },
+    }),
+  );
+
+  await expect(promise).resolves.toMatchObject([
+    {
+      path: "context/packets/run-1.yaml",
+      packet: {
+        id: "run-1",
+        projectGroupId: "grp_project",
+        task: "tasks/task-1.md",
+      },
+    },
+  ]);
+});
+
 test("passes password as HTTP bearer header and WebSocket subprotocol", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

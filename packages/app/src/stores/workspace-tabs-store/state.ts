@@ -40,6 +40,7 @@ export type WorkspaceTabTarget =
   | { kind: "project-tasks"; groupId: string }
   | { kind: "project-notes"; groupId: string }
   | { kind: "project-agents"; groupId: string }
+  | { kind: "project-context"; groupId: string }
   | { kind: "project-files"; groupId: string };
 
 const PROJECT_WORKSPACE_TAB_KINDS = new Set<string>([
@@ -49,6 +50,7 @@ const PROJECT_WORKSPACE_TAB_KINDS = new Set<string>([
   "project-tasks",
   "project-notes",
   "project-agents",
+  "project-context",
   "project-files",
 ]);
 

@@ -291,6 +291,9 @@ function getFallbackTabLabel(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "project-agents") {
     return "Agents";
   }
+  if (tab.target.kind === "project-context") {
+    return "Context";
+  }
   if (tab.target.kind === "project-files") {
     return "Files";
   }

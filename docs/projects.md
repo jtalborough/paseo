@@ -176,6 +176,10 @@ Agents can use `create_project_context_packet` to write that durable launch bund
 `context/packets/*.yaml`, references other Project files with Project-root-relative paths, and may
 record the creating agent, launched agent, and launch reason.
 
+The app exposes those same packets through the Project Context tab. Treat that tab as the human
+audit trail for an agent launch: it should answer which task, prompt, files, browser state, and
+Folder grants were handed to the run without requiring the user to inspect YAML manually.
+
 ## Folder boundary
 
 Folders are external directories referenced by a Project. They are not copied or moved into the
@@ -235,8 +239,7 @@ moves from prototype into stable product behavior.
 
 ### Agent context
 
-- Build durable Project prompts, agent profiles, and context packets as ordinary files in the
-  Project directory.
+- Polish durable Project prompts and agent profiles as ordinary files in the Project directory.
 - Context packets should explicitly record selected tasks, notes, files, browser state, prompts,
   and Folder grants for each launch.
 - Retrieval is for discovery; live filesystem tools remain authoritative before an agent acts on a

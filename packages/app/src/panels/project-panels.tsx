@@ -1,7 +1,15 @@
-import { Bot, Files, LayoutDashboard, ListTodo, NotebookText } from "lucide-react-native";
+import {
+  Bot,
+  Files,
+  LayoutDashboard,
+  ListTodo,
+  NotebookText,
+  ScrollText,
+} from "lucide-react-native";
 import { View } from "react-native";
 import { usePaneContext } from "@/panels/pane-context";
 import type { PanelDescriptor, PanelRegistration } from "@/panels/panel-registry";
+import { ProjectContextScreen } from "@/screens/project-context-screen";
 import { ProjectFilesScreen } from "@/screens/project-files-screen";
 import { ProjectAgentsScreen, ProjectHomeScreen } from "@/screens/project-home-screen";
 import { ProjectTasksScreen } from "@/screens/project-tasks-screen";
@@ -15,6 +23,7 @@ type ProjectPanelKind = Extract<
   | "project-tasks"
   | "project-notes"
   | "project-agents"
+  | "project-context"
   | "project-files"
 >;
 
@@ -61,6 +70,13 @@ const projectPanelDescriptors: Record<ProjectPanelKind, PanelDescriptor> = {
     icon: Bot,
     statusBucket: null,
   },
+  "project-context": {
+    label: "Context",
+    subtitle: "Context packets",
+    titleState: "ready",
+    icon: ScrollText,
+    statusBucket: null,
+  },
   "project-files": {
     label: "Files",
     subtitle: "Project files",
@@ -78,6 +94,7 @@ function getProjectGroupIdFromTarget(target: WorkspaceTabTarget): string | null 
     target.kind === "project-tasks" ||
     target.kind === "project-notes" ||
     target.kind === "project-agents" ||
+    target.kind === "project-context" ||
     target.kind === "project-files"
   ) {
     return target.groupId;
@@ -138,6 +155,14 @@ function ProjectFilesPanel() {
   return <ProjectFilesScreen serverId={serverId} groupId={groupId} embedded />;
 }
 
+function ProjectContextPanel() {
+  const { serverId, target } = usePaneContext();
+  if (target.kind !== "project-context") {
+    return <View />;
+  }
+  return <ProjectContextScreen serverId={serverId} groupId={target.groupId} embedded />;
+}
+
 function createProjectPanelRegistration<K extends ProjectPanelKind>(
   kind: K,
   component: PanelRegistration<K>["component"],
@@ -166,6 +191,10 @@ export const projectNotesPanelRegistration = createProjectPanelRegistration(
 export const projectAgentsPanelRegistration = createProjectPanelRegistration(
   "project-agents",
   ProjectAgentsPanel,
+);
+export const projectContextPanelRegistration = createProjectPanelRegistration(
+  "project-context",
+  ProjectContextPanel,
 );
 export const projectFilesPanelRegistration = createProjectPanelRegistration(
   "project-files",

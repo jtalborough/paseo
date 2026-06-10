@@ -27,6 +27,7 @@ import type { Theme } from "@/styles/theme";
 import {
   buildHostNewProjectAgentRoute,
   buildHostProjectAgentsRoute,
+  buildHostProjectContextRoute,
   buildHostNewWorkspaceRoute,
   buildHostProjectFilesRoute,
   buildHostProjectNotesRoute,
@@ -115,6 +116,13 @@ export function ProjectHomeScreen({
       return;
     }
     router.navigate(buildHostProjectAgentsRoute(serverId, groupId));
+  }, [groupId, onOpenTab, serverId]);
+  const handleBrowseContext = useCallback(() => {
+    if (onOpenTab) {
+      onOpenTab({ kind: "project-context", groupId });
+      return;
+    }
+    router.navigate(buildHostProjectContextRoute(serverId, groupId));
   }, [groupId, onOpenTab, serverId]);
   const launchCwd = useMemo(
     () => (group ? resolveProjectLaunchTarget({ group, folders }).cwd : undefined),
@@ -210,6 +218,13 @@ export function ProjectHomeScreen({
                 Icon={ThemedBot}
                 onPress={handleBrowseAgents}
                 testID="project-home-action-agents"
+              />
+              <LaunchpadAction
+                label="Context"
+                description="Audit launch packets"
+                Icon={ThemedFileText}
+                onPress={handleBrowseContext}
+                testID="project-home-action-context"
               />
               {onOpenTab ? (
                 <LaunchpadAction

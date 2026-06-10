@@ -1807,6 +1807,7 @@ export class Session {
       this.dispatchCheckoutMessage(msg) ??
       this.dispatchWorkspaceAndProjectMessage(msg) ??
       this.dispatchProjectGroupMessage(msg) ??
+      this.dispatchProjectContextMessage(msg) ??
       this.dispatchTaskMessage(msg) ??
       this.dispatchProviderMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
@@ -2762,11 +2763,31 @@ export class Session {
     }
   }
 
+  private dispatchProjectContextMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "project.context.packets.list.request":
+        return this.handleProjectContextPacketListRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
   private async assertActiveTaskProject(projectGroupId: string): Promise<void> {
     const group = await this.groupRegistry.get(projectGroupId);
     if (!group || group.archivedAt) {
       throw new Error(`Project not found: ${projectGroupId}`);
     }
+  }
+
+  private async handleProjectContextPacketListRequest(
+    msg: Extract<SessionInboundMessage, { type: "project.context.packets.list.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const packets = await this.contextPacketStore.list(msg.projectGroupId);
+    this.emit({
+      type: "project.context.packets.list.response",
+      payload: { requestId: msg.requestId, packets },
+    });
   }
 
   private async resolveTaskRunFolderGrant(
