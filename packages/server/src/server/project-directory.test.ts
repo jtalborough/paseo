@@ -58,6 +58,12 @@ describe("Project directory", () => {
     expect(readFileSync(path.join(cwd, "prompts", "README.md"), "utf8")).toContain(
       "Reusable Project prompts",
     );
+    expect(readFileSync(path.join(cwd, "prompts", "project-manager.md"), "utf8")).toContain(
+      "You are the Project manager",
+    );
+    expect(readFileSync(path.join(cwd, "agents", "project-manager.yaml"), "utf8")).toContain(
+      "prompt: prompts/project-manager.md",
+    );
     expect(readFileSync(path.join(cwd, "context", "packets", "README.md"), "utf8")).toContain(
       "Context packets",
     );
@@ -92,7 +98,9 @@ describe("Project directory", () => {
     const cwd = await syncProjectDirectory({ paseoHome, group, children: [] });
     writeFileSync(path.join(cwd, "project.md"), "# My notes\n");
     writeFileSync(path.join(cwd, "prompts", "README.md"), "# My prompts\n");
+    writeFileSync(path.join(cwd, "prompts", "project-manager.md"), "# My manager prompt\n");
     writeFileSync(path.join(cwd, "agents", "README.md"), "# My agents\n");
+    writeFileSync(path.join(cwd, "agents", "project-manager.yaml"), "id: custom-manager\n");
     writeFileSync(path.join(cwd, "context", "README.md"), "# My context\n");
     writeFileSync(path.join(cwd, "context", "packets", "README.md"), "# My packets\n");
 
@@ -103,7 +111,13 @@ describe("Project directory", () => {
     });
     expect(readFileSync(path.join(cwd, "project.md"), "utf8")).toBe("# My notes\n");
     expect(readFileSync(path.join(cwd, "prompts", "README.md"), "utf8")).toBe("# My prompts\n");
+    expect(readFileSync(path.join(cwd, "prompts", "project-manager.md"), "utf8")).toBe(
+      "# My manager prompt\n",
+    );
     expect(readFileSync(path.join(cwd, "agents", "README.md"), "utf8")).toBe("# My agents\n");
+    expect(readFileSync(path.join(cwd, "agents", "project-manager.yaml"), "utf8")).toBe(
+      "id: custom-manager\n",
+    );
     expect(readFileSync(path.join(cwd, "context", "README.md"), "utf8")).toBe("# My context\n");
     expect(readFileSync(path.join(cwd, "context", "packets", "README.md"), "utf8")).toBe(
       "# My packets\n",

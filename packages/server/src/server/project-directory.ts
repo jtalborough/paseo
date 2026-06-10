@@ -60,6 +60,34 @@ const PROMPTS_README_CONTENT = `# Prompts
 Reusable Project prompts live here as plain Markdown. Agent profiles and context packets can
 reference these files with Project-root-relative paths such as \`prompts/implementation.md\`.
 `;
+const PROJECT_MANAGER_PROMPT_CONTENT = `# Project Manager
+
+You are the Project manager for this Paseo Project. Keep the local Project files useful for both
+the human and future agents.
+
+Responsibilities:
+- Keep active work in \`tasks/\` as Markdown-backed Project Tasks.
+- Keep durable context, decisions, and reference material in \`notes/\`.
+- Use \`context/packets/\` to explain what was handed to an agent run.
+- Prefer local Project files as the execution source of truth. External tools such as Notion can be
+  provenance or mirror surfaces, but they are not required to run the Project.
+
+Before launching or briefing an agent, identify the task, relevant notes/files, browser state if
+available, and explicit Folder grants. After an agent finishes, update the task and add or revise
+notes only when they preserve durable context.
+`;
+const PROJECT_MANAGER_AGENT_CONTENT = `schemaVersion: 1
+id: project-manager
+name: Project Manager
+provider: null
+model: null
+prompt: prompts/project-manager.md
+defaultTools:
+  - project-tasks
+  - project-notes
+  - project-context-packets
+folderGrants: []
+`;
 const TASKS_README_CONTENT = `# Tasks
 
 Each structured Task is a Markdown file with YAML frontmatter and a free-form Markdown body.
@@ -117,6 +145,14 @@ export async function syncProjectDirectory(input: {
     CONTEXT_PACKETS_README_CONTENT,
   );
   await writeFileIfMissing(path.join(cwd, "prompts", "README.md"), PROMPTS_README_CONTENT);
+  await writeFileIfMissing(
+    path.join(cwd, "prompts", "project-manager.md"),
+    PROJECT_MANAGER_PROMPT_CONTENT,
+  );
+  await writeFileIfMissing(
+    path.join(cwd, "agents", "project-manager.yaml"),
+    PROJECT_MANAGER_AGENT_CONTENT,
+  );
   await writeFileIfMissing(path.join(cwd, "tasks", "README.md"), TASKS_README_CONTENT);
   await writeFileIfMissing(path.join(cwd, "notes", "README.md"), "# Notes\n\n");
   const manifest: ProjectDirectoryManifest = ProjectDirectoryManifestSchema.parse({

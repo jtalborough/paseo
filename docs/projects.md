@@ -18,7 +18,8 @@ $PASEO_HOME/projects/{groupId}/
 ├── project.json
 ├── project.md
 ├── agents/
-│   └── README.md
+│   ├── README.md
+│   └── project-manager.yaml
 ├── context/
 │   ├── README.md
 │   └── packets/
@@ -26,7 +27,8 @@ $PASEO_HOME/projects/{groupId}/
 ├── notes/
 │   └── README.md
 ├── prompts/
-│   └── README.md
+│   ├── README.md
+│   └── project-manager.md
 └── tasks/
     └── README.md
 ```
@@ -68,6 +70,38 @@ multiple clients cannot leave competing timers running. Each Task records append
 `timeEntries` intervals in its Markdown frontmatter; daily totals and Project timesheets are derived
 from those intervals. `timerStartedAt` and `trackedSeconds` remain compatibility summaries, not the
 timesheet source of truth.
+
+External project systems, starting with Notion, are provenance and mirror surfaces for active
+Project Tasks. A task may carry `sources[]` frontmatter entries such as a Notion page URL, page id,
+data source id, and last mirrored timestamp, but the Markdown task file remains authoritative for
+agent execution. Importers can seed tasks from Notion, and exporters can mirror status, time totals,
+and run summaries back to Notion, but agents launch from the local task plus a local context packet.
+Do not make a Notion database the runtime dependency for creating, resuming, or auditing an agent
+run.
+
+Use this initial Notion mapping:
+
+| Notion                            | Paseo Task                                               |
+| --------------------------------- | -------------------------------------------------------- |
+| TasksDB `Task`                    | `title`                                                  |
+| TasksDB `Status` / `Action State` | `actionState`                                            |
+| TasksDB `Project`                 | `projectGroupId` via explicit import mapping             |
+| TasksDB `DoDate`                  | `doDate`                                                 |
+| TasksDB `Recurrence`              | structured `recurrence`                                  |
+| TasksDB `Priority`                | `priority`                                               |
+| TasksDB `Attention`               | `attention`                                              |
+| TasksDB `People`                  | `people`                                                 |
+| TasksDB `Location`                | `context`                                                |
+| TasksDB `Type`                    | `type`                                                   |
+| TasksDB `Agents`                  | `provider` or future agent profile selection             |
+| TasksDB page URL/id               | `sources[]` entry with `kind: notion`                    |
+| TimeTracking rows                 | append-only `timeEntries`                                |
+| ProjectsDB review fields          | Project metadata or review notes, not task runtime state |
+
+Agents that can read Notion can seed the local backlog through the `import_notion_project_task` MCP
+tool. That tool accepts a Notion task/page snapshot and writes a normal Markdown Project Task with
+`sources[]` provenance. Keep it one-way until a dedicated mirror/export flow exists; do not let an
+agent update both Notion and the local task for the same semantic change in one step.
 
 Global Task views are definitions over the cross-Project Task query. Built-in Today, Inbox, and All
 views live in the Task view registry; add future views as definitions instead of branching the
@@ -122,6 +156,11 @@ Durable agent context is split into explicit files:
 - `context/packets/`: explicit launch bundles for a specific run. A packet records which prompt,
   task, notes, bookmarks, files, browser state, and Folder grants were selected.
 
+New Projects seed `prompts/project-manager.md` and `agents/project-manager.yaml`. These files are
+ordinary user-owned Project files, not hidden defaults. The Project manager role exists to keep
+`tasks/`, `notes/`, and `context/packets/` coherent and to make agent launches explainable from
+local files. Sync never overwrites user edits to those files.
+
 Within these durable files, references use Project-root-relative POSIX paths such as
 `prompts/implementation.md`, `agents/planner.yaml`, and `tasks/2026-06-09-task.md`. They are not
 filesystem-absolute paths and they are not relative to the YAML file's own folder. That keeps the
@@ -131,6 +170,11 @@ Context packets are the bridge between chat-style Project knowledge and coding-a
 are concrete and reviewable: an agent launch should be explainable by pointing to the packet and the
 live tools it was granted. Retrieval can help assemble a packet, but the packet remains the durable
 record of what was intentionally handed to the agent.
+
+Agents can use `create_project_context_packet` to write that durable launch bundle and
+`list_project_context_packets` to audit prior bundles. A packet belongs under
+`context/packets/*.yaml`, references other Project files with Project-root-relative paths, and may
+record the creating agent, launched agent, and launch reason.
 
 ## Folder boundary
 
