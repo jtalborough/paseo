@@ -9,6 +9,8 @@ import type { MessagePayload } from "@/composer/types";
 import { BackHeader } from "@/components/headers/back-header";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { useProjectGroups } from "@/hooks/use-project-groups";
+import { useHostProjects } from "@/projects/host-projects";
+import { resolveProjectLaunchTarget } from "@/projects/project-launch-target";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { encodeImages } from "@/utils/encode-images";
@@ -25,13 +27,21 @@ export function NewProjectAgentScreen({ serverId, groupId }: NewProjectAgentScre
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { groups, supported } = useProjectGroups(serverId);
+  const projects = useHostProjects(serverId);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const group = useMemo(
     () => groups.find((candidate) => candidate.groupId === groupId) ?? null,
     [groupId, groups],
   );
-  const cwd = group?.cwd ?? "";
+  const folders = useMemo(
+    () => projects.filter((project) => project.projectGroupId === groupId),
+    [projects, groupId],
+  );
+  const cwd = useMemo(
+    () => (group ? resolveProjectLaunchTarget({ group, folders }).cwd : ""),
+    [group, folders],
+  );
   const draft = useAgentInputDraft({
     draftKey: `new-project-agent:${serverId}:${groupId}`,
     composer: {
@@ -54,7 +64,7 @@ export function NewProjectAgentScreen({ serverId, groupId }: NewProjectAgentScre
 
   const handleSubmit = useCallback(
     async (payload: MessagePayload) => {
-      if (!client || !isConnected || !group?.cwd || !composerState) {
+      if (!client || !isConnected || !group || !cwd || !composerState) {
         return;
       }
       const provider = composerState.selectedProvider;
@@ -70,7 +80,7 @@ export function NewProjectAgentScreen({ serverId, groupId }: NewProjectAgentScre
         const images = await encodeImages(wirePayload.images);
         const result = await client.createAgent({
           provider,
-          cwd: group.cwd,
+          cwd,
           projectGroupId: group.groupId,
           initialPrompt: payload.text,
           clientMessageId: generateMessageId(),
@@ -98,7 +108,7 @@ export function NewProjectAgentScreen({ serverId, groupId }: NewProjectAgentScre
         setIsSubmitting(false);
       }
     },
-    [client, composerState, draft, group, isConnected, serverId],
+    [client, composerState, cwd, draft, group, isConnected, serverId],
   );
 
   const handleClear = useCallback(() => {

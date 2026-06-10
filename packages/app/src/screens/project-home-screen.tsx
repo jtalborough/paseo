@@ -16,6 +16,7 @@ import { ProjectSurfaceHeader } from "@/components/project-surface-header";
 import { Button } from "@/components/ui/button";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { useHostProjects, type HostProjectListItem } from "@/projects/host-projects";
+import { resolveProjectLaunchTarget } from "@/projects/project-launch-target";
 import { createWorkspaceBrowser } from "@/stores/browser-store";
 import { generateDraftId } from "@/stores/draft-keys";
 import { useProjectSelectionStore } from "@/stores/project-selection-store";
@@ -115,18 +116,22 @@ export function ProjectHomeScreen({
     }
     router.navigate(buildHostProjectAgentsRoute(serverId, groupId));
   }, [groupId, onOpenTab, serverId]);
+  const launchCwd = useMemo(
+    () => (group ? resolveProjectLaunchTarget({ group, folders }).cwd : undefined),
+    [group, folders],
+  );
   const handleNewAgent = useCallback(() => {
     if (onOpenTab) {
       onOpenTab({
         kind: "draft",
         draftId: generateDraftId(),
-        cwd: group?.cwd,
+        cwd: launchCwd,
         projectGroupId: groupId,
       });
       return;
     }
     router.navigate(buildHostNewProjectAgentRoute(serverId, groupId));
-  }, [group?.cwd, groupId, onOpenTab, serverId]);
+  }, [launchCwd, groupId, onOpenTab, serverId]);
   const handleOpenBrowser = useCallback(() => {
     if (!onOpenTab) {
       return;
@@ -244,7 +249,7 @@ export function ProjectHomeScreen({
           <ProjectAgentsSection
             serverId={serverId}
             groupId={groupId}
-            groupCwd={group.cwd}
+            launchCwd={launchCwd}
             agents={agents}
             onOpenTab={onOpenTab}
           />
@@ -304,9 +309,18 @@ export function ProjectAgentsScreen({
   const selectGroup = useProjectSelectionStore((state) => state.selectGroup);
   const hostAgents = useSessionStore((state) => state.sessions[serverId]?.agents ?? null);
   const { groups, supported } = useProjectGroups(serverId);
+  const projects = useHostProjects(serverId);
   const group = useMemo(
     () => groups.find((candidate) => candidate.groupId === groupId) ?? null,
     [groupId, groups],
+  );
+  const folders = useMemo(
+    () => projects.filter((project) => project.projectGroupId === groupId),
+    [projects, groupId],
+  );
+  const launchCwd = useMemo(
+    () => (group ? resolveProjectLaunchTarget({ group, folders }).cwd : undefined),
+    [group, folders],
   );
   const agents = useMemo(
     () =>
@@ -342,7 +356,7 @@ export function ProjectAgentsScreen({
           <ProjectAgentsSection
             serverId={serverId}
             groupId={groupId}
-            groupCwd={group.cwd}
+            launchCwd={launchCwd}
             agents={agents}
             onOpenTab={onOpenTab}
           />
@@ -356,12 +370,12 @@ function ProjectAgentsSection({
   serverId,
   groupId,
   agents,
-  groupCwd,
+  launchCwd,
   onOpenTab,
 }: {
   serverId: string;
   groupId: string;
-  groupCwd: string | null | undefined;
+  launchCwd: string | null | undefined;
   agents: Agent[];
   onOpenTab?: (target: WorkspaceTabTarget) => void;
 }) {
@@ -370,13 +384,13 @@ function ProjectAgentsSection({
       onOpenTab({
         kind: "draft",
         draftId: generateDraftId(),
-        cwd: groupCwd,
+        cwd: launchCwd,
         projectGroupId: groupId,
       });
       return;
     }
     router.navigate(buildHostNewProjectAgentRoute(serverId, groupId));
-  }, [groupCwd, groupId, onOpenTab, serverId]);
+  }, [launchCwd, groupId, onOpenTab, serverId]);
 
   return (
     <View style={styles.section}>
