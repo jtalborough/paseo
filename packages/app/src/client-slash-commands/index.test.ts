@@ -63,11 +63,13 @@ describe("resolveClientSlashCommand", () => {
         command.name,
         [...command.aliases],
         command.execution,
+        command.argumentHint,
       ]),
     ).toEqual([
-      ["exit", ["quit", "q"], "immediate"],
-      ["clear", ["new"], "immediate"],
-      ["terminal", ["term"], "immediate"],
+      ["exit", ["quit", "q"], "immediate", ""],
+      ["clear", ["new"], "immediate", ""],
+      ["terminal", ["term"], "immediate", ""],
+      ["task", ["todo"], "immediate", "title"],
     ]);
   });
 
@@ -101,17 +103,33 @@ describe("resolveClientSlashCommand", () => {
       name: "terminal",
       kind: "open-terminal",
     });
+    expect(
+      resolveClientSlashCommand({ text: "/task Capture follow-up", hasAttachments: false }),
+    ).toMatchObject({
+      name: "task",
+      kind: "create-project-task",
+      argumentText: "Capture follow-up",
+    });
+    expect(
+      resolveClientSlashCommand({ text: "/todo Capture follow-up", hasAttachments: false }),
+    ).toMatchObject({
+      name: "task",
+      kind: "create-project-task",
+      argumentText: "Capture follow-up",
+    });
   });
 
   it("leaves provider commands, arguments, ordinary messages, and attachment submits alone", () => {
     expect(resolveClientSlashCommand({ text: "/clear now", hasAttachments: false })).toBeNull();
     expect(resolveClientSlashCommand({ text: "/quit now", hasAttachments: false })).toBeNull();
     expect(resolveClientSlashCommand({ text: "/terminal now", hasAttachments: false })).toBeNull();
+    expect(resolveClientSlashCommand({ text: "/term now", hasAttachments: false })).toBeNull();
     expect(
       resolveClientSlashCommand({ text: "/provider-command", hasAttachments: false }),
     ).toBeNull();
     expect(resolveClientSlashCommand({ text: "hello /quit", hasAttachments: false })).toBeNull();
     expect(resolveClientSlashCommand({ text: "/quit", hasAttachments: true })).toBeNull();
+    expect(resolveClientSlashCommand({ text: "/task Capture", hasAttachments: true })).toBeNull();
   });
 });
 

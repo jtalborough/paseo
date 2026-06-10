@@ -1,7 +1,11 @@
 import type { Agent } from "@/stores/session-store";
 import type { WorkspaceDraftTabSetup } from "@/stores/workspace-tabs-store";
 
-export type ClientSlashCommandKind = "archive-agent" | "replace-agent-with-draft" | "open-terminal";
+export type ClientSlashCommandKind =
+  | "archive-agent"
+  | "replace-agent-with-draft"
+  | "open-terminal"
+  | "create-project-task";
 export type ClientSlashCommandExecution = "immediate" | "insert";
 
 export interface ClientSlashCommand {
@@ -11,6 +15,9 @@ export interface ClientSlashCommand {
   argumentHint: string;
   kind: ClientSlashCommandKind;
   execution: ClientSlashCommandExecution;
+  allowArguments?: boolean;
+  requiresArgument?: boolean;
+  argumentText?: string;
 }
 
 export const CLIENT_SLASH_COMMANDS: readonly ClientSlashCommand[] = [
@@ -38,6 +45,16 @@ export const CLIENT_SLASH_COMMANDS: readonly ClientSlashCommand[] = [
     kind: "open-terminal",
     execution: "immediate",
   },
+  {
+    name: "task",
+    aliases: ["todo"],
+    description: "Create a Project task from this chat",
+    argumentHint: "title",
+    kind: "create-project-task",
+    execution: "immediate",
+    allowArguments: true,
+    requiresArgument: true,
+  },
 ];
 
 const COMMAND_BY_NAME = new Map<string, ClientSlashCommand>();
@@ -61,12 +78,23 @@ export function resolveClientSlashCommand(input: {
     return null;
   }
 
-  const commandName = trimmed.slice(1);
-  if (!commandName || /\s/.test(commandName)) {
+  const commandInput = trimmed.slice(1);
+  const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(commandInput);
+  if (!match) {
     return null;
   }
 
-  return COMMAND_BY_NAME.get(commandName) ?? null;
+  const command = COMMAND_BY_NAME.get(match[1] ?? "");
+  if (!command) {
+    return null;
+  }
+
+  const argumentText = match[2]?.trim() ?? "";
+  if (argumentText && !command.allowArguments) {
+    return null;
+  }
+
+  return argumentText ? { ...command, argumentText } : command;
 }
 
 export function buildDraftAgentSetup(agent: Agent): WorkspaceDraftTabSetup {

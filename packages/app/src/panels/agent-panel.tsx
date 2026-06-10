@@ -1524,6 +1524,38 @@ function ActiveAgentComposer({
         return;
       }
 
+      if (command.kind === "create-project-task") {
+        if (!client) {
+          throw new Error("Host is not connected");
+        }
+        const projectGroupId = agent.projectGroupId?.trim();
+        if (!projectGroupId) {
+          throw new Error("This agent is not attached to a Project");
+        }
+        const title = command.argumentText?.trim();
+        if (!title) {
+          throw new Error("Type a task title after /task");
+        }
+        await client.taskCreate({
+          projectGroupId,
+          title,
+          run: "agent",
+          body: [
+            "Captured from an agent chat.",
+            "",
+            `- Agent: ${agent.title ?? agent.id}`,
+            `- Agent id: ${agent.id}`,
+            `- Cwd: ${agent.cwd}`,
+          ].join("\n"),
+        });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["tasks", serverId] }),
+          queryClient.invalidateQueries({ queryKey: ["project-tasks", serverId] }),
+          queryClient.invalidateQueries({ queryKey: ["project-tasks", serverId, projectGroupId] }),
+        ]);
+        return;
+      }
+
       const workspaceKey = buildWorkspaceTabsSurfacePersistenceKey({ serverId, scope });
       if (workspaceKey) {
         unpinWorkspaceAgent(workspaceKey, agentId);
@@ -1546,9 +1578,11 @@ function ActiveAgentComposer({
     [
       agentId,
       archiveAgent,
+      client,
       closeWorkspaceTab,
       hideWorkspaceAgent,
       openLinkedTerminal,
+      queryClient,
       retargetCurrentTab,
       serverId,
       scope,

@@ -364,6 +364,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       if (
         selected.type === "client_command" &&
         selected.command.execution === "immediate" &&
+        !selected.command.requiresArgument &&
         canExecuteClientSlashCommand &&
         onClientSlashCommand
       ) {
