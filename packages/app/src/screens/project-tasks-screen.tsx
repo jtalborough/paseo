@@ -39,6 +39,10 @@ export function ProjectTasksScreen({
     () => groups.find((candidate) => candidate.groupId === groupId) ?? null,
     [groupId, groups],
   );
+  const taskRunRepoRoot = useMemo(() => {
+    const gitChildren = group?.children.filter((child) => child.kind === "git") ?? [];
+    return gitChildren.length === 1 ? gitChildren[0].rootPath : null;
+  }, [group]);
   const projectOptions = useMemo<SelectOption[]>(
     () => groups.map((candidate) => ({ value: candidate.groupId, label: candidate.displayName })),
     [groups],
@@ -134,6 +138,29 @@ export function ProjectTasksScreen({
     onSuccess: () => void invalidateTasks(),
     onError,
   });
+  const runTask = useMutation({
+    mutationFn: async (task: StoredTask) => {
+      if (!client) throw new Error("Host is not connected");
+      if (!taskRunRepoRoot) {
+        throw new Error("Task runs require exactly one git folder in this Project");
+      }
+      const provider = task.metadata.provider?.trim();
+      if (!provider) {
+        throw new Error("Set an agent provider before running this task");
+      }
+      return client.taskRun({
+        projectGroupId: task.metadata.projectGroupId,
+        id: task.metadata.id,
+        repoRoot: taskRunRepoRoot,
+        provider,
+      });
+    },
+    onSuccess: (result) => {
+      void invalidateTasks();
+      toast.show(`Started agent ${result.agentId}`, { variant: "success" });
+    },
+    onError,
+  });
   const updateConfig = useMutation({
     mutationFn: async (config: TaskConfig) => {
       if (!client) throw new Error("Host is not connected");
@@ -172,6 +199,12 @@ export function ProjectTasksScreen({
   const handleTimerStop = useCallback(
     (task: StoredTask) => stopTimerMutate(task),
     [stopTimerMutate],
+  );
+  const runTaskMutate = runTask.mutate;
+  const handleRunTask = useCallback((task: StoredTask) => runTaskMutate(task), [runTaskMutate]);
+  const getRunDisabled = useCallback(
+    (task: StoredTask) => runTask.isPending || !taskRunRepoRoot || !task.metadata.provider?.trim(),
+    [runTask.isPending, taskRunRepoRoot],
   );
   const handleToggleExpanded = useCallback((task: StoredTask) => {
     const key = taskKey(task);
@@ -279,6 +312,8 @@ export function ProjectTasksScreen({
         onTimerStart={handleTimerStart}
         onTimerStop={handleTimerStop}
         onDelete={handleDelete}
+        onRun={handleRunTask}
+        getRunDisabled={getRunDisabled}
         projectOptions={projectOptions}
         onChangeProject={handleChangeProject}
         onAddType={handleAddType}

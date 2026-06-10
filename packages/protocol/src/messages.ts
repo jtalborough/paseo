@@ -1316,6 +1316,16 @@ export const ProjectGroupPayloadSchema = z.object({
   groupId: z.string(),
   displayName: z.string(),
   cwd: z.string().optional(),
+  children: z
+    .array(
+      z.object({
+        projectId: z.string(),
+        rootPath: z.string(),
+        kind: z.enum(["git", "non_git"]),
+        displayName: z.string(),
+      }),
+    )
+    .default([]),
   color: z.string().nullable(),
   icon: z.string().nullable(),
   order: z.number().nullable(),

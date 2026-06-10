@@ -88,6 +88,43 @@ describe("TaskStore", () => {
     expect(reloaded?.metadata).toEqual(ran.metadata);
   });
 
+  it("preserves external source provenance for imported tasks", async () => {
+    const created = await store.create({
+      projectGroupId: "grp_one",
+      title: "Review imported task",
+      sources: [
+        {
+          kind: "notion",
+          pageId: "48bd6c20dc71830989910173d2c5d6d5",
+          url: "https://www.notion.so/rfarm/48bd6c20dc71830989910173d2c5d6d5",
+          dataSourceId: "5b7d6c20-dc71-822b-97d8-87d06bbc3520",
+          database: "tasks",
+          importedAt: "2026-06-10T12:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(created.metadata.sources).toEqual([
+      {
+        kind: "notion",
+        pageId: "48bd6c20dc71830989910173d2c5d6d5",
+        url: "https://www.notion.so/rfarm/48bd6c20dc71830989910173d2c5d6d5",
+        dataSourceId: "5b7d6c20-dc71-822b-97d8-87d06bbc3520",
+        database: "tasks",
+        importedAt: "2026-06-10T12:00:00.000Z",
+        lastMirroredAt: null,
+      },
+    ]);
+
+    const source = created.metadata.sources[0]!;
+    const updated = await store.update("grp_one", created.metadata.id, {
+      sources: [{ ...source, lastMirroredAt: "2026-06-10T12:30:00.000Z" }],
+    });
+    const reloaded = await store.get("grp_one", created.metadata.id);
+    expect(reloaded?.metadata.sources).toEqual(updated.metadata.sources);
+    expect(reloaded?.metadata.sources[0]?.lastMirroredAt).toBe("2026-06-10T12:30:00.000Z");
+  });
+
   it("lists tasks for a project sorted by creation time and isolates projects", async () => {
     const a = await store.create({ projectGroupId: "grp_one", title: "Alpha" });
     const b = await store.create({ projectGroupId: "grp_one", title: "Beta" });

@@ -178,6 +178,7 @@ export class TaskStore {
       provider: input.provider ?? null,
       links: input.links ?? [],
       github: input.github ?? null,
+      sources: input.sources ?? [],
       createdAt: now,
       updatedAt: now,
     });
@@ -216,8 +217,10 @@ export class TaskStore {
         provider: patch.provider,
         links: patch.links,
         github: patch.github,
+        sources: patch.sources,
         agentId: patch.agentId,
         worktree: patch.worktree,
+        contextPacket: patch.contextPacket,
         lastRunAt: patch.lastRunAt,
         result: patch.result,
         lastCompletedAt: patch.lastCompletedAt,

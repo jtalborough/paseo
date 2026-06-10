@@ -30,6 +30,7 @@ function areGroupsEqual(left: ProjectGroup[], right: ProjectGroup[]): boolean {
       candidate?.groupId === group.groupId &&
       candidate.displayName === group.displayName &&
       candidate.cwd === group.cwd &&
+      areGroupChildrenEqual(candidate.children, group.children) &&
       candidate.color === group.color &&
       candidate.icon === group.icon &&
       candidate.order === group.order &&
@@ -70,3 +71,21 @@ export const useProjectGroupsStore = create<ProjectGroupsStoreState>()((set, get
     });
   },
 }));
+
+function areGroupChildrenEqual(
+  left: ProjectGroup["children"],
+  right: ProjectGroup["children"],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((child, index) => {
+    const candidate = right[index];
+    return (
+      candidate?.projectId === child.projectId &&
+      candidate.rootPath === child.rootPath &&
+      candidate.kind === child.kind &&
+      candidate.displayName === child.displayName
+    );
+  });
+}

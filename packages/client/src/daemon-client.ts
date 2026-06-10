@@ -120,6 +120,12 @@ export type TaskUpdateRpcPatch = z.infer<typeof TaskUpdateRequestSchema>["patch"
 import { DaemonClientRuntimeMetrics } from "./daemon-client-runtime-metrics.js";
 import { TerminalStreamRouter, type TerminalStreamEvent } from "./terminal-stream-router.js";
 
+export interface TaskRunResult {
+  task: StoredTask;
+  agentId: string;
+  contextPacket: string;
+}
+
 export interface Logger {
   debug(obj: object, msg?: string): void;
   info(obj: object, msg?: string): void;
@@ -1971,6 +1977,33 @@ export class DaemonClient {
       message: { type: "task.timer.stop.request", projectGroupId, id },
       timeout: 15000,
       selectPayload: (payload) => payload.task,
+    });
+  }
+
+  async taskRun(
+    input: {
+      projectGroupId: string;
+      id: string;
+      repoRoot: string;
+      provider?: string;
+      baseBranch?: string;
+    },
+    requestId?: string,
+  ): Promise<TaskRunResult> {
+    return this.sendNamespacedCorrelatedSessionRequest<"task.run.response", TaskRunResult>({
+      requestId,
+      message: { type: "task.run.request", ...input },
+      timeout: 30000,
+      selectPayload: (payload) => {
+        if (!payload.ok) {
+          throw new Error(payload.error);
+        }
+        return {
+          task: payload.task,
+          agentId: payload.agentId,
+          contextPacket: payload.contextPacket,
+        };
+      },
     });
   }
 

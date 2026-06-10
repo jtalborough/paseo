@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test, vi } from "vitest";
@@ -848,6 +856,172 @@ test("create_agent_request persists Project placement without creating a Workspa
         projectGroupId: "grp_project_agent",
       },
     });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("task.run creates an agent, worktree, and durable context packet", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-task-run-"));
+  try {
+    const logger = {
+      child: () => logger,
+      trace: vi.fn(),
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const repoRoot = path.join(workdir, "repo");
+    mkdirSync(repoRoot, { recursive: true });
+    execFileSync("git", ["init", "-b", "main"], { cwd: repoRoot });
+    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repoRoot });
+    execFileSync("git", ["config", "user.name", "Test User"], { cwd: repoRoot });
+    writeFileSync(path.join(repoRoot, "README.md"), "# Repo\n");
+    execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
+    execFileSync("git", ["commit", "-m", "initial"], { cwd: repoRoot });
+
+    const paseoHome = path.join(workdir, "paseo-home");
+    const agentStorage = new AgentStorage(path.join(workdir, "agents"), asSessionLogger(logger));
+    const agentManager = new AgentManager({
+      clients: { codex: new CreateAgentTestClient() },
+      registry: agentStorage,
+      logger: asSessionLogger(logger),
+      idFactory: () => "00000000-0000-4000-8000-000000000553",
+    });
+    const projectRegistry = new FileBackedProjectRegistry(
+      path.join(workdir, "projects.json"),
+      asSessionLogger(logger),
+    );
+    const workspaceRegistry = new FileBackedWorkspaceRegistry(
+      path.join(workdir, "workspaces.json"),
+      asSessionLogger(logger),
+    );
+    const groupRegistry = new FileBackedGroupRegistry(
+      path.join(workdir, "groups.json"),
+      asSessionLogger(logger),
+    );
+    await groupRegistry.upsert(
+      createPersistedGroupRecord({
+        groupId: "grp_task_run",
+        displayName: "Task run",
+        createdAt: "2026-06-10T00:00:00.000Z",
+        updatedAt: "2026-06-10T00:00:00.000Z",
+      }),
+    );
+    await projectRegistry.upsert(
+      createPersistedProjectRecord({
+        projectId: "proj-task-run",
+        groupId: "grp_task_run",
+        rootPath: repoRoot,
+        kind: "git",
+        displayName: "repo",
+        createdAt: "2026-06-10T00:00:00.000Z",
+        updatedAt: "2026-06-10T00:00:00.000Z",
+      }),
+    );
+
+    const emitted: SessionOutboundMessage[] = [];
+    const session = new Session({
+      clientId: "test-client",
+      appVersion: null,
+      onMessage: (message) => emitted.push(message),
+      logger: asSessionLogger(logger),
+      downloadTokenStore: asDownloadTokenStore(),
+      pushTokenStore: asPushTokenStore(),
+      paseoHome,
+      agentManager,
+      agentStorage,
+      projectRegistry,
+      workspaceRegistry,
+      groupRegistry,
+      chatService: asChatService(),
+      scheduleService: asScheduleService(),
+      loopService: asLoopService(),
+      checkoutDiffManager: asCheckoutDiffManager({
+        subscribe: async () => ({
+          initial: { cwd: repoRoot, files: [], error: null },
+          unsubscribe: () => {},
+        }),
+        scheduleRefreshForCwd: () => {},
+        getMetrics: () => ({
+          checkoutDiffTargetCount: 0,
+          checkoutDiffSubscriptionCount: 0,
+          checkoutDiffWatcherCount: 0,
+          checkoutDiffFallbackRefreshTargetCount: 0,
+        }),
+        dispose: () => {},
+      }),
+      workspaceGitService: createNoopWorkspaceGitService(),
+      daemonConfigStore: asDaemonConfigStore({
+        get: () => ({ mcp: { injectIntoAgents: false }, providers: {} }),
+        onChange: () => () => {},
+      }),
+      mcpBaseUrl: null,
+      stt: null,
+      tts: null,
+      providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+      terminalManager: null,
+    });
+
+    await session.handleMessage({
+      type: "task.create.request",
+      requestId: "task-create",
+      input: {
+        projectGroupId: "grp_task_run",
+        title: "Implement task launch",
+        provider: "codex",
+        body: "Launch from a task and preserve the packet.",
+      },
+    });
+    const createdTask = lastPayloadOfType(emitted, "task.create.response").task as {
+      metadata: { id: string };
+    };
+
+    await session.handleMessage({
+      type: "task.run.request",
+      requestId: "task-run",
+      projectGroupId: "grp_task_run",
+      id: createdTask.metadata.id,
+      repoRoot,
+      provider: "codex",
+      baseBranch: "main",
+    });
+
+    const runPayload = lastPayloadOfType(emitted, "task.run.response");
+    expect(runPayload).toMatchObject({
+      ok: true,
+      requestId: "task-run",
+      agentId: "00000000-0000-4000-8000-000000000553",
+    });
+    expect(runPayload.contextPacket).toMatch(/^context\/packets\/task-run-/);
+    expect(runPayload.task).toMatchObject({
+      metadata: {
+        id: createdTask.metadata.id,
+        actionState: "waiting",
+        run: "agent",
+        agentId: "00000000-0000-4000-8000-000000000553",
+        contextPacket: runPayload.contextPacket,
+      },
+    });
+
+    await expect(agentStorage.get("00000000-0000-4000-8000-000000000553")).resolves.toMatchObject({
+      cwd: expect.stringContaining("task-2026-06-10-implement-task-launch"),
+      projectGroupId: "grp_task_run",
+      labels: {
+        projectGroupId: "grp_task_run",
+        taskId: createdTask.metadata.id,
+        contextPacket: runPayload.contextPacket,
+      },
+    });
+    const packetText = readFileSync(
+      path.join(paseoHome, "projects", "grp_task_run", runPayload.contextPacket as string),
+      "utf8",
+    );
+    expect(packetText).toContain("launchedAgentId: 00000000-0000-4000-8000-000000000553");
+    expect(packetText).toContain(`task: tasks/${createdTask.metadata.id}.md`);
+    expect(packetText).toContain("projectId: proj-task-run");
+    expect(packetText).toContain("mode: read-write");
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

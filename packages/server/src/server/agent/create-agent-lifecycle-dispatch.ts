@@ -45,6 +45,7 @@ export class CreateAgentLifecycleDispatch {
   async createWorktreeForRequest(input: {
     cwd: string;
     target: CreateAgentWorktreeTarget | undefined;
+    projectId?: string;
     firstAgentContext: FirstAgentContext;
     hasLegacyGitOptions: boolean;
   }): Promise<CreatePaseoWorktreeWorkflowResult | null> {
@@ -55,7 +56,9 @@ export class CreateAgentLifecycleDispatch {
       return null;
     }
 
-    return this.createWorktreeForTarget(input.cwd, input.target, input.firstAgentContext);
+    return this.createWorktreeForTarget(input.cwd, input.target, input.firstAgentContext, {
+      projectId: input.projectId,
+    });
   }
 
   registerAutoArchiveIfRequested(input: {
@@ -101,9 +104,11 @@ export class CreateAgentLifecycleDispatch {
     cwd: string,
     target: CreateAgentWorktreeTarget,
     firstAgentContext: FirstAgentContext,
+    options: { projectId?: string } = {},
   ): Promise<CreatePaseoWorktreeWorkflowResult> {
     const baseInput = {
       cwd,
+      projectId: options.projectId,
       firstAgentContext,
       runSetup: false,
       paseoHome: this.dependencies.paseoHome,

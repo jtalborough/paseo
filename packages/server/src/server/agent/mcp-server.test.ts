@@ -737,6 +737,127 @@ describe("Project task MCP tools", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("imports a Notion task snapshot into the caller agent Project", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-notion-tasks-"));
+    const paseoHome = join(tempDir, ".paseo");
+    const projectGroupId = "grp_product";
+    try {
+      const { agentManager, agentStorage, spies } = createTestDeps();
+      spies.agentStorage.get.mockResolvedValue({ projectGroupId });
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createOpenCodeManager().manager,
+        callerAgentId: "agent-1",
+        paseoHome,
+        logger,
+      });
+
+      const importTask = registeredTool(server, "import_notion_project_task");
+      const response = await invokeToolWithParsedInput(importTask, {
+        task: "Build local task import",
+        actionState: "Review",
+        recurrence: ["rec-weekly-mon"],
+        agents: ["Codex"],
+        url: "https://www.notion.so/rfarm/48bd6c20dc71830989910173d2c5d6d5",
+        pageId: "48bd6c20dc71830989910173d2c5d6d5",
+        dataSourceId: "5b7d6c20-dc71-822b-97d8-87d06bbc3520",
+        importedAt: "2026-06-10T13:00:00.000Z",
+      });
+
+      const importedTask = response.structuredContent.task as {
+        metadata: {
+          projectGroupId: string;
+          title: string;
+          actionState: string;
+          recurrence: unknown;
+          provider: string;
+          sources: Array<{ kind: string; url: string; pageId: string | null }>;
+        };
+      };
+      expect(importedTask.metadata.projectGroupId).toBe(projectGroupId);
+      expect(importedTask.metadata.title).toBe("Build local task import");
+      expect(importedTask.metadata.actionState).toBe("info");
+      expect(importedTask.metadata.recurrence).toEqual({ kind: "weekly", weekdays: ["mon"] });
+      expect(importedTask.metadata.provider).toBe("codex");
+      expect(importedTask.metadata.sources).toEqual([
+        {
+          kind: "notion",
+          pageId: "48bd6c20dc71830989910173d2c5d6d5",
+          url: "https://www.notion.so/rfarm/48bd6c20dc71830989910173d2c5d6d5",
+          dataSourceId: "5b7d6c20-dc71-822b-97d8-87d06bbc3520",
+          database: "tasks",
+          importedAt: "2026-06-10T13:00:00.000Z",
+          lastMirroredAt: null,
+        },
+      ]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Project context packet MCP tools", () => {
+  const logger = createTestLogger();
+
+  it("creates and lists context packets in the caller agent Project", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-context-packets-"));
+    const paseoHome = join(tempDir, ".paseo");
+    const projectGroupId = "grp_product";
+    try {
+      const { agentManager, agentStorage, spies } = createTestDeps();
+      spies.agentStorage.get.mockResolvedValue({ projectGroupId });
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createOpenCodeManager().manager,
+        callerAgentId: "agent-planner",
+        paseoHome,
+        logger,
+      });
+
+      const createPacket = registeredTool(server, "create_project_context_packet");
+      const createResponse = await invokeToolWithParsedInput(createPacket, {
+        id: "launch-1",
+        launchReason: "Implement imported task",
+        launchedAgentId: "agent-impl",
+        profile: "agents/implementation.yaml",
+        prompt: "prompts/implementation.md",
+        task: "tasks/2026-06-10-build-local-task-import.md",
+        notes: ["notes/architecture.md"],
+        files: ["context/reference.json"],
+        bookmarks: ["https://example.com"],
+        browser: [{ url: "https://example.com", title: "Example" }],
+        folderGrants: [{ projectId: "folder-1", mode: "read-write" }],
+      });
+
+      expect(createResponse.structuredContent.path).toBe("context/packets/launch-1.yaml");
+      expect(createResponse.structuredContent.packet).toMatchObject({
+        id: "launch-1",
+        projectGroupId,
+        createdByAgentId: "agent-planner",
+        launchedAgentId: "agent-impl",
+        launchReason: "Implement imported task",
+        profile: "agents/implementation.yaml",
+        prompt: "prompts/implementation.md",
+        task: "tasks/2026-06-10-build-local-task-import.md",
+        notes: ["notes/architecture.md"],
+        files: ["context/reference.json"],
+        bookmarks: ["https://example.com"],
+        browser: [{ url: "https://example.com", title: "Example" }],
+        folderGrants: [{ projectId: "folder-1", path: ".", mode: "read-write" }],
+      });
+      expect(typeof createResponse.structuredContent.packet.createdAt).toBe("string");
+
+      const listPackets = registeredTool(server, "list_project_context_packets");
+      const listResponse = await invokeToolWithParsedInput(listPackets, {});
+      expect(listResponse.structuredContent.projectGroupId).toBe(projectGroupId);
+      expect(listResponse.structuredContent.packets).toEqual([createResponse.structuredContent]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("create_agent MCP tool", () => {

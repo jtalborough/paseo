@@ -79,6 +79,43 @@ export const TaskTimeEntrySchema = z.object({
 });
 export type TaskTimeEntry = z.infer<typeof TaskTimeEntrySchema>;
 
+export const TaskExternalSourceSchema = z.object({
+  kind: z.literal("notion"),
+  /** Stable Notion page id when known. */
+  pageId: z
+    .string()
+    .min(1)
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  /** Human-clickable source URL. */
+  url: z.string().min(1),
+  /** Optional data source/database id for import and mirror bookkeeping. */
+  dataSourceId: z
+    .string()
+    .min(1)
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  /** Which Notion database role this source represented when imported. */
+  database: z
+    .enum(["tasks", "projects", "time-tracking"])
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  importedAt: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  lastMirroredAt: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+});
+export type TaskExternalSource = z.infer<typeof TaskExternalSourceSchema>;
+
 function nullableString() {
   return z
     .string()
@@ -159,6 +196,8 @@ export const TaskFrontmatterSchema = z
     links: z.array(z.string()).default([]),
     /** GitHub issue/PR this task was seeded from or tracks. */
     github: nullableString(),
+    /** External system source records. Local files remain authoritative. */
+    sources: z.array(TaskExternalSourceSchema).default([]),
 
     createdAt: z.string(),
     updatedAt: z.string(),
@@ -168,6 +207,8 @@ export const TaskFrontmatterSchema = z
     agentId: nullableString(),
     /** Worktree path the agent ran in (disposable; recorded for traceability). */
     worktree: nullableString(),
+    /** Project-relative context packet path used to launch the latest agent run. */
+    contextPacket: nullableString(),
     /** When the last run started (ISO). */
     lastRunAt: nullableString(),
     /** Outcome of the last run. */
@@ -237,6 +278,7 @@ export interface CreateTaskInput {
   provider?: string | null;
   links?: string[];
   github?: string | null;
+  sources?: TaskExternalSource[];
   body?: string;
 }
 
@@ -258,10 +300,12 @@ export interface UpdateTaskInput {
   provider?: string | null;
   links?: string[];
   github?: string | null;
+  sources?: TaskExternalSource[];
   body?: string;
   // Roll-up / completion fields (set by the daemon, not the UI).
   agentId?: string | null;
   worktree?: string | null;
+  contextPacket?: string | null;
   lastRunAt?: string | null;
   result?: TaskResult | null;
   lastCompletedAt?: string | null;

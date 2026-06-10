@@ -38,6 +38,8 @@ export function TaskList({
   onRemoveContext,
   projectOptions,
   onChangeProject,
+  onRun,
+  getRunDisabled,
 }: {
   pending: boolean;
   error: Error | null;
@@ -59,6 +61,8 @@ export function TaskList({
   onRemoveContext: (value: string) => void;
   projectOptions?: SelectOption[];
   onChangeProject?: (task: StoredTask, projectGroupId: string) => void;
+  onRun?: (task: StoredTask) => void;
+  getRunDisabled?: (task: StoredTask) => boolean;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const { activeTasks, completedTasks } = useMemo(() => {
@@ -98,6 +102,8 @@ export function TaskList({
         onRemoveContext={onRemoveContext}
         projectOptions={projectOptions}
         onChangeProject={onChangeProject}
+        onRun={onRun}
+        getRunDisabled={getRunDisabled}
       />
     ),
     [
@@ -115,6 +121,8 @@ export function TaskList({
       onTimerStart,
       onTimerStop,
       onToggleExpanded,
+      onRun,
+      getRunDisabled,
       projectOptions,
     ],
   );
@@ -168,6 +176,8 @@ function TaskRow({
   onDelete,
   projectOptions,
   onChangeProject,
+  onRun,
+  getRunDisabled,
   ...editorProps
 }: {
   task: StoredTask;
@@ -180,6 +190,8 @@ function TaskRow({
   onDelete: (task: StoredTask) => void;
   projectOptions?: SelectOption[];
   onChangeProject?: (task: StoredTask, projectGroupId: string) => void;
+  onRun?: (task: StoredTask) => void;
+  getRunDisabled?: (task: StoredTask) => boolean;
   onAddType: (value: string) => void;
   onAddPerson: (value: string) => void;
   onAddContext: (value: string) => void;
@@ -213,6 +225,7 @@ function TaskRow({
     (projectGroupId: string) => onChangeProject?.(task, projectGroupId),
     [onChangeProject, task],
   );
+  const handleRun = useCallback(() => onRun?.(task), [onRun, task]);
   const badges = useMemo(
     () =>
       taskBadges(task, projectOptions && projectOptions.length > 1 ? projectOptions : undefined),
@@ -258,6 +271,8 @@ function TaskRow({
           {...editorProps}
           projectOptions={projectOptions}
           onChangeProject={onChangeProject ? handleChangeProject : undefined}
+          onRun={onRun ? handleRunAdapter(handleRun) : undefined}
+          runDisabled={getRunDisabled?.(task) ?? false}
           onDelete={handleDeleteAdapter(handleDelete)}
         />
       ) : null}
@@ -378,6 +393,10 @@ function handleDeleteAdapter(handleDelete: () => void) {
   return () => handleDelete();
 }
 
+function handleRunAdapter(handleRun: () => void) {
+  return () => handleRun();
+}
+
 function taskBadges(task: StoredTask, projectOptions?: SelectOption[]): string[] {
   const { metadata } = task;
   const badges: string[] = [];
@@ -397,6 +416,9 @@ function taskBadges(task: StoredTask, projectOptions?: SelectOption[]): string[]
   }
   if (metadata.github) {
     badges.push("GitHub");
+  }
+  if (metadata.sources.some((source) => source.kind === "notion")) {
+    badges.push("Notion");
   }
   if (metadata.links.length > 0) {
     badges.push(`${metadata.links.length} link${metadata.links.length === 1 ? "" : "s"}`);

@@ -48,8 +48,21 @@ import {
   type UpdateScheduleInput,
 } from "@getpaseo/protocol/schedule/types";
 import {
+  ProjectAgentProfilePathSchema,
+  ProjectContextFolderGrantSchema,
+  ProjectContextFileIdSchema,
+  ProjectContextPacketBrowserStateSchema,
+  ProjectContextPacketPathSchema,
+  ProjectContextPacketSchema,
+  ProjectNotePathSchema,
+  ProjectPromptPathSchema,
+  ProjectRelativePathSchema,
+  ProjectTaskPathSchema,
+} from "@getpaseo/protocol/project-context/types";
+import {
   ActionStateSchema,
   TaskAttentionSchema,
+  TaskExternalSourceSchema,
   TaskPrioritySchema,
   TaskRunModeSchema,
   TaskWireSchema,
@@ -72,6 +85,7 @@ import {
 } from "./mcp-shared.js";
 import { sendPromptToAgent, setupFinishNotification } from "./agent-prompt.js";
 import { respondToAgentPermission } from "./permission-response.js";
+import { createTaskInputFromNotion } from "../task/notion-import.js";
 import {
   archiveAgentCommand,
   cancelAgentRunCommand,
@@ -89,6 +103,7 @@ import {
   type CreatePaseoWorktreeCommandInput,
   listPaseoWorktreesCommand,
 } from "../worktree/commands.js";
+import { ProjectContextPacketStore } from "../project-context/packet-store.js";
 import { TaskStore } from "../task/store.js";
 
 export interface AgentMcpServerOptions {
@@ -533,6 +548,9 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
   const waitTracker = new WaitForAgentTracker(logger);
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
   const taskStore = options.paseoHome ? new TaskStore(options.paseoHome) : null;
+  const contextPacketStore = options.paseoHome
+    ? new ProjectContextPacketStore(options.paseoHome)
+    : null;
 
   const server = new McpServer({
     name: "agent-mcp",
@@ -619,6 +637,13 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
       throw new Error("Task tools require a configured PASEO_HOME");
     }
     return taskStore;
+  };
+
+  const requireContextPacketStore = (): ProjectContextPacketStore => {
+    if (!contextPacketStore) {
+      throw new Error("Context packet tools require a configured PASEO_HOME");
+    }
+    return contextPacketStore;
   };
 
   const buildCallerAgentScheduleConfigExtras = (
@@ -1538,6 +1563,85 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
   );
 
   registerTool(
+    "list_project_context_packets",
+    {
+      title: "List Project context packets",
+      description:
+        "List durable Project context packets that record the prompts, tasks, notes, files, browser state, and folder grants selected for agent launches.",
+      inputSchema: {
+        projectGroupId: z
+          .string()
+          .optional()
+          .describe("Project group id. Defaults to the current agent's Project."),
+      },
+      outputSchema: {
+        projectGroupId: z.string(),
+        packets: z.array(
+          z.object({
+            path: ProjectContextPacketPathSchema,
+            packet: ProjectContextPacketSchema,
+          }),
+        ),
+      },
+    },
+    async ({ projectGroupId }) => {
+      const resolvedProjectGroupId = await resolveTaskProjectGroupId(projectGroupId);
+      const packets = await requireContextPacketStore().list(resolvedProjectGroupId);
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          projectGroupId: resolvedProjectGroupId,
+          packets,
+        }),
+      };
+    },
+  );
+
+  registerTool(
+    "create_project_context_packet",
+    {
+      title: "Create Project context packet",
+      description:
+        "Create a durable Project context packet before launching or briefing an agent so the selected task, prompt, files, browser state, and folder grants are auditable later.",
+      inputSchema: {
+        projectGroupId: z
+          .string()
+          .optional()
+          .describe("Project group id. Defaults to the current agent's Project."),
+        id: ProjectContextFileIdSchema.optional().describe(
+          "Optional stable packet id. Defaults to a generated id.",
+        ),
+        launchReason: z.string().nullable().optional(),
+        launchedAgentId: z.string().nullable().optional(),
+        profile: ProjectAgentProfilePathSchema.nullable().optional(),
+        prompt: ProjectPromptPathSchema.nullable().optional(),
+        task: ProjectTaskPathSchema.nullable().optional(),
+        notes: z.array(ProjectNotePathSchema).optional(),
+        files: z.array(ProjectRelativePathSchema).optional(),
+        bookmarks: z.array(z.string().min(1)).optional(),
+        browser: z.array(ProjectContextPacketBrowserStateSchema).optional(),
+        folderGrants: z.array(ProjectContextFolderGrantSchema).optional(),
+      },
+      outputSchema: {
+        path: ProjectContextPacketPathSchema,
+        packet: ProjectContextPacketSchema,
+      },
+    },
+    async ({ projectGroupId, ...input }) => {
+      const resolvedProjectGroupId = await resolveTaskProjectGroupId(projectGroupId);
+      const packet = await requireContextPacketStore().create({
+        projectGroupId: resolvedProjectGroupId,
+        createdByAgentId: callerAgentId ?? null,
+        ...input,
+      });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ path: packet.path, packet: packet.packet }),
+      };
+    },
+  );
+
+  registerTool(
     "create_project_task",
     {
       title: "Create Project task",
@@ -1559,6 +1663,7 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         doDate: z.string().nullable().optional(),
         links: z.array(z.string()).optional(),
         github: z.string().nullable().optional(),
+        sources: z.array(TaskExternalSourceSchema).optional(),
       },
       outputSchema: {
         task: TaskWireSchema,
@@ -1579,8 +1684,62 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         ...(input.doDate !== undefined ? { doDate: input.doDate } : {}),
         ...(input.links !== undefined ? { links: input.links } : {}),
         ...(input.github !== undefined ? { github: input.github } : {}),
+        ...(input.sources !== undefined ? { sources: input.sources } : {}),
       };
       const task = await requireTaskStore().create(taskInput);
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ task }),
+      };
+    },
+  );
+
+  registerTool(
+    "import_notion_project_task",
+    {
+      title: "Import Notion Project task",
+      description:
+        "Create a local Project Task from a Notion task snapshot. The local Markdown task becomes authoritative for agent execution; Notion is recorded as provenance.",
+      inputSchema: {
+        projectGroupId: z
+          .string()
+          .optional()
+          .describe("Project group id. Defaults to the current agent's Project."),
+        title: z.string().trim().min(1).optional(),
+        task: z.string().trim().min(1).optional(),
+        status: z.string().nullable().optional(),
+        actionState: z.string().nullable().optional(),
+        doDate: z.string().nullable().optional(),
+        recurrence: z
+          .union([z.string(), z.array(z.string())])
+          .nullable()
+          .optional(),
+        priority: z.string().nullable().optional(),
+        attention: z.string().nullable().optional(),
+        people: z.array(z.string()).optional(),
+        location: z.string().nullable().optional(),
+        type: z.string().nullable().optional(),
+        agents: z.array(z.string()).optional(),
+        url: z.string().min(1).describe("Notion page URL."),
+        pageId: z.string().nullable().optional(),
+        dataSourceId: z.string().nullable().optional(),
+        body: z.string().nullable().optional(),
+        links: z.array(z.string()).optional(),
+        github: z.string().nullable().optional(),
+        importedAt: z.string().nullable().optional(),
+      },
+      outputSchema: {
+        task: TaskWireSchema,
+      },
+    },
+    async ({ projectGroupId, ...input }) => {
+      const resolvedProjectGroupId = await resolveTaskProjectGroupId(projectGroupId);
+      const task = await requireTaskStore().create(
+        createTaskInputFromNotion({
+          projectGroupId: resolvedProjectGroupId,
+          ...input,
+        }),
+      );
       return {
         content: [],
         structuredContent: ensureValidJson({ task }),
@@ -1611,6 +1770,7 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         doDate: z.string().nullable().optional(),
         links: z.array(z.string()).optional(),
         github: z.string().nullable().optional(),
+        sources: z.array(TaskExternalSourceSchema).optional(),
       },
       outputSchema: {
         task: TaskWireSchema,
@@ -1630,6 +1790,7 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         ...(patch.doDate !== undefined ? { doDate: patch.doDate } : {}),
         ...(patch.links !== undefined ? { links: patch.links } : {}),
         ...(patch.github !== undefined ? { github: patch.github } : {}),
+        ...(patch.sources !== undefined ? { sources: patch.sources } : {}),
       };
       const task = await requireTaskStore().update(resolvedProjectGroupId, id, taskPatch);
       return {

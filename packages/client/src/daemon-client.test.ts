@@ -204,6 +204,81 @@ test("dedupes in-flight checkout status requests per agentId", async () => {
   });
 });
 
+test("sends task.run requests and resolves launched agent context", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const promise = client.taskRun({
+    projectGroupId: "grp_project",
+    id: "task-1",
+    repoRoot: "/repo",
+    provider: "codex",
+    baseBranch: "main",
+  });
+
+  expect(mock.sent).toHaveLength(1);
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request).toMatchObject({
+    type: "task.run.request",
+    projectGroupId: "grp_project",
+    id: "task-1",
+    repoRoot: "/repo",
+    provider: "codex",
+    baseBranch: "main",
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "task.run.response",
+      payload: {
+        ok: true,
+        requestId: request.requestId,
+        agentId: "agent-1",
+        contextPacket: "context/packets/task-run.yaml",
+        task: {
+          metadata: {
+            id: "task-1",
+            projectGroupId: "grp_project",
+            title: "Run me",
+            actionState: "waiting",
+            run: "agent",
+            agentId: "agent-1",
+            contextPacket: "context/packets/task-run.yaml",
+            createdAt: "2026-06-10T00:00:00.000Z",
+            updatedAt: "2026-06-10T00:00:00.000Z",
+          },
+          body: "",
+        },
+      },
+    }),
+  );
+
+  await expect(promise).resolves.toMatchObject({
+    agentId: "agent-1",
+    contextPacket: "context/packets/task-run.yaml",
+    task: {
+      metadata: {
+        id: "task-1",
+        run: "agent",
+        agentId: "agent-1",
+      },
+    },
+  });
+});
+
 test("passes password as HTTP bearer header and WebSocket subprotocol", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

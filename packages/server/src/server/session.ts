@@ -185,7 +185,9 @@ import {
 } from "./file-explorer/service.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import { PushTokenStore } from "./push/token-store.js";
+import { ProjectContextPacketStore } from "./project-context/packet-store.js";
 import { TaskStore } from "./task/store.js";
+import type { StoredTask } from "@getpaseo/protocol/task/types";
 import {
   readPaseoConfigForEdit,
   writePaseoConfigForEdit,
@@ -371,6 +373,45 @@ function diffChangeTypeFor(file: { isNew?: boolean; isDeleted?: boolean }): "A" 
   if (file.isNew) return "A";
   if (file.isDeleted) return "D";
   return "M";
+}
+
+function buildTaskRunPrompt(input: {
+  task: StoredTask;
+  taskPath: string;
+  contextPacketPath: string;
+  repoRoot: string;
+}): string {
+  const { task, taskPath, contextPacketPath, repoRoot } = input;
+  const { metadata } = task;
+  const details = [
+    `Task file: ${taskPath}`,
+    `Context packet: ${contextPacketPath}`,
+    `Project: ${metadata.projectGroupId}`,
+    `Repo root: ${repoRoot}`,
+    `Action State: ${metadata.actionState}`,
+    metadata.priority ? `Priority: ${metadata.priority}` : null,
+    metadata.type ? `Type: ${metadata.type}` : null,
+    metadata.context ? `Context: ${metadata.context}` : null,
+    metadata.github ? `GitHub: ${metadata.github}` : null,
+    metadata.links.length > 0
+      ? `Links:\n${metadata.links.map((link) => `- ${link}`).join("\n")}`
+      : null,
+    metadata.sources.length > 0
+      ? `Sources:\n${metadata.sources.map((source) => `- ${source.kind}: ${source.url}`).join("\n")}`
+      : null,
+  ].filter(Boolean);
+  const body = task.body.trim();
+  return [
+    `You are working from a Paseo Project Task: ${metadata.title}`,
+    "",
+    "Use the local task file and context packet as the durable record of why this run exists. Do not rely on external systems as the execution source of truth.",
+    "",
+    details.join("\n"),
+    "",
+    body ? `Task notes:\n${body}` : "Task notes: none",
+    "",
+    "When you finish, update the Project Task with what changed and mark it done only if the work is actually complete.",
+  ].join("\n");
 }
 
 function buildWorkspaceCheckout(
@@ -789,6 +830,7 @@ export class Session {
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly groupRegistry: GroupRegistry;
   private readonly taskStore: TaskStore;
+  private readonly contextPacketStore: ProjectContextPacketStore;
   private readonly chatService: FileBackedChatService;
   private readonly scheduleService: ScheduleService;
   private readonly loopService: LoopService;
@@ -913,6 +955,7 @@ export class Session {
     this.workspaceRegistry = workspaceRegistry;
     this.groupRegistry = groupRegistry ?? createNoopGroupRegistry();
     this.taskStore = new TaskStore(paseoHome);
+    this.contextPacketStore = new ProjectContextPacketStore(paseoHome);
     this.chatService = chatService;
     this.scheduleService = scheduleService;
     this.loopService = loopService;
@@ -2672,7 +2715,10 @@ export class Session {
           group,
           children: allProjects.filter((project) => project.groupId === group.groupId),
         });
-        return this.projectGroupRecordToPayload(group);
+        return this.projectGroupRecordToPayload(
+          group,
+          allProjects.filter((project) => project.groupId === group.groupId),
+        );
       }),
     );
     this.emit({
@@ -2701,6 +2747,8 @@ export class Session {
         return this.handleTaskTimerStartRequest(msg);
       case "task.timer.stop.request":
         return this.handleTaskTimerStopRequest(msg);
+      case "task.run.request":
+        return this.handleTaskRunRequest(msg);
       case "task.config.get.request":
         return this.handleTaskConfigGetRequest(msg);
       case "task.config.update.request":
@@ -2719,6 +2767,22 @@ export class Session {
     if (!group || group.archivedAt) {
       throw new Error(`Project not found: ${projectGroupId}`);
     }
+  }
+
+  private async resolveTaskRunFolderGrant(
+    projectGroupId: string,
+    repoRoot: string,
+  ): Promise<{ projectId: string; path: string; mode: "read-write" }> {
+    const normalizedRepoRoot = normalizePersistedWorkspaceId(repoRoot);
+    const project = (await this.projectRegistry.list()).find(
+      (candidate) =>
+        candidate.groupId === projectGroupId &&
+        normalizePersistedWorkspaceId(candidate.rootPath) === normalizedRepoRoot,
+    );
+    if (!project) {
+      throw new Error(`Repo root does not belong to Project ${projectGroupId}`);
+    }
+    return { projectId: project.projectId, path: ".", mode: "read-write" };
   }
 
   private async handleTaskListRequest(
@@ -2805,6 +2869,138 @@ export class Session {
     this.emit({ type: "task.timer.stop.response", payload: { requestId: msg.requestId, task } });
   }
 
+  private async handleTaskRunRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.run.request" }>,
+  ): Promise<void> {
+    let createdWorktreeForCleanup: CreatePaseoWorktreeWorkflowResult | null = null;
+    let createdAgentId: string | null = null;
+    try {
+      await this.assertActiveTaskProject(msg.projectGroupId);
+      const task = await this.taskStore.get(msg.projectGroupId, msg.id);
+      if (!task) {
+        throw new Error(`Task not found: ${msg.projectGroupId}/${msg.id}`);
+      }
+      const provider = (msg.provider ?? task.metadata.provider)?.trim();
+      if (!provider) {
+        throw new Error("Task run requires a provider");
+      }
+
+      const folderGrant = await this.resolveTaskRunFolderGrant(msg.projectGroupId, msg.repoRoot);
+      const now = new Date().toISOString();
+      const runSuffix = uuidv4().slice(0, 8);
+      const contextPacketId = `task-run-${now.slice(0, 10)}-${task.metadata.id}-${runSuffix}`;
+      const contextPacketPath = `context/packets/${contextPacketId}.yaml`;
+      const taskPath = `tasks/${task.metadata.id}.md`;
+      const launchReason = `Run task: ${task.metadata.title}`;
+      await this.contextPacketStore.create({
+        id: contextPacketId,
+        projectGroupId: msg.projectGroupId,
+        launchReason,
+        task: taskPath,
+        folderGrants: [folderGrant],
+        now,
+      });
+
+      const initialPrompt = buildTaskRunPrompt({
+        task,
+        taskPath,
+        contextPacketPath,
+        repoRoot: msg.repoRoot,
+      });
+      const firstAgentContext: FirstAgentContext = { prompt: initialPrompt };
+      createdWorktreeForCleanup = await this.createAgentLifecycleDispatch.createWorktreeForRequest({
+        cwd: msg.repoRoot,
+        projectId: folderGrant.projectId,
+        target: {
+          mode: "branch-off",
+          newBranch: `task/${task.metadata.id}-${runSuffix}`,
+          ...(msg.baseBranch ? { base: msg.baseBranch } : {}),
+        },
+        firstAgentContext,
+        hasLegacyGitOptions: false,
+      });
+
+      const createAgentConfig: AgentSessionConfig = {
+        provider,
+        cwd: createdWorktreeForCleanup?.worktree.worktreePath ?? msg.repoRoot,
+        title: task.metadata.title.slice(0, 60),
+      };
+      const { snapshot, liveSnapshot } = await createAgentCommand(
+        {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          logger: this.sessionLogger,
+          paseoHome: this.paseoHome,
+          worktreesRoot: this.worktreesRoot,
+          workspaceGitService: this.workspaceGitService,
+          providerSnapshotManager: this.providerSnapshotManager,
+          daemonConfig: this.readStructuredGenerationDaemonConfig(),
+        },
+        {
+          kind: "session",
+          config: createAgentConfig,
+          projectGroupId: msg.projectGroupId,
+          initialPrompt,
+          labels: {
+            projectGroupId: msg.projectGroupId,
+            taskId: task.metadata.id,
+            contextPacket: contextPacketPath,
+          },
+          provisionalTitle: task.metadata.title.slice(0, 60),
+          explicitTitle: task.metadata.title.slice(0, 60),
+          firstAgentContext,
+          buildSessionConfig: (sessionConfig, gitOptions, legacyWorktreeName, ctx) =>
+            this.buildAgentSessionConfig(sessionConfig, gitOptions, legacyWorktreeName, ctx),
+          resolveWorkspace: ({ cwd, workspaceId }) =>
+            this.resolveCreateAgentPlacement(cwd, workspaceId, msg.projectGroupId),
+        },
+      );
+      createdAgentId = snapshot.id;
+      await this.contextPacketStore.create({
+        id: contextPacketId,
+        projectGroupId: msg.projectGroupId,
+        launchReason,
+        launchedAgentId: snapshot.id,
+        task: taskPath,
+        folderGrants: [folderGrant],
+        now,
+      });
+      const updatedTask = await this.taskStore.update(msg.projectGroupId, msg.id, {
+        run: "agent",
+        actionState: "waiting",
+        agentId: snapshot.id,
+        worktree: liveSnapshot.cwd,
+        contextPacket: contextPacketPath,
+        lastRunAt: now,
+        result: null,
+      });
+      await this.forwardAgentUpdate(snapshot);
+      this.emit({
+        type: "task.run.response",
+        payload: {
+          ok: true,
+          requestId: msg.requestId,
+          task: updatedTask,
+          agentId: snapshot.id,
+          contextPacket: contextPacketPath,
+        },
+      });
+    } catch (error) {
+      await this.createAgentLifecycleDispatch.cleanupCreatedWorktreeAfterFailedAgentCreate({
+        createdWorktree: createdWorktreeForCleanup,
+        createdAgentId,
+      });
+      this.emit({
+        type: "task.run.response",
+        payload: {
+          ok: false,
+          requestId: msg.requestId,
+          error: getErrorMessageOr(error, "Failed to run task"),
+        },
+      });
+    }
+  }
+
   private async handleTaskConfigGetRequest(
     msg: Extract<SessionInboundMessage, { type: "task.config.get.request" }>,
   ): Promise<void> {
@@ -2872,7 +3068,7 @@ export class Session {
         payload: {
           requestId,
           accepted: true,
-          group: this.projectGroupRecordToPayload(record),
+          group: this.projectGroupRecordToPayload(record, []),
           error: null,
         },
       });
@@ -2943,7 +3139,12 @@ export class Session {
         payload: {
           requestId,
           accepted: true,
-          group: this.projectGroupRecordToPayload(next),
+          group: this.projectGroupRecordToPayload(
+            next,
+            (await this.projectRegistry.list()).filter(
+              (project) => project.groupId === next.groupId,
+            ),
+          ),
           error: null,
         },
       });
@@ -3106,10 +3307,19 @@ export class Session {
     }
   }
 
-  private projectGroupRecordToPayload(record: PersistedGroupRecord): {
+  private projectGroupRecordToPayload(
+    record: PersistedGroupRecord,
+    children: PersistedProjectRecord[],
+  ): {
     groupId: string;
     displayName: string;
     cwd: string;
+    children: Array<{
+      projectId: string;
+      rootPath: string;
+      kind: "git" | "non_git";
+      displayName: string;
+    }>;
     color: string | null;
     icon: string | null;
     order: number | null;
@@ -3122,6 +3332,12 @@ export class Session {
       groupId: record.groupId,
       displayName: record.displayName,
       cwd: projectDirectoryPath(this.paseoHome, record.groupId),
+      children: children.map((child) => ({
+        projectId: child.projectId,
+        rootPath: child.rootPath,
+        kind: child.kind,
+        displayName: child.displayName,
+      })),
       color: record.color,
       icon: record.icon,
       order: record.order,

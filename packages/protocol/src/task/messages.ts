@@ -5,6 +5,7 @@ import {
   RecurrenceSchema,
   TaskAttentionSchema,
   TaskConfigSchema,
+  TaskExternalSourceSchema,
   TaskPrioritySchema,
   TaskResultSchema,
   TaskRunModeSchema,
@@ -31,6 +32,7 @@ const TaskEditableFields = {
   provider: z.string().nullable().optional(),
   links: z.array(z.string()).optional(),
   github: z.string().nullable().optional(),
+  sources: z.array(TaskExternalSourceSchema).optional(),
   body: z.string().optional(),
 } as const;
 
@@ -181,8 +183,6 @@ export const TaskTimerStopResponseSchema = z.object({
 });
 
 // --- task.run ---
-// Defined for the future, but intentionally not included in TaskRequestSchemas
-// until Project Tasks require an explicit Folder or Workspace execution target.
 export const TaskRunRequestSchema = z.object({
   type: z.literal("task.run.request"),
   requestId: z.string(),
@@ -190,6 +190,8 @@ export const TaskRunRequestSchema = z.object({
   id: z.string().min(1),
   /** Repo root the worktree branches from (the project's code checkout). */
   repoRoot: z.string().min(1),
+  /** Provider/model used for this run. Defaults to the task's provider field. */
+  provider: z.string().min(1).optional(),
   /** Base branch to branch off (defaults to the repo's default branch). */
   baseBranch: z.string().min(1).optional(),
 });
@@ -201,6 +203,7 @@ export const TaskRunResponseSchema = z.object({
       requestId: z.string(),
       task: TaskWireSchema,
       agentId: z.string(),
+      contextPacket: z.string(),
     }),
     z.object({
       ok: z.literal(false),
@@ -265,6 +268,7 @@ export const TaskRequestSchemas = [
   TaskDeleteRequestSchema,
   TaskTimerStartRequestSchema,
   TaskTimerStopRequestSchema,
+  TaskRunRequestSchema,
   TaskConfigGetRequestSchema,
   TaskConfigUpdateRequestSchema,
   TaskViewsGetRequestSchema,
@@ -281,6 +285,7 @@ export const TaskResponseSchemas = [
   TaskDeleteResponseSchema,
   TaskTimerStartResponseSchema,
   TaskTimerStopResponseSchema,
+  TaskRunResponseSchema,
   TaskConfigGetResponseSchema,
   TaskConfigUpdateResponseSchema,
   TaskViewsGetResponseSchema,
