@@ -14,6 +14,7 @@ import type { SelectOption } from "@/components/task-select";
 import { useToast } from "@/contexts/toast-context";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { useSessionStore } from "@/stores/session-store";
+import { confirmDialog } from "@/utils/confirm-dialog";
 import {
   addTaskTimeDays,
   aggregateTaskDayTotals,
@@ -337,7 +338,13 @@ export function ProjectTasksScreen({
     [runTask.isPending, taskRunRepoRoot],
   );
   const getScheduleDisabled = useCallback(
-    (task: StoredTask) => isTaskAgentActionDisabled(scheduleTask.isPending, taskRunRepoRoot, task),
+    (task: StoredTask) =>
+      getTaskScheduleDisabledReason(scheduleTask.isPending, taskRunRepoRoot, task) !== null,
+    [scheduleTask.isPending, taskRunRepoRoot],
+  );
+  const getScheduleDisabledReason = useCallback(
+    (task: StoredTask) =>
+      getTaskScheduleDisabledReason(scheduleTask.isPending, taskRunRepoRoot, task),
     [scheduleTask.isPending, taskRunRepoRoot],
   );
   const scheduleActionDisabled = isAnyScheduleActionPending({
@@ -366,7 +373,17 @@ export function ProjectTasksScreen({
       onRunNow: runScheduleNowMutate,
       onPause: pauseScheduleMutate,
       onResume: resumeScheduleMutate,
-      onDelete: (scheduleId: string) => deleteScheduleMutate({ task, scheduleId }),
+      onDelete: async (scheduleId: string) => {
+        const confirmed = await confirmDialog({
+          title: "Delete schedule?",
+          message: `Delete schedule ${scheduleId} from "${task.metadata.title}"? Future runs will stop.`,
+          confirmLabel: "Delete",
+          destructive: true,
+        });
+        if (confirmed) {
+          deleteScheduleMutate({ task, scheduleId });
+        }
+      },
     }),
     [
       deleteScheduleMutate,
@@ -509,6 +526,7 @@ export function ProjectTasksScreen({
           getRunDisabled={getRunDisabled}
           onSchedule={handleScheduleTask}
           getScheduleDisabled={getScheduleDisabled}
+          getScheduleDisabledReason={getScheduleDisabledReason}
           getSchedules={getTaskSchedules}
           getScheduleActions={getScheduleActions}
           projectOptions={projectOptions}
@@ -662,6 +680,23 @@ function isTaskAgentActionDisabled(
   task: StoredTask,
 ): boolean {
   return pending || !repoRoot || !task.metadata.provider?.trim();
+}
+
+function getTaskScheduleDisabledReason(
+  pending: boolean,
+  repoRoot: string | null,
+  task: StoredTask,
+): string | null {
+  if (pending) {
+    return "Scheduling task...";
+  }
+  if (!repoRoot) {
+    return "Project must have exactly one git folder.";
+  }
+  if (!task.metadata.provider?.trim()) {
+    return "Set an agent provider first.";
+  }
+  return null;
 }
 
 function isAnyScheduleActionPending(state: {

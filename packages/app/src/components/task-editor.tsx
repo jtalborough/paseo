@@ -6,6 +6,7 @@ import type {
   Recurrence,
   StoredTask,
   TaskAttention,
+  TaskScheduledAgentRun,
   TaskConfig,
   TaskPriority,
 } from "@getpaseo/protocol/task/types";
@@ -25,6 +26,7 @@ import { StyleSheet } from "react-native-unistyles";
 
 const PLACEHOLDER_COLOR = "#9ca3af";
 const EMPTY_SCHEDULES: ScheduleSummary[] = [];
+const EMPTY_SCHEDULE_RUNS: TaskScheduledAgentRun[] = [];
 
 interface Option<T> {
   value: T;
@@ -89,6 +91,7 @@ export function TaskEditor({
   runDisabled,
   onSchedule,
   scheduleDisabled,
+  scheduleDisabledReason,
   schedules,
   scheduleActions,
   projectOptions,
@@ -108,6 +111,7 @@ export function TaskEditor({
   runDisabled?: boolean;
   onSchedule?: (id: string, draft: TaskScheduleDraft) => void;
   scheduleDisabled?: boolean;
+  scheduleDisabledReason?: string | null;
   schedules?: ScheduleSummary[];
   scheduleActions?: TaskScheduleActions;
   projectOptions?: SelectOption[];
@@ -296,6 +300,7 @@ export function TaskEditor({
         onSchedule={onSchedule ? handleSchedule : undefined}
         actions={scheduleActions}
         disabled={scheduleDisabled ?? false}
+        disabledReason={scheduleDisabledReason ?? null}
       />
       <TextField
         label="GitHub"
@@ -320,12 +325,14 @@ function ScheduledAgentTaskSection({
   onSchedule,
   actions,
   disabled,
+  disabledReason,
 }: {
   task: StoredTask;
   schedules: ScheduleSummary[];
   onSchedule?: (draft: TaskScheduleDraft) => void;
   actions?: TaskScheduleActions;
   disabled: boolean;
+  disabledReason: string | null;
 }) {
   const { scheduleIds, scheduledRuns } = task.metadata;
   const latestRuns = scheduledRuns.slice(-3).toReversed();
@@ -333,6 +340,15 @@ function ScheduledAgentTaskSection({
     () => new Map(schedules.map((schedule) => [schedule.id, schedule])),
     [schedules],
   );
+  const runsByScheduleId = useMemo(() => {
+    const map = new Map<string, TaskScheduledAgentRun[]>();
+    for (const run of scheduledRuns) {
+      const runs = map.get(run.scheduleId) ?? [];
+      runs.push(run);
+      map.set(run.scheduleId, runs);
+    }
+    return map;
+  }, [scheduledRuns]);
   const [mode, setMode] = useState<"every" | "cron">("every");
   const [everyDraft, setEveryDraft] = useState("1d");
   const [cronDraft, setCronDraft] = useState("0 9 * * *");
@@ -344,6 +360,8 @@ function ScheduledAgentTaskSection({
     [cronDraft, everyDraft, mode, timezoneDraft],
   );
   const scheduleDisabled = disabled || !onSchedule || cadence === null;
+  const cadencePreview = cadence ? formatCadence(cadence) : null;
+  const scheduleReason = cadence === null ? "Invalid schedule cadence." : disabledReason;
   const scheduleButtonViewStyle = useMemo(
     () => [styles.scheduleButton, scheduleDisabled ? styles.scheduleButtonDisabled : null],
     [scheduleDisabled],
@@ -402,6 +420,10 @@ function ScheduledAgentTaskSection({
       {cadence === null ? (
         <Text style={styles.scheduleError}>Invalid schedule cadence.</Text>
       ) : null}
+      {cadencePreview ? <Text style={styles.scheduleHint}>{cadencePreview}</Text> : null}
+      {scheduleReason && cadence !== null ? (
+        <Text style={styles.scheduleHint}>{scheduleReason}</Text>
+      ) : null}
       {scheduleIds.length > 0 ? (
         <View style={styles.attachedSchedules}>
           {scheduleIds.map((scheduleId) => (
@@ -409,6 +431,7 @@ function ScheduledAgentTaskSection({
               key={scheduleId}
               scheduleId={scheduleId}
               schedule={scheduleById.get(scheduleId) ?? null}
+              runs={runsByScheduleId.get(scheduleId) ?? EMPTY_SCHEDULE_RUNS}
               actions={actions}
             />
           ))}
@@ -461,24 +484,26 @@ function ScheduleTextInput({
 function AttachedScheduleRow({
   scheduleId,
   schedule,
+  runs,
   actions,
 }: {
   scheduleId: string;
   schedule: ScheduleSummary | null;
+  runs: TaskScheduledAgentRun[];
   actions?: TaskScheduleActions;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const actionDisabled = actions?.disabled ?? false;
   const runNow = useCallback(() => actions?.onRunNow?.(scheduleId), [actions, scheduleId]);
   const pause = useCallback(() => actions?.onPause?.(scheduleId), [actions, scheduleId]);
   const resume = useCallback(() => actions?.onResume?.(scheduleId), [actions, scheduleId]);
   const deleteSchedule = useCallback(() => actions?.onDelete?.(scheduleId), [actions, scheduleId]);
+  const toggleExpanded = useCallback(() => setExpanded((current) => !current), []);
   const title = schedule?.name ?? scheduleId;
   const status = schedule?.status ?? "missing";
   const timing = formatAttachedScheduleTiming(schedule);
-  const canRun = Boolean(actions?.onRunNow && schedule);
-  const canPause = Boolean(actions?.onPause && schedule);
-  const canResume = Boolean(actions?.onResume);
-  const canDelete = Boolean(actions?.onDelete);
+  const cadence = schedule ? formatCadence(schedule.cadence) : null;
+  const latestRuns = runs.slice(-3).toReversed();
   return (
     <View style={styles.attachedSchedule}>
       <View style={styles.attachedScheduleMain}>
@@ -488,29 +513,103 @@ function AttachedScheduleRow({
         <Text style={styles.attachedScheduleMeta}>
           {status} - {timing}
         </Text>
+        {cadence ? <Text style={styles.attachedScheduleMeta}>{cadence}</Text> : null}
       </View>
-      <View style={styles.attachedScheduleActions}>
-        <ScheduleActionButton label="Run" disabled={actionDisabled || !canRun} onPress={runNow} />
-        {schedule?.status === "paused" ? (
-          <ScheduleActionButton
-            label="Resume"
-            disabled={actionDisabled || !canResume}
-            onPress={resume}
-          />
-        ) : (
-          <ScheduleActionButton
-            label="Pause"
-            disabled={actionDisabled || !canPause}
-            onPress={pause}
-          />
-        )}
+      <AttachedScheduleActions
+        expanded={expanded}
+        schedule={schedule}
+        actionDisabled={actionDisabled}
+        actions={actions}
+        onToggleExpanded={toggleExpanded}
+        onRunNow={runNow}
+        onPause={pause}
+        onResume={resume}
+        onDelete={deleteSchedule}
+      />
+      {expanded ? <ScheduleDetails scheduleId={scheduleId} runs={latestRuns} /> : null}
+    </View>
+  );
+}
+
+function AttachedScheduleActions({
+  expanded,
+  schedule,
+  actionDisabled,
+  actions,
+  onToggleExpanded,
+  onRunNow,
+  onPause,
+  onResume,
+  onDelete,
+}: {
+  expanded: boolean;
+  schedule: ScheduleSummary | null;
+  actionDisabled: boolean;
+  actions?: TaskScheduleActions;
+  onToggleExpanded: () => void;
+  onRunNow: () => void;
+  onPause: () => void;
+  onResume: () => void;
+  onDelete: () => void;
+}) {
+  const canRun = Boolean(actions?.onRunNow && schedule);
+  const canPause = Boolean(actions?.onPause && schedule);
+  const canResume = Boolean(actions?.onResume);
+  const canDelete = Boolean(actions?.onDelete);
+  const isPaused = schedule?.status === "paused";
+  return (
+    <View style={styles.attachedScheduleActions}>
+      <ScheduleActionButton
+        label={expanded ? "Hide" : "Details"}
+        disabled={false}
+        onPress={onToggleExpanded}
+      />
+      <ScheduleActionButton label="Run" disabled={actionDisabled || !canRun} onPress={onRunNow} />
+      {isPaused ? (
         <ScheduleActionButton
-          label="Delete"
-          destructive
-          disabled={actionDisabled || !canDelete}
-          onPress={deleteSchedule}
+          label="Resume"
+          disabled={actionDisabled || !canResume}
+          onPress={onResume}
         />
-      </View>
+      ) : (
+        <ScheduleActionButton
+          label="Pause"
+          disabled={actionDisabled || !canPause}
+          onPress={onPause}
+        />
+      )}
+      <ScheduleActionButton
+        label="Delete"
+        destructive
+        disabled={actionDisabled || !canDelete}
+        onPress={onDelete}
+      />
+    </View>
+  );
+}
+
+function ScheduleDetails({
+  scheduleId,
+  runs,
+}: {
+  scheduleId: string;
+  runs: TaskScheduledAgentRun[];
+}) {
+  return (
+    <View style={styles.scheduleDetails}>
+      <Text style={styles.scheduleDetailText}>ID {scheduleId}</Text>
+      {runs.length > 0 ? (
+        runs.map((run) => (
+          <View key={`${run.scheduleId}:${run.runId}`} style={styles.scheduleDetailRun}>
+            <Text style={styles.scheduleRunTitle}>
+              {run.status} - {formatScheduleRunTime(run.scheduledFor)}
+            </Text>
+            {run.summary ? <Text style={styles.scheduleRunDetail}>{run.summary}</Text> : null}
+          </View>
+        ))
+      ) : (
+        <Text style={styles.scheduleDetailText}>No task run history yet</Text>
+      )}
     </View>
   );
 }
@@ -556,6 +655,31 @@ function formatAttachedScheduleTiming(schedule: ScheduleSummary | null): string 
     return `Last ${formatScheduleRunTime(schedule.lastRunAt)}`;
   }
   return "No runs yet";
+}
+
+function formatCadence(cadence: ScheduleCadence): string {
+  if (cadence.type === "cron") {
+    return cadence.timezone
+      ? `Cron ${cadence.expression} ${cadence.timezone}`
+      : `Cron ${cadence.expression}`;
+  }
+  return `Every ${formatEveryMs(cadence.everyMs)}`;
+}
+
+function formatEveryMs(value: number): string {
+  const units = [
+    { label: "week", ms: 604_800_000 },
+    { label: "day", ms: 86_400_000 },
+    { label: "hour", ms: 3_600_000 },
+    { label: "minute", ms: 60_000 },
+  ];
+  for (const unit of units) {
+    if (value % unit.ms === 0) {
+      const amount = value / unit.ms;
+      return `${amount} ${unit.label}${amount === 1 ? "" : "s"}`;
+    }
+  }
+  return `${value} ms`;
 }
 
 function parseEveryCadence(value: string): ScheduleCadence | null {
@@ -1035,7 +1159,21 @@ const styles = StyleSheet.create((theme) => ({
   scheduleActionDisabled: { opacity: 0.5 },
   scheduleActionText: { color: theme.colors.foreground, fontSize: theme.fontSize.xs },
   scheduleActionDangerText: { color: theme.colors.destructive },
+  scheduleDetails: {
+    gap: theme.spacing[1],
+    paddingTop: theme.spacing[1],
+    borderTopWidth: theme.borderWidth[1],
+    borderTopColor: theme.colors.border,
+  },
+  scheduleDetailText: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  scheduleDetailRun: {
+    gap: 2,
+    padding: theme.spacing[2],
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colors.surface1,
+  },
   scheduleEmpty: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  scheduleHint: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
   scheduleRuns: { gap: theme.spacing[1] },
   scheduleRun: {
     gap: 2,

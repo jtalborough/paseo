@@ -45,6 +45,7 @@ export function TaskList({
   getRunDisabled,
   onSchedule,
   getScheduleDisabled,
+  getScheduleDisabledReason,
   getSchedules,
   getScheduleActions,
 }: {
@@ -72,6 +73,7 @@ export function TaskList({
   getRunDisabled?: (task: StoredTask) => boolean;
   onSchedule?: (task: StoredTask, draft: TaskScheduleDraft) => void;
   getScheduleDisabled?: (task: StoredTask) => boolean;
+  getScheduleDisabledReason?: (task: StoredTask) => string | null;
   getSchedules?: (task: StoredTask) => ScheduleSummary[];
   getScheduleActions?: (task: StoredTask) => TaskScheduleActions;
 }) {
@@ -117,6 +119,7 @@ export function TaskList({
         getRunDisabled={getRunDisabled}
         onSchedule={onSchedule}
         getScheduleDisabled={getScheduleDisabled}
+        getScheduleDisabledReason={getScheduleDisabledReason}
         getSchedules={getSchedules}
         getScheduleActions={getScheduleActions}
       />
@@ -140,6 +143,7 @@ export function TaskList({
       getRunDisabled,
       onSchedule,
       getScheduleDisabled,
+      getScheduleDisabledReason,
       getSchedules,
       getScheduleActions,
       projectOptions,
@@ -199,6 +203,7 @@ function TaskRow({
   getRunDisabled,
   onSchedule,
   getScheduleDisabled,
+  getScheduleDisabledReason,
   getSchedules,
   getScheduleActions,
   ...editorProps
@@ -217,6 +222,7 @@ function TaskRow({
   getRunDisabled?: (task: StoredTask) => boolean;
   onSchedule?: (task: StoredTask, draft: TaskScheduleDraft) => void;
   getScheduleDisabled?: (task: StoredTask) => boolean;
+  getScheduleDisabledReason?: (task: StoredTask) => string | null;
   getSchedules?: (task: StoredTask) => ScheduleSummary[];
   getScheduleActions?: (task: StoredTask) => TaskScheduleActions;
   onAddType: (value: string) => void;
@@ -306,6 +312,7 @@ function TaskRow({
           runDisabled={getRunDisabled?.(task) ?? false}
           onSchedule={onSchedule ? handleScheduleAdapter(handleSchedule) : undefined}
           scheduleDisabled={getScheduleDisabled?.(task) ?? false}
+          scheduleDisabledReason={getScheduleDisabledReason?.(task) ?? null}
           schedules={getSchedules?.(task) ?? EMPTY_SCHEDULES}
           scheduleActions={getScheduleActions?.(task)}
           onDelete={handleDeleteAdapter(handleDelete)}
