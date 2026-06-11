@@ -7,7 +7,7 @@ import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
 import { StyleSheet } from "react-native-unistyles";
 import { ProjectSurfaceHeader } from "@/components/project-surface-header";
-import type { TaskScheduleDraft } from "@/components/task-editor";
+import type { TaskScheduleDraft, TaskScheduleUpdateDraft } from "@/components/task-editor";
 import { TaskList, taskKey } from "@/components/task-list";
 import { formatDuration } from "@/components/task-timer";
 import type { SelectOption } from "@/components/task-select";
@@ -264,6 +264,26 @@ export function ProjectTasksScreen({
     },
     onError,
   });
+  const updateSchedule = useMutation({
+    mutationFn: async (input: { scheduleId: string; draft: TaskScheduleUpdateDraft }) => {
+      if (!client) throw new Error("Host is not connected");
+      const name = input.draft.name;
+      const payload = await client.scheduleUpdate({
+        id: input.scheduleId,
+        cadence: input.draft.cadence,
+        ...(name !== undefined ? { name } : {}),
+      });
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
+      return payload.schedule;
+    },
+    onSuccess: () => {
+      void invalidateSchedules();
+      toast.show("Schedule updated", { variant: "success" });
+    },
+    onError,
+  });
   const deleteSchedule = useMutation({
     mutationFn: async (input: { task: StoredTask; scheduleId: string }) => {
       if (!client) throw new Error("Host is not connected");
@@ -332,6 +352,7 @@ export function ProjectTasksScreen({
   const runScheduleNowMutate = runScheduleNow.mutate;
   const pauseScheduleMutate = pauseSchedule.mutate;
   const resumeScheduleMutate = resumeSchedule.mutate;
+  const updateScheduleMutate = updateSchedule.mutate;
   const deleteScheduleMutate = deleteSchedule.mutate;
   const getRunDisabled = useCallback(
     (task: StoredTask) => isTaskAgentActionDisabled(runTask.isPending, taskRunRepoRoot, task),
@@ -351,6 +372,7 @@ export function ProjectTasksScreen({
     runScheduleNow: runScheduleNow.isPending,
     pauseSchedule: pauseSchedule.isPending,
     resumeSchedule: resumeSchedule.isPending,
+    updateSchedule: updateSchedule.isPending,
     deleteSchedule: deleteSchedule.isPending,
   });
   const schedulesById = useMemo(() => {
@@ -373,6 +395,8 @@ export function ProjectTasksScreen({
       onRunNow: runScheduleNowMutate,
       onPause: pauseScheduleMutate,
       onResume: resumeScheduleMutate,
+      onUpdate: (scheduleId: string, draft: TaskScheduleUpdateDraft) =>
+        updateScheduleMutate({ scheduleId, draft }),
       onDelete: async (scheduleId: string) => {
         const confirmed = await confirmDialog({
           title: "Delete schedule?",
@@ -391,6 +415,7 @@ export function ProjectTasksScreen({
       resumeScheduleMutate,
       runScheduleNowMutate,
       scheduleActionDisabled,
+      updateScheduleMutate,
     ],
   );
   const handleToggleExpanded = useCallback((task: StoredTask) => {
@@ -703,10 +728,15 @@ function isAnyScheduleActionPending(state: {
   runScheduleNow: boolean;
   pauseSchedule: boolean;
   resumeSchedule: boolean;
+  updateSchedule: boolean;
   deleteSchedule: boolean;
 }): boolean {
   return (
-    state.runScheduleNow || state.pauseSchedule || state.resumeSchedule || state.deleteSchedule
+    state.runScheduleNow ||
+    state.pauseSchedule ||
+    state.resumeSchedule ||
+    state.updateSchedule ||
+    state.deleteSchedule
   );
 }
 

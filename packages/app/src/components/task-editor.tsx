@@ -58,10 +58,16 @@ export interface TaskScheduleDraft {
   runOnCreate?: boolean;
 }
 
+export interface TaskScheduleUpdateDraft {
+  cadence: ScheduleCadence;
+  name?: string | null;
+}
+
 export interface TaskScheduleActions {
   onRunNow?: (scheduleId: string) => void;
   onPause?: (scheduleId: string) => void;
   onResume?: (scheduleId: string) => void;
+  onUpdate?: (scheduleId: string, draft: TaskScheduleUpdateDraft) => void;
   onDelete?: (scheduleId: string) => void;
   disabled?: boolean;
 }
@@ -493,12 +499,19 @@ function AttachedScheduleRow({
   actions?: TaskScheduleActions;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
   const actionDisabled = actions?.disabled ?? false;
   const runNow = useCallback(() => actions?.onRunNow?.(scheduleId), [actions, scheduleId]);
   const pause = useCallback(() => actions?.onPause?.(scheduleId), [actions, scheduleId]);
   const resume = useCallback(() => actions?.onResume?.(scheduleId), [actions, scheduleId]);
+  const update = useCallback(
+    (draft: TaskScheduleUpdateDraft) => actions?.onUpdate?.(scheduleId, draft),
+    [actions, scheduleId],
+  );
   const deleteSchedule = useCallback(() => actions?.onDelete?.(scheduleId), [actions, scheduleId]);
   const toggleExpanded = useCallback(() => setExpanded((current) => !current), []);
+  const toggleEditing = useCallback(() => setEditing((current) => !current), []);
+  const closeEditing = useCallback(() => setEditing(false), []);
   const title = schedule?.name ?? scheduleId;
   const status = schedule?.status ?? "missing";
   const timing = formatAttachedScheduleTiming(schedule);
@@ -521,11 +534,20 @@ function AttachedScheduleRow({
         actionDisabled={actionDisabled}
         actions={actions}
         onToggleExpanded={toggleExpanded}
+        onToggleEditing={toggleEditing}
         onRunNow={runNow}
         onPause={pause}
         onResume={resume}
         onDelete={deleteSchedule}
       />
+      {editing && schedule ? (
+        <ScheduleEditForm
+          schedule={schedule}
+          disabled={actionDisabled}
+          onSave={update}
+          onCancel={closeEditing}
+        />
+      ) : null}
       {expanded ? <ScheduleDetails scheduleId={scheduleId} runs={latestRuns} /> : null}
     </View>
   );
@@ -537,6 +559,7 @@ function AttachedScheduleActions({
   actionDisabled,
   actions,
   onToggleExpanded,
+  onToggleEditing,
   onRunNow,
   onPause,
   onResume,
@@ -547,6 +570,7 @@ function AttachedScheduleActions({
   actionDisabled: boolean;
   actions?: TaskScheduleActions;
   onToggleExpanded: () => void;
+  onToggleEditing: () => void;
   onRunNow: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -555,6 +579,7 @@ function AttachedScheduleActions({
   const canRun = Boolean(actions?.onRunNow && schedule);
   const canPause = Boolean(actions?.onPause && schedule);
   const canResume = Boolean(actions?.onResume);
+  const canEdit = Boolean(actions?.onUpdate && schedule);
   const canDelete = Boolean(actions?.onDelete);
   const isPaused = schedule?.status === "paused";
   return (
@@ -563,6 +588,11 @@ function AttachedScheduleActions({
         label={expanded ? "Hide" : "Details"}
         disabled={false}
         onPress={onToggleExpanded}
+      />
+      <ScheduleActionButton
+        label="Edit"
+        disabled={actionDisabled || !canEdit}
+        onPress={onToggleEditing}
       />
       <ScheduleActionButton label="Run" disabled={actionDisabled || !canRun} onPress={onRunNow} />
       {isPaused ? (
@@ -584,6 +614,85 @@ function AttachedScheduleActions({
         disabled={actionDisabled || !canDelete}
         onPress={onDelete}
       />
+    </View>
+  );
+}
+
+function ScheduleEditForm({
+  schedule,
+  disabled,
+  onSave,
+  onCancel,
+}: {
+  schedule: ScheduleSummary;
+  disabled: boolean;
+  onSave: (draft: TaskScheduleUpdateDraft) => void;
+  onCancel: () => void;
+}) {
+  const [mode, setMode] = useState<"every" | "cron">(schedule.cadence.type);
+  const [nameDraft, setNameDraft] = useState(schedule.name ?? "");
+  const [everyDraft, setEveryDraft] = useState(formatEveryInput(schedule.cadence));
+  const [cronDraft, setCronDraft] = useState(
+    schedule.cadence.type === "cron" ? schedule.cadence.expression : "0 9 * * *",
+  );
+  const [timezoneDraft, setTimezoneDraft] = useState(
+    schedule.cadence.type === "cron" ? (schedule.cadence.timezone ?? "") : "",
+  );
+  const cadence = useMemo(
+    () =>
+      mode === "every" ? parseEveryCadence(everyDraft) : parseCronCadence(cronDraft, timezoneDraft),
+    [cronDraft, everyDraft, mode, timezoneDraft],
+  );
+  const saveDisabled = disabled || cadence === null;
+  const setEveryMode = useCallback(() => setMode("every"), []);
+  const setCronMode = useCallback(() => setMode("cron"), []);
+  const save = useCallback(() => {
+    if (!cadence) {
+      return;
+    }
+    const name = nameDraft.trim();
+    onSave({
+      cadence,
+      name: name ? name : null,
+    });
+    onCancel();
+  }, [cadence, nameDraft, onCancel, onSave]);
+  return (
+    <View style={styles.scheduleEdit}>
+      <View style={styles.scheduleModeRow}>
+        <QuickChip label="Every" onPress={setEveryMode} selected={mode === "every"} />
+        <QuickChip label="Cron" onPress={setCronMode} selected={mode === "cron"} />
+      </View>
+      <ScheduleTextInput
+        value={nameDraft}
+        onChangeText={setNameDraft}
+        placeholder="Schedule name"
+      />
+      {mode === "every" ? (
+        <ScheduleTextInput value={everyDraft} onChangeText={setEveryDraft} placeholder="1d" />
+      ) : (
+        <View style={styles.scheduleCronFields}>
+          <ScheduleTextInput
+            value={cronDraft}
+            onChangeText={setCronDraft}
+            placeholder="0 9 * * *"
+          />
+          <ScheduleTextInput
+            value={timezoneDraft}
+            onChangeText={setTimezoneDraft}
+            placeholder="America/New_York"
+          />
+        </View>
+      )}
+      {cadence ? (
+        <Text style={styles.scheduleHint}>{formatCadence(cadence)}</Text>
+      ) : (
+        <Text style={styles.scheduleError}>Invalid schedule cadence.</Text>
+      )}
+      <View style={styles.attachedScheduleActions}>
+        <ScheduleActionButton label="Save" disabled={saveDisabled} onPress={save} />
+        <ScheduleActionButton label="Cancel" disabled={disabled} onPress={onCancel} />
+      </View>
     </View>
   );
 }
@@ -680,6 +789,24 @@ function formatEveryMs(value: number): string {
     }
   }
   return `${value} ms`;
+}
+
+function formatEveryInput(cadence: ScheduleCadence): string {
+  if (cadence.type !== "every") {
+    return "1d";
+  }
+  const units = [
+    { suffix: "w", ms: 604_800_000 },
+    { suffix: "d", ms: 86_400_000 },
+    { suffix: "h", ms: 3_600_000 },
+    { suffix: "m", ms: 60_000 },
+  ];
+  for (const unit of units) {
+    if (cadence.everyMs % unit.ms === 0) {
+      return `${cadence.everyMs / unit.ms}${unit.suffix}`;
+    }
+  }
+  return `${Math.max(1, Math.round(cadence.everyMs / 60_000))}m`;
 }
 
 function parseEveryCadence(value: string): ScheduleCadence | null {
@@ -1160,6 +1287,12 @@ const styles = StyleSheet.create((theme) => ({
   scheduleActionText: { color: theme.colors.foreground, fontSize: theme.fontSize.xs },
   scheduleActionDangerText: { color: theme.colors.destructive },
   scheduleDetails: {
+    gap: theme.spacing[1],
+    paddingTop: theme.spacing[1],
+    borderTopWidth: theme.borderWidth[1],
+    borderTopColor: theme.colors.border,
+  },
+  scheduleEdit: {
     gap: theme.spacing[1],
     paddingTop: theme.spacing[1],
     borderTopWidth: theme.borderWidth[1],
