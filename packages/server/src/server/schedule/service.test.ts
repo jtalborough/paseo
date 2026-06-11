@@ -67,6 +67,8 @@ describe("ScheduleService", () => {
   });
 
   test("ticks due schedules and records run history on disk", async () => {
+    const startedRuns: string[] = [];
+    const finishedRuns: string[] = [];
     const service = new ScheduleService({
       paseoHome: tempDir,
       logger: createTestLogger(),
@@ -78,6 +80,12 @@ describe("ScheduleService", () => {
         agentId: "00000000-0000-0000-0000-000000000001",
         output: `ran:${schedule.prompt}`,
       }),
+      onRunStarted: async (_schedule, run) => {
+        startedRuns.push(`${run.id}:${run.status}`);
+      },
+      onRunFinished: async (_schedule, run) => {
+        finishedRuns.push(`${run.id}:${run.status}`);
+      },
     });
 
     const created = await service.create({
@@ -102,6 +110,8 @@ describe("ScheduleService", () => {
       agentId: "00000000-0000-0000-0000-000000000001",
       output: "ran:Review new PRs",
     });
+    expect(startedRuns).toEqual([`${inspected.runs[0]?.id}:running`]);
+    expect(finishedRuns).toEqual([`${inspected.runs[0]?.id}:succeeded`]);
     expect(inspected.nextRunAt).toBe("2026-01-01T00:02:00.000Z");
   });
 

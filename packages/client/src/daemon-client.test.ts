@@ -279,6 +279,92 @@ test("sends task.run requests and resolves launched agent context", async () => 
   });
 });
 
+test("sends task.schedule.create requests and resolves attached schedule", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const promise = client.taskScheduleCreate({
+    projectGroupId: "grp_project",
+    id: "task-1",
+    repoRoot: "/repo",
+    provider: "codex",
+    cadence: { type: "every", everyMs: 86_400_000 },
+    name: "Daily task",
+  });
+
+  expect(mock.sent).toHaveLength(1);
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request).toMatchObject({
+    type: "task.schedule.create.request",
+    projectGroupId: "grp_project",
+    id: "task-1",
+    repoRoot: "/repo",
+    provider: "codex",
+    cadence: { type: "every", everyMs: 86_400_000 },
+    name: "Daily task",
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "task.schedule.create.response",
+      payload: {
+        ok: true,
+        requestId: request.requestId,
+        schedule: {
+          id: "abc12345",
+          name: "Daily task",
+          prompt: "Run the task",
+          cadence: { type: "every", everyMs: 86_400_000 },
+          target: {
+            type: "new-agent",
+            config: { provider: "codex", cwd: "/repo" },
+          },
+          status: "active",
+          createdAt: "2026-06-11T00:00:00.000Z",
+          updatedAt: "2026-06-11T00:00:00.000Z",
+          nextRunAt: "2026-06-11T00:00:00.000Z",
+          lastRunAt: null,
+          pausedAt: null,
+          expiresAt: null,
+          maxRuns: null,
+        },
+        task: {
+          metadata: {
+            id: "task-1",
+            projectGroupId: "grp_project",
+            title: "Run me",
+            actionState: "todo",
+            run: "agent",
+            provider: "codex",
+            scheduleIds: ["abc12345"],
+            createdAt: "2026-06-10T00:00:00.000Z",
+            updatedAt: "2026-06-10T00:00:00.000Z",
+          },
+          body: "",
+        },
+      },
+    }),
+  );
+
+  await expect(promise).resolves.toMatchObject({
+    schedule: { id: "abc12345" },
+    task: { metadata: { id: "task-1", scheduleIds: ["abc12345"] } },
+  });
+});
+
 test("lists Project context packets", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

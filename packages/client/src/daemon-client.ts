@@ -94,7 +94,10 @@ import type {
   TaskConfig,
   TaskViewDefinition,
 } from "@getpaseo/protocol/task/types";
-import type { TaskUpdateRequestSchema } from "@getpaseo/protocol/task/messages";
+import type {
+  TaskScheduleCreateRequestSchema,
+  TaskUpdateRequestSchema,
+} from "@getpaseo/protocol/task/messages";
 import type { ProjectContextPacket } from "@getpaseo/protocol/project-context/types";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import {
@@ -118,6 +121,10 @@ import {
 } from "./daemon-client-transport.js";
 
 export type TaskUpdateRpcPatch = z.infer<typeof TaskUpdateRequestSchema>["patch"];
+export type TaskScheduleCreateInput = Omit<
+  z.infer<typeof TaskScheduleCreateRequestSchema>,
+  "type" | "requestId"
+>;
 import { DaemonClientRuntimeMetrics } from "./daemon-client-runtime-metrics.js";
 import { TerminalStreamRouter, type TerminalStreamEvent } from "./terminal-stream-router.js";
 
@@ -125,6 +132,18 @@ export interface TaskRunResult {
   task: StoredTask;
   agentId: string;
   contextPacket: string;
+}
+
+export interface TaskScheduleCreateResult {
+  task: StoredTask;
+  schedule: Extract<
+    SessionOutboundMessage,
+    { type: "task.schedule.create.response" }
+  >["payload"] extends infer Payload
+    ? Payload extends { ok: true; schedule: infer Schedule }
+      ? Schedule
+      : never
+    : never;
 }
 
 export interface ProjectContextPacketEntry {
@@ -2008,6 +2027,29 @@ export class DaemonClient {
           task: payload.task,
           agentId: payload.agentId,
           contextPacket: payload.contextPacket,
+        };
+      },
+    });
+  }
+
+  async taskScheduleCreate(
+    input: TaskScheduleCreateInput,
+    requestId?: string,
+  ): Promise<TaskScheduleCreateResult> {
+    return this.sendNamespacedCorrelatedSessionRequest<
+      "task.schedule.create.response",
+      TaskScheduleCreateResult
+    >({
+      requestId,
+      message: { type: "task.schedule.create.request", ...input },
+      timeout: 15000,
+      selectPayload: (payload) => {
+        if (!payload.ok) {
+          throw new Error(payload.error);
+        }
+        return {
+          task: payload.task,
+          schedule: payload.schedule,
         };
       },
     });

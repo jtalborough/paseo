@@ -231,6 +231,20 @@ moves from prototype into stable product behavior.
 - Expand timesheets beyond daily Project/task summaries into export/mirror workflows and richer
   reporting ranges.
 
+### Scheduled agent tasks
+
+- Project Tasks can opt into daemon-owned schedule definitions that launch an agent from the task,
+  selected prompt/profile, and context packet at the intended time. The schedule should reference the
+  local task file and record run history back onto the task rather than becoming a separate drifting
+  automation list.
+- Scheduled runs need an execution ledger: task file, schedule id, intended run time, actual start
+  time, context packet, provider/profile, Folder grants, result, summary, changed files, follow-up
+  task links, and external mirror updates.
+- Add trust controls before unattended execution: dry run, run now, pause, approval-before-edit,
+  comment-only mode, retry policy, missed-run policy, and failure notification routing.
+- Keep scheduled work Project-scoped by default. Global schedule views should aggregate Project
+  schedules, not own the schedule source of truth.
+
 ### Browser
 
 - Treat Browser as its own epic. It needs bookmarks, credentials/OnePassword strategy, Project

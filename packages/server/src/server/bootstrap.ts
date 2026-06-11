@@ -111,6 +111,7 @@ import { FileBackedChatService } from "./chat/chat-service.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { LoopService } from "./loop-service.js";
 import { ScheduleService } from "./schedule/service.js";
+import { TaskStore } from "./task/store.js";
 import { DaemonConfigStore } from "./daemon-config-store.js";
 import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
 import { archivePersistedWorkspaceRecord } from "./workspace-archive-service.js";
@@ -136,10 +137,13 @@ import { createScriptStatusEmitter } from "./script-status-projection.js";
 import { WorkspaceScriptRuntimeStore } from "./workspace-script-runtime-store.js";
 import { isHostnameAllowed, type HostnamesConfig } from "./hostnames.js";
 import { createRequireBearerMiddleware, type DaemonAuthConfig } from "./auth.js";
+import type { ScheduleRun, StoredSchedule } from "@getpaseo/protocol/schedule/types";
+import type { TaskScheduledAgentRun } from "@getpaseo/protocol/task/types";
 
 type AgentMcpTransportMap = Map<string, StreamableHTTPServerTransport>;
 
 const MAX_MCP_DEBUG_BATCH_ITEMS = 10;
+const MAX_TASK_SCHEDULED_RUNS = 20;
 const REDACTED_LOG_VALUE = "[redacted]";
 const DOWNLOAD_OPEN_FLAGS =
   process.platform === "win32" ? constants.O_RDONLY : constants.O_RDONLY | constants.O_NOFOLLOW;
@@ -199,6 +203,72 @@ function summarizeAgentMcpDebugBody(body: unknown): Record<string, unknown> {
     messages,
     ...(body.length > messages.length ? { omitted: body.length - messages.length } : {}),
   };
+}
+
+function summarizeScheduledRun(run: ScheduleRun): string | null {
+  const value = run.output ?? run.error;
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return (
+    trimmed
+      .split("\n")
+      .find((line) => line.trim().length > 0)
+      ?.trim()
+      .slice(0, 240) ?? null
+  );
+}
+
+function taskResultFromScheduleRun(run: ScheduleRun): TaskScheduledAgentRun["result"] {
+  if (run.status === "failed") {
+    return "failed";
+  }
+  if (run.status === "succeeded") {
+    return "success";
+  }
+  return null;
+}
+
+async function recordTaskScheduleRun(
+  taskStore: TaskStore,
+  schedule: StoredSchedule,
+  run: ScheduleRun,
+): Promise<void> {
+  const tasks = (await taskStore.queryAll()).filter((task) =>
+    task.metadata.scheduleIds.includes(schedule.id),
+  );
+  if (tasks.length === 0) {
+    return;
+  }
+  const taskRun: TaskScheduledAgentRun = {
+    scheduleId: schedule.id,
+    runId: run.id,
+    scheduledFor: run.scheduledFor,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt,
+    status: run.status,
+    agentId: run.agentId,
+    contextPacket: null,
+    provider: schedule.target.type === "new-agent" ? schedule.target.config.provider : null,
+    folderGrants: [],
+    result: taskResultFromScheduleRun(run),
+    summary: summarizeScheduledRun(run),
+    changedFiles: [],
+    followUpTaskIds: [],
+    externalMirrorUpdates: [],
+  };
+  await Promise.all(
+    tasks.map((task) => {
+      const scheduledRuns = [
+        ...task.metadata.scheduledRuns.filter(
+          (existing) => !(existing.scheduleId === schedule.id && existing.runId === run.id),
+        ),
+        taskRun,
+      ].slice(-MAX_TASK_SCHEDULED_RUNS);
+      return taskStore.update(task.metadata.projectGroupId, task.metadata.id, { scheduledRuns });
+    }),
+  );
 }
 
 export type PaseoOpenAIConfig = OpenAiSpeechProviderConfig;
@@ -609,12 +679,15 @@ export async function createPaseoDaemon(
   });
   await loopService.initialize();
   logger.info({ elapsed: elapsed() }, "Loop service initialized");
+  const taskStore = new TaskStore(config.paseoHome);
   const scheduleService = new ScheduleService({
     paseoHome: config.paseoHome,
     logger,
     agentManager,
     agentStorage,
     providerSnapshotManager,
+    onRunStarted: (schedule, run) => recordTaskScheduleRun(taskStore, schedule, run),
+    onRunFinished: (schedule, run) => recordTaskScheduleRun(taskStore, schedule, run),
   });
   await scheduleService.start();
   agentManager.setAgentArchivedCallback(async (agentId) => {

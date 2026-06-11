@@ -28,6 +28,8 @@ function task(
       doDate: null,
       recurrence: null,
       remind: [],
+      scheduleIds: [],
+      scheduledRuns: [],
       timerStartedAt:
         timeEntries.at(-1)?.endedAt === null ? (timeEntries.at(-1)?.startedAt ?? null) : null,
       trackedSeconds: 0,

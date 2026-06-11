@@ -414,6 +414,37 @@ function buildTaskRunPrompt(input: {
   ].join("\n");
 }
 
+function buildScheduledTaskPrompt(input: {
+  task: StoredTask;
+  taskPath: string;
+  repoRoot: string;
+}): string {
+  const { task, taskPath, repoRoot } = input;
+  const { metadata } = task;
+  const body = task.body.trim();
+  return [
+    `Scheduled Paseo Project Task: ${metadata.title}`,
+    "",
+    `Task file: ${taskPath}`,
+    `Project: ${metadata.projectGroupId}`,
+    `Repo root: ${repoRoot}`,
+    `Action State: ${metadata.actionState}`,
+    metadata.priority ? `Priority: ${metadata.priority}` : null,
+    metadata.type ? `Type: ${metadata.type}` : null,
+    metadata.context ? `Context: ${metadata.context}` : null,
+    metadata.github ? `GitHub: ${metadata.github}` : null,
+    metadata.links.length > 0
+      ? `Links:\n${metadata.links.map((link) => `- ${link}`).join("\n")}`
+      : null,
+    "",
+    body ? `Task notes:\n${body}` : "Task notes: none",
+    "",
+    "This is an unattended scheduled run. Be conservative: inspect current files before changing them, summarize what happened, and do not mark the task done unless the work is actually complete.",
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+}
+
 function buildWorkspaceCheckout(
   workspace: PersistedWorkspaceRecord,
   project: PersistedProjectRecord,
@@ -2750,6 +2781,8 @@ export class Session {
         return this.handleTaskTimerStopRequest(msg);
       case "task.run.request":
         return this.handleTaskRunRequest(msg);
+      case "task.schedule.create.request":
+        return this.handleTaskScheduleCreateRequest(msg);
       case "task.config.get.request":
         return this.handleTaskConfigGetRequest(msg);
       case "task.config.update.request":
@@ -3017,6 +3050,67 @@ export class Session {
           ok: false,
           requestId: msg.requestId,
           error: getErrorMessageOr(error, "Failed to run task"),
+        },
+      });
+    }
+  }
+
+  private async handleTaskScheduleCreateRequest(
+    msg: Extract<SessionInboundMessage, { type: "task.schedule.create.request" }>,
+  ): Promise<void> {
+    try {
+      await this.assertActiveTaskProject(msg.projectGroupId);
+      const task = await this.taskStore.get(msg.projectGroupId, msg.id);
+      if (!task) {
+        throw new Error(`Task not found: ${msg.projectGroupId}/${msg.id}`);
+      }
+      const provider = (msg.provider ?? task.metadata.provider)?.trim();
+      if (!provider) {
+        throw new Error("Task schedule requires a provider");
+      }
+      await this.resolveTaskRunFolderGrant(msg.projectGroupId, msg.repoRoot);
+
+      const taskPath = `tasks/${task.metadata.id}.md`;
+      const schedule = await this.scheduleService.create({
+        name: msg.name ?? `Task: ${task.metadata.title}`,
+        prompt: buildScheduledTaskPrompt({
+          task,
+          taskPath,
+          repoRoot: msg.repoRoot,
+        }),
+        cadence: msg.cadence,
+        target: {
+          type: "new-agent",
+          config: {
+            provider: provider as AgentProvider,
+            cwd: msg.repoRoot,
+            title: task.metadata.title.slice(0, 60),
+          },
+        },
+        runOnCreate: msg.runOnCreate,
+      });
+      const scheduleIds = Array.from(new Set([...task.metadata.scheduleIds, schedule.id]));
+      const updatedTask = await this.taskStore.update(msg.projectGroupId, msg.id, {
+        run: "agent",
+        provider,
+        scheduleIds,
+      });
+      this.emit({
+        type: "task.schedule.create.response",
+        payload: {
+          ok: true,
+          requestId: msg.requestId,
+          task: updatedTask,
+          schedule: this.toScheduleSummary(schedule),
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "task.schedule.create.response",
+        payload: {
+          ok: false,
+          requestId: msg.requestId,
+          error: getErrorMessageOr(error, "Failed to schedule task"),
         },
       });
     }

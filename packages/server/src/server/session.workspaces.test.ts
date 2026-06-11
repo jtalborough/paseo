@@ -14,6 +14,7 @@ import { expect, test, vi } from "vitest";
 import { z } from "zod";
 import { Session } from "./session.js";
 import type { AgentSnapshotPayload, SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { CreateScheduleInput } from "@getpaseo/protocol/schedule/types";
 import { AgentManager } from "./agent/agent-manager.js";
 import { AgentStorage, type StoredAgentRecord } from "./agent/agent-storage.js";
 import type {
@@ -901,6 +902,22 @@ test("task.run creates an agent, worktree, and durable context packet", async ()
       path.join(workdir, "groups.json"),
       asSessionLogger(logger),
     );
+    const scheduleCreate = vi.fn(async (input: CreateScheduleInput) => ({
+      id: "abc12345",
+      name: input.name ?? null,
+      prompt: input.prompt,
+      cadence: input.cadence,
+      target: input.target,
+      status: "active" as const,
+      createdAt: "2026-06-10T00:00:00.000Z",
+      updatedAt: "2026-06-10T00:00:00.000Z",
+      nextRunAt: "2026-06-10T01:00:00.000Z",
+      lastRunAt: null,
+      pausedAt: null,
+      expiresAt: null,
+      maxRuns: null,
+      runs: [],
+    }));
     await groupRegistry.upsert(
       createPersistedGroupRecord({
         groupId: "grp_task_run",
@@ -936,7 +953,7 @@ test("task.run creates an agent, worktree, and durable context packet", async ()
       workspaceRegistry,
       groupRegistry,
       chatService: asChatService(),
-      scheduleService: asScheduleService(),
+      scheduleService: asScheduleService({ create: scheduleCreate }),
       loopService: asLoopService(),
       checkoutDiffManager: asCheckoutDiffManager({
         subscribe: async () => ({
@@ -979,6 +996,52 @@ test("task.run creates an agent, worktree, and durable context packet", async ()
     };
 
     await session.handleMessage({
+      type: "task.schedule.create.request",
+      requestId: "task-schedule",
+      projectGroupId: "grp_task_run",
+      id: createdTask.metadata.id,
+      repoRoot,
+      provider: "codex",
+      cadence: { type: "every", everyMs: 3_600_000 },
+      name: "Hourly task launch",
+      runOnCreate: false,
+    });
+
+    const schedulePayload = lastPayloadOfType(emitted, "task.schedule.create.response");
+    expect(schedulePayload).toMatchObject({
+      ok: true,
+      requestId: "task-schedule",
+      schedule: {
+        id: "abc12345",
+        name: "Hourly task launch",
+        status: "active",
+      },
+      task: {
+        metadata: {
+          id: createdTask.metadata.id,
+          run: "agent",
+          provider: "codex",
+          scheduleIds: ["abc12345"],
+        },
+      },
+    });
+    expect(scheduleCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Hourly task launch",
+        cadence: { type: "every", everyMs: 3_600_000 },
+        runOnCreate: false,
+        target: {
+          type: "new-agent",
+          config: {
+            provider: "codex",
+            cwd: repoRoot,
+            title: "Implement task launch",
+          },
+        },
+      }),
+    );
+
+    await session.handleMessage({
       type: "task.run.request",
       requestId: "task-run",
       projectGroupId: "grp_task_run",
@@ -1006,7 +1069,7 @@ test("task.run creates an agent, worktree, and durable context packet", async ()
     });
 
     await expect(agentStorage.get("00000000-0000-4000-8000-000000000553")).resolves.toMatchObject({
-      cwd: expect.stringContaining("task-2026-06-10-implement-task-launch"),
+      cwd: expect.stringContaining(`task-${createdTask.metadata.id}`),
       projectGroupId: "grp_task_run",
       labels: {
         projectGroupId: "grp_task_run",

@@ -124,6 +124,42 @@ function nullableString() {
     .transform((value) => value ?? null);
 }
 
+export const TaskScheduledAgentRunStatusSchema = z.enum([
+  "scheduled",
+  "running",
+  "succeeded",
+  "failed",
+  "skipped",
+]);
+export type TaskScheduledAgentRunStatus = z.infer<typeof TaskScheduledAgentRunStatusSchema>;
+
+export const TaskScheduledAgentRunSchema = z.object({
+  /** Daemon schedule id under `$PASEO_HOME/schedules`. */
+  scheduleId: z.string().min(1),
+  /** Schedule run id, copied from the daemon-owned schedule run ledger. */
+  runId: z.string().min(1),
+  /** Intended wall-clock execution time. */
+  scheduledFor: z.string(),
+  /** Actual start time when the daemon began dispatching the agent. */
+  startedAt: nullableString(),
+  endedAt: nullableString(),
+  status: TaskScheduledAgentRunStatusSchema,
+  agentId: nullableString(),
+  /** Project-relative context packet path used for this scheduled launch. */
+  contextPacket: nullableString(),
+  provider: nullableString(),
+  /** Project folder or tool grants selected for the run. */
+  folderGrants: z.array(z.string()).default([]),
+  result: TaskResultSchema.nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  summary: nullableString(),
+  changedFiles: z.array(z.string()).default([]),
+  followUpTaskIds: z.array(z.string()).default([]),
+  externalMirrorUpdates: z.array(z.string()).default([]),
+});
+export type TaskScheduledAgentRun = z.infer<typeof TaskScheduledAgentRunSchema>;
+
 /**
  * Migration shim. Two older vocabularies map onto the current Action State:
  * - the original `status: todo|doing|done`
@@ -141,7 +177,41 @@ const LEGACY_STATUS_TO_ACTION_STATE: Record<string, ActionState> = {
   // values that are already valid pass through untouched
 };
 
-export const TaskFrontmatterSchema = z
+export interface TaskFrontmatter {
+  id: string;
+  projectGroupId: string;
+  title: string;
+  actionState: ActionState;
+  run: TaskRunMode;
+  priority: TaskPriority | null;
+  type: string | null;
+  people: string[];
+  context: string | null;
+  attention: TaskAttention | null;
+  doDate: string | null;
+  recurrence: Recurrence | null;
+  remind: string[];
+  scheduleIds: string[];
+  scheduledRuns: TaskScheduledAgentRun[];
+  timerStartedAt: string | null;
+  trackedSeconds: number;
+  timeEntries: TaskTimeEntry[];
+  provider: string | null;
+  links: string[];
+  github: string | null;
+  sources: TaskExternalSource[];
+  createdAt: string;
+  updatedAt: string;
+  agentId: string | null;
+  worktree: string | null;
+  contextPacket: string | null;
+  lastRunAt: string | null;
+  result: TaskResult | null;
+  lastCompletedAt: string | null;
+  completions: string[];
+}
+
+export const TaskFrontmatterSchema: z.ZodType<TaskFrontmatter, z.ZodTypeDef, unknown> = z
   .object({
     /** Stable id; also the file stem (`<id>.md`). */
     id: z.string().min(1),
@@ -178,6 +248,12 @@ export const TaskFrontmatterSchema = z
       .transform((value) => value ?? null),
     /** Reminder offsets: absolute ISO datetimes and/or relative like "-3d". */
     remind: z.array(z.string()).default([]),
+
+    // --- Scheduled agent execution. ---
+    /** Daemon schedule ids that can launch this task. */
+    scheduleIds: z.array(z.string()).default([]),
+    /** Append-only execution ledger for scheduled task agent runs. */
+    scheduledRuns: z.array(TaskScheduledAgentRunSchema).default([]),
 
     // --- Time tracking. ---
     /** Active stopwatch start timestamp; null when paused. */
@@ -230,7 +306,6 @@ export const TaskFrontmatterSchema = z
     const { status, actionState, ...rest } = task;
     return { ...rest, actionState: resolveActionState(actionState, status) };
   });
-export type TaskFrontmatter = z.infer<typeof TaskFrontmatterSchema>;
 
 /** Resolve a valid ActionState from the (possibly legacy/empty) raw fields. */
 function resolveActionState(
@@ -251,13 +326,15 @@ function resolveActionState(
  * Wire shape of a task: queryable frontmatter + free-form markdown body. Used
  * both as the in-memory `StoredTask` (server) and the over-the-wire payload.
  */
-export const TaskWireSchema = z.object({
+export interface StoredTask {
+  metadata: TaskFrontmatter;
+  body: string;
+}
+
+export const TaskWireSchema: z.ZodType<StoredTask, z.ZodTypeDef, unknown> = z.object({
   metadata: TaskFrontmatterSchema,
   body: z.string(),
 });
-
-/** A fully materialized task: queryable frontmatter + free-form markdown body. */
-export type StoredTask = z.infer<typeof TaskWireSchema>;
 
 export interface CreateTaskInput {
   projectGroupId: string;
@@ -275,6 +352,8 @@ export interface CreateTaskInput {
   timerStartedAt?: string | null;
   trackedSeconds?: number;
   timeEntries?: TaskTimeEntry[];
+  scheduleIds?: string[];
+  scheduledRuns?: TaskScheduledAgentRun[];
   provider?: string | null;
   links?: string[];
   github?: string | null;
@@ -297,6 +376,8 @@ export interface UpdateTaskInput {
   timerStartedAt?: string | null;
   trackedSeconds?: number;
   timeEntries?: TaskTimeEntry[];
+  scheduleIds?: string[];
+  scheduledRuns?: TaskScheduledAgentRun[];
   provider?: string | null;
   links?: string[];
   github?: string | null;

@@ -54,8 +54,12 @@ export function asChatService(): SessionOptions["chatService"] {
   return createStub<SessionOptions["chatService"]>({});
 }
 
-export function asScheduleService(): SessionOptions["scheduleService"] {
-  return createStub<SessionOptions["scheduleService"]>({});
+export function asScheduleService(
+  stub: {
+    [K in keyof SessionOptions["scheduleService"]]?: unknown;
+  } = {},
+): SessionOptions["scheduleService"] {
+  return createStub<SessionOptions["scheduleService"]>(stub);
 }
 
 export function asLoopService(): SessionOptions["loopService"] {

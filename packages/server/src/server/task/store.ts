@@ -72,6 +72,15 @@ function serializeTask(task: StoredTask): string {
   return `${FRONTMATTER_FENCE}\n${yamlText}\n${FRONTMATTER_FENCE}\n\n${body}`;
 }
 
+function scheduleCreateFields(
+  input: CreateTaskInput,
+): Pick<TaskFrontmatter, "scheduleIds" | "scheduledRuns"> {
+  return {
+    scheduleIds: input.scheduleIds ?? [],
+    scheduledRuns: input.scheduledRuns ?? [],
+  };
+}
+
 /**
  * File-backed store for Task primitives. Each Task is contained by its Project:
  * `<paseoHome>/projects/<groupId>/tasks/<id>.md`. The file is the source of
@@ -172,6 +181,7 @@ export class TaskStore {
       doDate: input.doDate ?? null,
       recurrence: input.recurrence ?? null,
       remind: input.remind ?? [],
+      ...scheduleCreateFields(input),
       timerStartedAt: input.timerStartedAt ?? null,
       trackedSeconds: input.trackedSeconds ?? 0,
       timeEntries: input.timeEntries ?? [],
@@ -211,6 +221,8 @@ export class TaskStore {
         doDate: patch.doDate,
         recurrence: patch.recurrence,
         remind: patch.remind,
+        scheduleIds: patch.scheduleIds,
+        scheduledRuns: patch.scheduledRuns,
         timerStartedAt: patch.timerStartedAt,
         trackedSeconds: patch.trackedSeconds,
         timeEntries: patch.timeEntries,

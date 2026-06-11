@@ -149,6 +149,8 @@ export interface ScheduleServiceOptions {
   providerSnapshotManager: CreateConfigResolver;
   now?: () => Date;
   runner?: (schedule: StoredSchedule, runId: string) => Promise<ScheduleExecutionResult>;
+  onRunStarted?: (schedule: StoredSchedule, run: ScheduleRun) => Promise<void>;
+  onRunFinished?: (schedule: StoredSchedule, run: ScheduleRun) => Promise<void>;
 }
 
 export class ScheduleService {
@@ -162,6 +164,8 @@ export class ScheduleService {
     schedule: StoredSchedule,
     runId: string,
   ) => Promise<ScheduleExecutionResult>;
+  private readonly onRunStarted?: (schedule: StoredSchedule, run: ScheduleRun) => Promise<void>;
+  private readonly onRunFinished?: (schedule: StoredSchedule, run: ScheduleRun) => Promise<void>;
   private readonly runningScheduleIds = new Set<string>();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -173,6 +177,8 @@ export class ScheduleService {
     this.createConfigResolver = options.providerSnapshotManager;
     this.now = options.now ?? (() => new Date());
     this.runner = options.runner ?? ((schedule, runId) => this.executeSchedule(schedule, runId));
+    this.onRunStarted = options.onRunStarted;
+    this.onRunFinished = options.onRunFinished;
   }
 
   async start(): Promise<void> {
@@ -444,6 +450,7 @@ export class ScheduleService {
       runs: [...schedule.runs, runningRun],
     };
     await this.store.put(scheduleWithRun);
+    await this.notifyRunStarted(scheduleWithRun, runningRun);
 
     try {
       const result = await this.runner(scheduleWithRun, runId);
@@ -523,6 +530,38 @@ export class ScheduleService {
     }
 
     await this.store.put(updated);
+    const finishedRun = updated.runs.find((run) => run.id === params.runId);
+    if (finishedRun) {
+      await this.notifyRunFinished(updated, finishedRun);
+    }
+  }
+
+  private async notifyRunStarted(schedule: StoredSchedule, run: ScheduleRun): Promise<void> {
+    if (!this.onRunStarted) {
+      return;
+    }
+    try {
+      await this.onRunStarted(schedule, run);
+    } catch (error) {
+      this.logger.warn(
+        { err: error, scheduleId: schedule.id, runId: run.id },
+        "Schedule run started callback failed",
+      );
+    }
+  }
+
+  private async notifyRunFinished(schedule: StoredSchedule, run: ScheduleRun): Promise<void> {
+    if (!this.onRunFinished) {
+      return;
+    }
+    try {
+      await this.onRunFinished(schedule, run);
+    } catch (error) {
+      this.logger.warn(
+        { err: error, scheduleId: schedule.id, runId: run.id },
+        "Schedule run finished callback failed",
+      );
+    }
   }
 
   private async executeSchedule(

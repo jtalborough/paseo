@@ -9,6 +9,7 @@ import type {
   TaskConfig,
   TaskPriority,
 } from "@getpaseo/protocol/task/types";
+import type { ScheduleCadence, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
 import { type SelectOption, TaskMultiSelect, TaskSelect } from "@/components/task-select";
 import {
@@ -23,6 +24,7 @@ import { remindersToText, textToReminders } from "@/utils/task-reminders";
 import { StyleSheet } from "react-native-unistyles";
 
 const PLACEHOLDER_COLOR = "#9ca3af";
+const EMPTY_SCHEDULES: ScheduleSummary[] = [];
 
 interface Option<T> {
   value: T;
@@ -48,6 +50,20 @@ const ATTENTIONS: Option<TaskAttention>[] = [
   { value: "minimal", label: "Minimal" },
 ];
 
+export interface TaskScheduleDraft {
+  cadence: ScheduleCadence;
+  name?: string;
+  runOnCreate?: boolean;
+}
+
+export interface TaskScheduleActions {
+  onRunNow?: (scheduleId: string) => void;
+  onPause?: (scheduleId: string) => void;
+  onResume?: (scheduleId: string) => void;
+  onDelete?: (scheduleId: string) => void;
+  disabled?: boolean;
+}
+
 function toOption(value: string): SelectOption {
   return { value, label: value };
 }
@@ -71,6 +87,10 @@ export function TaskEditor({
   onRemoveContext,
   onRun,
   runDisabled,
+  onSchedule,
+  scheduleDisabled,
+  schedules,
+  scheduleActions,
   projectOptions,
   onChangeProject,
 }: {
@@ -86,6 +106,10 @@ export function TaskEditor({
   onRemoveContext?: (value: string) => void;
   onRun?: (id: string) => void;
   runDisabled?: boolean;
+  onSchedule?: (id: string, draft: TaskScheduleDraft) => void;
+  scheduleDisabled?: boolean;
+  schedules?: ScheduleSummary[];
+  scheduleActions?: TaskScheduleActions;
   projectOptions?: SelectOption[];
   onChangeProject?: (projectGroupId: string) => void;
 }) {
@@ -164,6 +188,11 @@ export function TaskEditor({
   const setBody = useCallback((value: string) => patchField({ body: value }), [patchField]);
 
   const handleRunPress = useCallback(() => onRun?.(id), [onRun, id]);
+  const handleSchedule = useCallback(
+    (draft: TaskScheduleDraft) => onSchedule?.(id, draft),
+    [id, onSchedule],
+  );
+  const taskSchedules = schedules ?? EMPTY_SCHEDULES;
   const handleDelete = useCallback(() => onDelete(id), [onDelete, id]);
 
   const typeOptions = useMemo(() => config.types.map(toOption), [config.types]);
@@ -261,6 +290,13 @@ export function TaskEditor({
         onRun={onRun ? handleRunPress : undefined}
         runDisabled={runDisabled ?? false}
       />
+      <ScheduledAgentTaskSection
+        task={task}
+        schedules={taskSchedules}
+        onSchedule={onSchedule ? handleSchedule : undefined}
+        actions={scheduleActions}
+        disabled={scheduleDisabled ?? false}
+      />
       <TextField
         label="GitHub"
         value={metadata.github}
@@ -276,6 +312,305 @@ export function TaskEditor({
       </View>
     </View>
   );
+}
+
+function ScheduledAgentTaskSection({
+  task,
+  schedules,
+  onSchedule,
+  actions,
+  disabled,
+}: {
+  task: StoredTask;
+  schedules: ScheduleSummary[];
+  onSchedule?: (draft: TaskScheduleDraft) => void;
+  actions?: TaskScheduleActions;
+  disabled: boolean;
+}) {
+  const { scheduleIds, scheduledRuns } = task.metadata;
+  const latestRuns = scheduledRuns.slice(-3).toReversed();
+  const scheduleById = useMemo(
+    () => new Map(schedules.map((schedule) => [schedule.id, schedule])),
+    [schedules],
+  );
+  const [mode, setMode] = useState<"every" | "cron">("every");
+  const [everyDraft, setEveryDraft] = useState("1d");
+  const [cronDraft, setCronDraft] = useState("0 9 * * *");
+  const [timezoneDraft, setTimezoneDraft] = useState("");
+  const [nameDraft, setNameDraft] = useState("");
+  const cadence = useMemo(
+    () =>
+      mode === "every" ? parseEveryCadence(everyDraft) : parseCronCadence(cronDraft, timezoneDraft),
+    [cronDraft, everyDraft, mode, timezoneDraft],
+  );
+  const scheduleDisabled = disabled || !onSchedule || cadence === null;
+  const scheduleButtonViewStyle = useMemo(
+    () => [styles.scheduleButton, scheduleDisabled ? styles.scheduleButtonDisabled : null],
+    [scheduleDisabled],
+  );
+  const handleSchedule = useCallback(() => {
+    if (!onSchedule || !cadence) {
+      return;
+    }
+    const name = nameDraft.trim();
+    onSchedule({
+      cadence,
+      ...(name ? { name } : {}),
+      ...(cadence.type === "every" ? { runOnCreate: false } : {}),
+    });
+  }, [cadence, nameDraft, onSchedule]);
+  const setEveryMode = useCallback(() => setMode("every"), []);
+  const setCronMode = useCallback(() => setMode("cron"), []);
+  return (
+    <View style={styles.fieldRow}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.fieldLabel}>Schedule</Text>
+        <Pressable
+          accessibilityRole="button"
+          disabled={scheduleDisabled}
+          onPress={handleSchedule}
+          style={scheduleButtonViewStyle}
+        >
+          <Text style={styles.scheduleButtonText}>Schedule</Text>
+        </Pressable>
+      </View>
+      <View style={styles.scheduleModeRow}>
+        <QuickChip label="Every" onPress={setEveryMode} selected={mode === "every"} />
+        <QuickChip label="Cron" onPress={setCronMode} selected={mode === "cron"} />
+      </View>
+      <ScheduleTextInput
+        value={nameDraft}
+        onChangeText={setNameDraft}
+        placeholder="Schedule name"
+      />
+      {mode === "every" ? (
+        <ScheduleTextInput value={everyDraft} onChangeText={setEveryDraft} placeholder="1d" />
+      ) : (
+        <View style={styles.scheduleCronFields}>
+          <ScheduleTextInput
+            value={cronDraft}
+            onChangeText={setCronDraft}
+            placeholder="0 9 * * *"
+          />
+          <ScheduleTextInput
+            value={timezoneDraft}
+            onChangeText={setTimezoneDraft}
+            placeholder="America/New_York"
+          />
+        </View>
+      )}
+      {cadence === null ? (
+        <Text style={styles.scheduleError}>Invalid schedule cadence.</Text>
+      ) : null}
+      {scheduleIds.length > 0 ? (
+        <View style={styles.attachedSchedules}>
+          {scheduleIds.map((scheduleId) => (
+            <AttachedScheduleRow
+              key={scheduleId}
+              scheduleId={scheduleId}
+              schedule={scheduleById.get(scheduleId) ?? null}
+              actions={actions}
+            />
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.scheduleEmpty}>No agent schedule is attached yet.</Text>
+      )}
+      {latestRuns.length > 0 ? (
+        <View style={styles.scheduleRuns}>
+          {latestRuns.map((run) => (
+            <View key={`${run.scheduleId}:${run.runId}`} style={styles.scheduleRun}>
+              <Text style={styles.scheduleRunTitle}>
+                {run.status} - {formatScheduleRunTime(run.scheduledFor)}
+              </Text>
+              {run.summary ? <Text style={styles.scheduleRunDetail}>{run.summary}</Text> : null}
+              <Text style={styles.scheduleRunMeta}>
+                {run.provider ?? "agent"} {run.contextPacket ? `- ${run.contextPacket}` : ""}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ScheduleTextInput({
+  value,
+  onChangeText,
+  placeholder,
+}: {
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <TextInput
+      style={styles.fieldInput}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={PLACEHOLDER_COLOR}
+      returnKeyType="done"
+      autoCapitalize="none"
+      autoCorrect={false}
+    />
+  );
+}
+
+function AttachedScheduleRow({
+  scheduleId,
+  schedule,
+  actions,
+}: {
+  scheduleId: string;
+  schedule: ScheduleSummary | null;
+  actions?: TaskScheduleActions;
+}) {
+  const actionDisabled = actions?.disabled ?? false;
+  const runNow = useCallback(() => actions?.onRunNow?.(scheduleId), [actions, scheduleId]);
+  const pause = useCallback(() => actions?.onPause?.(scheduleId), [actions, scheduleId]);
+  const resume = useCallback(() => actions?.onResume?.(scheduleId), [actions, scheduleId]);
+  const deleteSchedule = useCallback(() => actions?.onDelete?.(scheduleId), [actions, scheduleId]);
+  const title = schedule?.name ?? scheduleId;
+  const status = schedule?.status ?? "missing";
+  const timing = formatAttachedScheduleTiming(schedule);
+  const canRun = Boolean(actions?.onRunNow && schedule);
+  const canPause = Boolean(actions?.onPause && schedule);
+  const canResume = Boolean(actions?.onResume);
+  const canDelete = Boolean(actions?.onDelete);
+  return (
+    <View style={styles.attachedSchedule}>
+      <View style={styles.attachedScheduleMain}>
+        <Text style={styles.attachedScheduleTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.attachedScheduleMeta}>
+          {status} - {timing}
+        </Text>
+      </View>
+      <View style={styles.attachedScheduleActions}>
+        <ScheduleActionButton label="Run" disabled={actionDisabled || !canRun} onPress={runNow} />
+        {schedule?.status === "paused" ? (
+          <ScheduleActionButton
+            label="Resume"
+            disabled={actionDisabled || !canResume}
+            onPress={resume}
+          />
+        ) : (
+          <ScheduleActionButton
+            label="Pause"
+            disabled={actionDisabled || !canPause}
+            onPress={pause}
+          />
+        )}
+        <ScheduleActionButton
+          label="Delete"
+          destructive
+          disabled={actionDisabled || !canDelete}
+          onPress={deleteSchedule}
+        />
+      </View>
+    </View>
+  );
+}
+
+function ScheduleActionButton({
+  label,
+  onPress,
+  disabled,
+  destructive = false,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled: boolean;
+  destructive?: boolean;
+}) {
+  const buttonStyle = useMemo(
+    () => [
+      styles.scheduleAction,
+      destructive ? styles.scheduleActionDanger : null,
+      disabled ? styles.scheduleActionDisabled : null,
+    ],
+    [destructive, disabled],
+  );
+  const textStyle = useMemo(
+    () => [styles.scheduleActionText, destructive ? styles.scheduleActionDangerText : null],
+    [destructive],
+  );
+  return (
+    <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={buttonStyle}>
+      <Text style={textStyle}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function formatAttachedScheduleTiming(schedule: ScheduleSummary | null): string {
+  if (!schedule) {
+    return "Schedule not found";
+  }
+  if (schedule.nextRunAt) {
+    return `Next ${formatScheduleRunTime(schedule.nextRunAt)}`;
+  }
+  if (schedule.lastRunAt) {
+    return `Last ${formatScheduleRunTime(schedule.lastRunAt)}`;
+  }
+  return "No runs yet";
+}
+
+function parseEveryCadence(value: string): ScheduleCadence | null {
+  const match = value.trim().match(/^(\d+)\s*([mhdw])$/i);
+  if (!match) {
+    return null;
+  }
+  const amount = Number(match[1]);
+  const unit = match[2]?.toLowerCase();
+  const multiplier = everyUnitMultiplier(unit);
+  if (!Number.isInteger(amount) || amount <= 0 || multiplier <= 0) {
+    return null;
+  }
+  return { type: "every", everyMs: amount * multiplier };
+}
+
+function everyUnitMultiplier(unit: string | undefined): number {
+  switch (unit) {
+    case "m":
+      return 60_000;
+    case "h":
+      return 3_600_000;
+    case "d":
+      return 86_400_000;
+    case "w":
+      return 604_800_000;
+    default:
+      return 0;
+  }
+}
+
+function parseCronCadence(expression: string, timezone: string): ScheduleCadence | null {
+  const trimmedExpression = expression.trim();
+  if (!trimmedExpression) {
+    return null;
+  }
+  const trimmedTimezone = timezone.trim();
+  return {
+    type: "cron",
+    expression: trimmedExpression,
+    ...(trimmedTimezone ? { timezone: trimmedTimezone } : {}),
+  };
+}
+
+function formatScheduleRunTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 /** Project select gives `string | null`; a project is never cleared, so coerce. */
@@ -330,10 +665,26 @@ function DateField({
   );
 }
 
-function QuickChip({ label, onPress }: { label: string; onPress: () => void }) {
+function QuickChip({
+  label,
+  onPress,
+  selected = false,
+}: {
+  label: string;
+  onPress: () => void;
+  selected?: boolean;
+}) {
+  const chipStyle = useMemo(
+    () => [styles.addChip, selected ? styles.addChipSelected : null],
+    [selected],
+  );
+  const textStyle = useMemo(
+    () => [styles.addChipText, selected ? styles.addChipTextSelected : null],
+    [selected],
+  );
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.addChip}>
-      <Text style={styles.addChipText}>{label}</Text>
+    <Pressable accessibilityRole="button" onPress={onPress} style={chipStyle}>
+      <Text style={textStyle}>{label}</Text>
     </Pressable>
   );
 }
@@ -575,6 +926,12 @@ const styles = StyleSheet.create((theme) => ({
     borderTopColor: theme.colors.border,
   },
   fieldRow: { gap: theme.spacing[1] },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[2],
+  },
   fieldLabel: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing[1] },
   addChip: {
@@ -584,7 +941,12 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
+  addChipSelected: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.surface2,
+  },
   addChipText: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  addChipTextSelected: { color: theme.colors.foreground },
   recurrencePreview: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
@@ -626,6 +988,72 @@ const styles = StyleSheet.create((theme) => ({
   },
   runButtonPressed: { opacity: 0.8 },
   runButtonText: { color: theme.colors.accentForeground, fontSize: theme.fontSize.sm },
+  scheduleModeRow: { flexDirection: "row", gap: theme.spacing[1] },
+  scheduleCronFields: { gap: theme.spacing[1] },
+  scheduleButton: {
+    minHeight: 28,
+    paddingHorizontal: theme.spacing[3],
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.accent,
+  },
+  scheduleButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: theme.colors.surface2,
+  },
+  scheduleButtonPressed: { opacity: 0.8 },
+  scheduleButtonText: {
+    color: theme.colors.accentForeground,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+  },
+  attachedSchedules: { gap: theme.spacing[1] },
+  attachedSchedule: {
+    gap: theme.spacing[2],
+    padding: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+  },
+  attachedScheduleMain: { minWidth: 0, gap: 2 },
+  attachedScheduleTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+  },
+  attachedScheduleMeta: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  attachedScheduleActions: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing[1] },
+  scheduleAction: {
+    minHeight: 24,
+    paddingHorizontal: theme.spacing[2],
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colors.surface1,
+  },
+  scheduleActionDanger: { borderWidth: 1, borderColor: theme.colors.destructive },
+  scheduleActionDisabled: { opacity: 0.5 },
+  scheduleActionText: { color: theme.colors.foreground, fontSize: theme.fontSize.xs },
+  scheduleActionDangerText: { color: theme.colors.destructive },
+  scheduleEmpty: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  scheduleRuns: { gap: theme.spacing[1] },
+  scheduleRun: {
+    gap: 2,
+    padding: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+  },
+  scheduleRunTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+  },
+  scheduleRunDetail: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.xs,
+  },
+  scheduleRunMeta: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  scheduleError: { color: theme.colors.destructive, fontSize: theme.fontSize.xs },
   notesInput: {
     minHeight: 80,
     padding: theme.spacing[2],

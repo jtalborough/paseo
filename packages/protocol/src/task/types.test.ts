@@ -14,7 +14,48 @@ describe("Task schemas", () => {
       }),
     ).toMatchObject({
       sources: [],
+      scheduleIds: [],
+      scheduledRuns: [],
     });
+  });
+
+  test("normalizes scheduled agent run ledger records", () => {
+    expect(
+      TaskFrontmatterSchema.parse({
+        id: "2026-06-11-nightly",
+        projectGroupId: "grp_scheduled",
+        title: "Nightly review",
+        scheduleIds: ["schedule-a"],
+        scheduledRuns: [
+          {
+            scheduleId: "schedule-a",
+            runId: "run-a",
+            scheduledFor: "2026-06-11T09:00:00.000Z",
+            status: "succeeded",
+          },
+        ],
+        createdAt: "2026-06-11T00:00:00.000Z",
+        updatedAt: "2026-06-11T00:00:00.000Z",
+      }).scheduledRuns,
+    ).toEqual([
+      {
+        scheduleId: "schedule-a",
+        runId: "run-a",
+        scheduledFor: "2026-06-11T09:00:00.000Z",
+        startedAt: null,
+        endedAt: null,
+        status: "succeeded",
+        agentId: null,
+        contextPacket: null,
+        provider: null,
+        folderGrants: [],
+        result: null,
+        summary: null,
+        changedFiles: [],
+        followUpTaskIds: [],
+        externalMirrorUpdates: [],
+      },
+    ]);
   });
 
   test("normalizes Notion source records", () => {

@@ -9,10 +9,12 @@ import {
   TaskPrioritySchema,
   TaskResultSchema,
   TaskRunModeSchema,
+  TaskScheduledAgentRunSchema,
   TaskTimeEntrySchema,
   TaskViewsSchema,
   TaskWireSchema,
 } from "@getpaseo/protocol/task/types";
+import { ScheduleCadenceSchema, ScheduleSummarySchema } from "@getpaseo/protocol/schedule/types";
 
 /** Editable GTD fields shared by create input and update patch. */
 const TaskEditableFields = {
@@ -26,6 +28,8 @@ const TaskEditableFields = {
   doDate: z.string().nullable().optional(),
   recurrence: RecurrenceSchema.nullable().optional(),
   remind: z.array(z.string()).optional(),
+  scheduleIds: z.array(z.string()).optional(),
+  scheduledRuns: z.array(TaskScheduledAgentRunSchema).optional(),
   timerStartedAt: z.string().nullable().optional(),
   trackedSeconds: z.number().int().nonnegative().optional(),
   timeEntries: z.array(TaskTimeEntrySchema).optional(),
@@ -213,6 +217,35 @@ export const TaskRunResponseSchema = z.object({
   ]),
 });
 
+// --- task.schedule.create ---
+export const TaskScheduleCreateRequestSchema = z.object({
+  type: z.literal("task.schedule.create.request"),
+  requestId: z.string(),
+  projectGroupId: z.string().regex(/^grp_[A-Za-z0-9_-]+$/),
+  id: z.string().min(1),
+  repoRoot: z.string().min(1),
+  provider: z.string().min(1).optional(),
+  cadence: ScheduleCadenceSchema,
+  name: z.string().min(1).optional(),
+  runOnCreate: z.boolean().optional(),
+});
+export const TaskScheduleCreateResponseSchema = z.object({
+  type: z.literal("task.schedule.create.response"),
+  payload: z.discriminatedUnion("ok", [
+    z.object({
+      ok: z.literal(true),
+      requestId: z.string(),
+      task: TaskWireSchema,
+      schedule: ScheduleSummarySchema,
+    }),
+    z.object({
+      ok: z.literal(false),
+      requestId: z.string(),
+      error: z.string(),
+    }),
+  ]),
+});
+
 // --- task.config.get / task.config.update --- (editable Type/People option lists)
 export const TaskConfigGetRequestSchema = z.object({
   type: z.literal("task.config.get.request"),
@@ -269,6 +302,7 @@ export const TaskRequestSchemas = [
   TaskTimerStartRequestSchema,
   TaskTimerStopRequestSchema,
   TaskRunRequestSchema,
+  TaskScheduleCreateRequestSchema,
   TaskConfigGetRequestSchema,
   TaskConfigUpdateRequestSchema,
   TaskViewsGetRequestSchema,
@@ -286,6 +320,7 @@ export const TaskResponseSchemas = [
   TaskTimerStartResponseSchema,
   TaskTimerStopResponseSchema,
   TaskRunResponseSchema,
+  TaskScheduleCreateResponseSchema,
   TaskConfigGetResponseSchema,
   TaskConfigUpdateResponseSchema,
   TaskViewsGetResponseSchema,

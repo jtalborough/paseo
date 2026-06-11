@@ -88,6 +88,48 @@ describe("TaskStore", () => {
     expect(reloaded?.metadata).toEqual(ran.metadata);
   });
 
+  it("records scheduled agent task links and run ledger entries", async () => {
+    const created = await store.create({
+      projectGroupId: "grp_one",
+      title: "Nightly triage",
+      run: "agent",
+      provider: "codex/gpt-5.4",
+      scheduleIds: ["schedule-1"],
+    });
+
+    expect(created.metadata.scheduleIds).toEqual(["schedule-1"]);
+    expect(created.metadata.scheduledRuns).toEqual([]);
+
+    const updated = await store.update("grp_one", created.metadata.id, {
+      scheduledRuns: [
+        {
+          scheduleId: "schedule-1",
+          runId: "run-1",
+          scheduledFor: "2026-06-11T09:00:00.000Z",
+          startedAt: "2026-06-11T09:00:05.000Z",
+          endedAt: "2026-06-11T09:05:00.000Z",
+          status: "succeeded",
+          agentId: "agent-123",
+          contextPacket: "context/packets/nightly-triage.yaml",
+          provider: "codex/gpt-5.4",
+          folderGrants: ["folders/paseo"],
+          result: "success",
+          summary: "Opened one follow-up task.",
+          changedFiles: ["tasks/2026-06-11-follow-up.md"],
+          followUpTaskIds: ["2026-06-11-follow-up"],
+          externalMirrorUpdates: [],
+        },
+      ],
+    });
+
+    const reloaded = await store.get("grp_one", created.metadata.id);
+    expect(reloaded?.metadata.scheduleIds).toEqual(["schedule-1"]);
+    expect(reloaded?.metadata.scheduledRuns).toEqual(updated.metadata.scheduledRuns);
+    expect(reloaded?.metadata.scheduledRuns[0]?.contextPacket).toBe(
+      "context/packets/nightly-triage.yaml",
+    );
+  });
+
   it("preserves external source provenance for imported tasks", async () => {
     const created = await store.create({
       projectGroupId: "grp_one",

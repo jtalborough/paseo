@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import type { ActionState, StoredTask, TaskConfig } from "@getpaseo/protocol/task/types";
+import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
 import { StyleSheet } from "react-native-unistyles";
 import { TaskEditor } from "@/components/task-editor";
+import type { TaskScheduleActions, TaskScheduleDraft } from "@/components/task-editor";
 import type { SelectOption } from "@/components/task-select";
 import { TaskTimer } from "@/components/task-timer";
 import { computeNextTaskDoDate, taskRecurrenceLabel } from "@/utils/task-recurrence";
@@ -16,6 +18,7 @@ const ACTION_STATE_LABEL: Record<ActionState, string> = {
   dropped: "Dropped",
   done: "Done",
 };
+const EMPTY_SCHEDULES: ScheduleSummary[] = [];
 
 export function TaskList({
   pending,
@@ -40,6 +43,10 @@ export function TaskList({
   onChangeProject,
   onRun,
   getRunDisabled,
+  onSchedule,
+  getScheduleDisabled,
+  getSchedules,
+  getScheduleActions,
 }: {
   pending: boolean;
   error: Error | null;
@@ -63,6 +70,10 @@ export function TaskList({
   onChangeProject?: (task: StoredTask, projectGroupId: string) => void;
   onRun?: (task: StoredTask) => void;
   getRunDisabled?: (task: StoredTask) => boolean;
+  onSchedule?: (task: StoredTask, draft: TaskScheduleDraft) => void;
+  getScheduleDisabled?: (task: StoredTask) => boolean;
+  getSchedules?: (task: StoredTask) => ScheduleSummary[];
+  getScheduleActions?: (task: StoredTask) => TaskScheduleActions;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const { activeTasks, completedTasks } = useMemo(() => {
@@ -104,6 +115,10 @@ export function TaskList({
         onChangeProject={onChangeProject}
         onRun={onRun}
         getRunDisabled={getRunDisabled}
+        onSchedule={onSchedule}
+        getScheduleDisabled={getScheduleDisabled}
+        getSchedules={getSchedules}
+        getScheduleActions={getScheduleActions}
       />
     ),
     [
@@ -123,6 +138,10 @@ export function TaskList({
       onToggleExpanded,
       onRun,
       getRunDisabled,
+      onSchedule,
+      getScheduleDisabled,
+      getSchedules,
+      getScheduleActions,
       projectOptions,
     ],
   );
@@ -178,6 +197,10 @@ function TaskRow({
   onChangeProject,
   onRun,
   getRunDisabled,
+  onSchedule,
+  getScheduleDisabled,
+  getSchedules,
+  getScheduleActions,
   ...editorProps
 }: {
   task: StoredTask;
@@ -192,6 +215,10 @@ function TaskRow({
   onChangeProject?: (task: StoredTask, projectGroupId: string) => void;
   onRun?: (task: StoredTask) => void;
   getRunDisabled?: (task: StoredTask) => boolean;
+  onSchedule?: (task: StoredTask, draft: TaskScheduleDraft) => void;
+  getScheduleDisabled?: (task: StoredTask) => boolean;
+  getSchedules?: (task: StoredTask) => ScheduleSummary[];
+  getScheduleActions?: (task: StoredTask) => TaskScheduleActions;
   onAddType: (value: string) => void;
   onAddPerson: (value: string) => void;
   onAddContext: (value: string) => void;
@@ -226,6 +253,10 @@ function TaskRow({
     [onChangeProject, task],
   );
   const handleRun = useCallback(() => onRun?.(task), [onRun, task]);
+  const handleSchedule = useCallback(
+    (draft: TaskScheduleDraft) => onSchedule?.(task, draft),
+    [onSchedule, task],
+  );
   const badges = useMemo(
     () =>
       taskBadges(task, projectOptions && projectOptions.length > 1 ? projectOptions : undefined),
@@ -273,6 +304,10 @@ function TaskRow({
           onChangeProject={onChangeProject ? handleChangeProject : undefined}
           onRun={onRun ? handleRunAdapter(handleRun) : undefined}
           runDisabled={getRunDisabled?.(task) ?? false}
+          onSchedule={onSchedule ? handleScheduleAdapter(handleSchedule) : undefined}
+          scheduleDisabled={getScheduleDisabled?.(task) ?? false}
+          schedules={getSchedules?.(task) ?? EMPTY_SCHEDULES}
+          scheduleActions={getScheduleActions?.(task)}
           onDelete={handleDeleteAdapter(handleDelete)}
         />
       ) : null}
@@ -397,6 +432,10 @@ function handleRunAdapter(handleRun: () => void) {
   return () => handleRun();
 }
 
+function handleScheduleAdapter(handleSchedule: (draft: TaskScheduleDraft) => void) {
+  return (_id: string, draft: TaskScheduleDraft) => handleSchedule(draft);
+}
+
 function taskBadges(task: StoredTask, projectOptions?: SelectOption[]): string[] {
   const { metadata } = task;
   const badges: string[] = [];
@@ -421,6 +460,15 @@ function taskBadges(task: StoredTask, projectOptions?: SelectOption[]): string[]
   }
   if (metadata.remind.length > 0) {
     badges.push(`${metadata.remind.length} reminder${metadata.remind.length === 1 ? "" : "s"}`);
+  }
+  if (metadata.scheduleIds.length > 0) {
+    badges.push(
+      `${metadata.scheduleIds.length} schedule${metadata.scheduleIds.length === 1 ? "" : "s"}`,
+    );
+  }
+  if (metadata.scheduledRuns.length > 0) {
+    const latestRun = metadata.scheduledRuns[metadata.scheduledRuns.length - 1];
+    badges.push(`Last scheduled ${latestRun.status}`);
   }
   if (metadata.github) {
     badges.push("GitHub");

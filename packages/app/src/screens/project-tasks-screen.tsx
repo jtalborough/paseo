@@ -3,9 +3,11 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import type { PressableStateCallbackType } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StoredTask, TaskConfig } from "@getpaseo/protocol/task/types";
+import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
 import { StyleSheet } from "react-native-unistyles";
 import { ProjectSurfaceHeader } from "@/components/project-surface-header";
+import type { TaskScheduleDraft } from "@/components/task-editor";
 import { TaskList, taskKey } from "@/components/task-list";
 import { formatDuration } from "@/components/task-timer";
 import type { SelectOption } from "@/components/task-select";
@@ -57,6 +59,7 @@ export function ProjectTasksScreen({
   );
   const tasksKey = useMemo(() => ["project-tasks", serverId, groupId], [groupId, serverId]);
   const configKey = useMemo(() => ["task-config", serverId, groupId], [groupId, serverId]);
+  const schedulesKey = useMemo(() => ["schedules", serverId], [serverId]);
   const invalidateTasks = useCallback(async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: tasksKey }),
@@ -64,6 +67,9 @@ export function ProjectTasksScreen({
       queryClient.invalidateQueries({ queryKey: ["project-tasks", serverId] }),
     ]);
   }, [queryClient, serverId, tasksKey]);
+  const invalidateSchedules = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: schedulesKey });
+  }, [queryClient, schedulesKey]);
   const tasksQuery = useQuery({
     queryKey: tasksKey,
     enabled: Boolean(client && group && tasksSupported),
@@ -75,6 +81,21 @@ export function ProjectTasksScreen({
     enabled: Boolean(client && group && tasksSupported),
     queryFn: async () => (client ? client.taskConfigGet(groupId) : EMPTY_CONFIG),
     staleTime: 30_000,
+  });
+  const schedulesQuery = useQuery({
+    queryKey: schedulesKey,
+    enabled: Boolean(client && group && tasksSupported),
+    queryFn: async () => {
+      if (!client) {
+        return [];
+      }
+      const payload = await client.scheduleList();
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
+      return payload.schedules;
+    },
+    staleTime: 2_000,
   });
 
   const onError = useCallback(
@@ -169,6 +190,98 @@ export function ProjectTasksScreen({
     },
     onError,
   });
+  const scheduleTask = useMutation({
+    mutationFn: async (input: { task: StoredTask; draft: TaskScheduleDraft }) => {
+      if (!client) throw new Error("Host is not connected");
+      if (!taskRunRepoRoot) {
+        throw new Error("Task schedules require exactly one git folder in this Project");
+      }
+      const provider = input.task.metadata.provider?.trim();
+      if (!provider) {
+        throw new Error("Set an agent provider before scheduling this task");
+      }
+      return client.taskScheduleCreate({
+        projectGroupId: input.task.metadata.projectGroupId,
+        id: input.task.metadata.id,
+        repoRoot: taskRunRepoRoot,
+        provider,
+        cadence: input.draft.cadence,
+        name: input.draft.name,
+        runOnCreate: input.draft.runOnCreate,
+      });
+    },
+    onSuccess: (result) => {
+      void invalidateTasks();
+      void invalidateSchedules();
+      toast.show(`Scheduled ${result.schedule.id}`, { variant: "success" });
+    },
+    onError,
+  });
+  const runScheduleNow = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      if (!client) throw new Error("Host is not connected");
+      const payload = await client.scheduleRunOnce({ id: scheduleId });
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
+      return payload.schedule;
+    },
+    onSuccess: () => {
+      void invalidateTasks();
+      void invalidateSchedules();
+      toast.show("Scheduled agent run started", { variant: "success" });
+    },
+    onError,
+  });
+  const pauseSchedule = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      if (!client) throw new Error("Host is not connected");
+      const payload = await client.schedulePause({ id: scheduleId });
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
+      return payload.schedule;
+    },
+    onSuccess: () => {
+      void invalidateSchedules();
+      toast.show("Schedule paused", { variant: "success" });
+    },
+    onError,
+  });
+  const resumeSchedule = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      if (!client) throw new Error("Host is not connected");
+      const payload = await client.scheduleResume({ id: scheduleId });
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
+      return payload.schedule;
+    },
+    onSuccess: () => {
+      void invalidateSchedules();
+      toast.show("Schedule resumed", { variant: "success" });
+    },
+    onError,
+  });
+  const deleteSchedule = useMutation({
+    mutationFn: async (input: { task: StoredTask; scheduleId: string }) => {
+      if (!client) throw new Error("Host is not connected");
+      const payload = await client.scheduleDelete({ id: input.scheduleId });
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
+      await client.taskUpdate(input.task.metadata.projectGroupId, input.task.metadata.id, {
+        scheduleIds: input.task.metadata.scheduleIds.filter((id) => id !== input.scheduleId),
+      });
+      return payload.scheduleId;
+    },
+    onSuccess: () => {
+      void invalidateTasks();
+      void invalidateSchedules();
+      toast.show("Schedule deleted", { variant: "success" });
+    },
+    onError,
+  });
   const updateConfig = useMutation({
     mutationFn: async (config: TaskConfig) => {
       if (!client) throw new Error("Host is not connected");
@@ -210,9 +323,58 @@ export function ProjectTasksScreen({
   );
   const runTaskMutate = runTask.mutate;
   const handleRunTask = useCallback((task: StoredTask) => runTaskMutate(task), [runTaskMutate]);
+  const scheduleTaskMutate = scheduleTask.mutate;
+  const handleScheduleTask = useCallback(
+    (task: StoredTask, draft: TaskScheduleDraft) => scheduleTaskMutate({ task, draft }),
+    [scheduleTaskMutate],
+  );
+  const runScheduleNowMutate = runScheduleNow.mutate;
+  const pauseScheduleMutate = pauseSchedule.mutate;
+  const resumeScheduleMutate = resumeSchedule.mutate;
+  const deleteScheduleMutate = deleteSchedule.mutate;
   const getRunDisabled = useCallback(
-    (task: StoredTask) => runTask.isPending || !taskRunRepoRoot || !task.metadata.provider?.trim(),
+    (task: StoredTask) => isTaskAgentActionDisabled(runTask.isPending, taskRunRepoRoot, task),
     [runTask.isPending, taskRunRepoRoot],
+  );
+  const getScheduleDisabled = useCallback(
+    (task: StoredTask) => isTaskAgentActionDisabled(scheduleTask.isPending, taskRunRepoRoot, task),
+    [scheduleTask.isPending, taskRunRepoRoot],
+  );
+  const scheduleActionDisabled = isAnyScheduleActionPending({
+    runScheduleNow: runScheduleNow.isPending,
+    pauseSchedule: pauseSchedule.isPending,
+    resumeSchedule: resumeSchedule.isPending,
+    deleteSchedule: deleteSchedule.isPending,
+  });
+  const schedulesById = useMemo(() => {
+    const map = new Map<string, ScheduleSummary>();
+    for (const schedule of schedulesQuery.data ?? []) {
+      map.set(schedule.id, schedule);
+    }
+    return map;
+  }, [schedulesQuery.data]);
+  const getTaskSchedules = useCallback(
+    (task: StoredTask) =>
+      task.metadata.scheduleIds
+        .map((id) => schedulesById.get(id))
+        .filter((schedule): schedule is ScheduleSummary => schedule !== undefined),
+    [schedulesById],
+  );
+  const getScheduleActions = useCallback(
+    (task: StoredTask) => ({
+      disabled: scheduleActionDisabled,
+      onRunNow: runScheduleNowMutate,
+      onPause: pauseScheduleMutate,
+      onResume: resumeScheduleMutate,
+      onDelete: (scheduleId: string) => deleteScheduleMutate({ task, scheduleId }),
+    }),
+    [
+      deleteScheduleMutate,
+      pauseScheduleMutate,
+      resumeScheduleMutate,
+      runScheduleNowMutate,
+      scheduleActionDisabled,
+    ],
   );
   const handleToggleExpanded = useCallback((task: StoredTask) => {
     const key = taskKey(task);
@@ -345,6 +507,10 @@ export function ProjectTasksScreen({
           onDelete={handleDelete}
           onRun={handleRunTask}
           getRunDisabled={getRunDisabled}
+          onSchedule={handleScheduleTask}
+          getScheduleDisabled={getScheduleDisabled}
+          getSchedules={getTaskSchedules}
+          getScheduleActions={getScheduleActions}
           projectOptions={projectOptions}
           onChangeProject={handleChangeProject}
           onAddType={handleAddType}
@@ -489,6 +655,25 @@ function ProjectTimesheetRow({
 }
 
 const PLACEHOLDER_COLOR = "#9ca3af";
+
+function isTaskAgentActionDisabled(
+  pending: boolean,
+  repoRoot: string | null,
+  task: StoredTask,
+): boolean {
+  return pending || !repoRoot || !task.metadata.provider?.trim();
+}
+
+function isAnyScheduleActionPending(state: {
+  runScheduleNow: boolean;
+  pauseSchedule: boolean;
+  resumeSchedule: boolean;
+  deleteSchedule: boolean;
+}): boolean {
+  return (
+    state.runScheduleNow || state.pauseSchedule || state.resumeSchedule || state.deleteSchedule
+  );
+}
 
 const styles = StyleSheet.create((theme) => ({
   container: { flex: 1, minHeight: 0, backgroundColor: theme.colors.surface0 },
