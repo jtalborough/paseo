@@ -28,6 +28,61 @@ interface ProjectTasksScreenProps {
   embedded?: boolean;
 }
 
+type ProjectTaskView = "tasks" | "schedules" | "timesheet";
+
+interface ProjectScheduleItem {
+  task: StoredTask;
+  scheduleId: string;
+  schedule: ScheduleSummary | null;
+}
+
+interface ProjectTaskViewContentProps {
+  view: ProjectTaskView;
+  tasksPending: boolean;
+  tasksError: Error | null;
+  schedulesPending: boolean;
+  schedulesError: Error | null;
+  tasks: StoredTask[];
+  projectScheduleItems: ProjectScheduleItem[];
+  scheduleActionDisabled: boolean;
+  expandedId: string | null;
+  config: TaskConfig;
+  projectOptions: SelectOption[];
+  onOpenScheduledTask: (task: StoredTask) => void;
+  onRunScheduleNow: (scheduleId: string) => void;
+  onPauseSchedule: (scheduleId: string) => void;
+  onResumeSchedule: (scheduleId: string) => void;
+  onDeleteSchedule: (task: StoredTask, scheduleId: string) => void;
+  onOpenTimesheetTask: (taskKey: string) => void;
+  onSelectView: (view: ProjectTaskView) => void;
+  onToggleExpanded: (task: StoredTask) => void;
+  onPatch: (task: StoredTask, patch: TaskUpdateRpcPatch) => void;
+  onTimerStart: (task: StoredTask) => void;
+  onTimerStop: (task: StoredTask) => void;
+  onDeleteTask: (task: StoredTask) => void;
+  onRunTask: (task: StoredTask) => void;
+  getRunDisabled: (task: StoredTask) => boolean;
+  onScheduleTask: (task: StoredTask, draft: TaskScheduleDraft) => void;
+  getScheduleDisabled: (task: StoredTask) => boolean;
+  getScheduleDisabledReason: (task: StoredTask) => string | null;
+  getSchedules: (task: StoredTask) => ScheduleSummary[];
+  getScheduleActions: (task: StoredTask) => {
+    disabled: boolean;
+    onRunNow: (scheduleId: string) => void;
+    onPause: (scheduleId: string) => void;
+    onResume: (scheduleId: string) => void;
+    onUpdate: (scheduleId: string, draft: TaskScheduleUpdateDraft) => void;
+    onDelete: (scheduleId: string) => void;
+  };
+  onChangeProject: (task: StoredTask, projectGroupId: string) => void;
+  onAddType: (value: string) => void;
+  onAddPerson: (value: string) => void;
+  onAddContext: (value: string) => void;
+  onRemoveType: (value: string) => void;
+  onRemovePerson: (value: string) => void;
+  onRemoveContext: (value: string) => void;
+}
+
 const EMPTY_CONFIG: TaskConfig = { types: [], people: [], contexts: [] };
 const EMPTY_TASKS: StoredTask[] = [];
 
@@ -45,7 +100,7 @@ export function ProjectTasksScreen({
   const { groups, supported: projectsSupported } = useProjectGroups(serverId);
   const [newTitle, setNewTitle] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [view, setView] = useState<"tasks" | "timesheet">("tasks");
+  const [view, setView] = useState<ProjectTaskView>("tasks");
   const group = useMemo(
     () => groups.find((candidate) => candidate.groupId === groupId) ?? null,
     [groupId, groups],
@@ -354,6 +409,20 @@ export function ProjectTasksScreen({
   const resumeScheduleMutate = resumeSchedule.mutate;
   const updateScheduleMutate = updateSchedule.mutate;
   const deleteScheduleMutate = deleteSchedule.mutate;
+  const confirmDeleteSchedule = useCallback(
+    async (task: StoredTask, scheduleId: string) => {
+      const confirmed = await confirmDialog({
+        title: "Delete schedule?",
+        message: `Delete schedule ${scheduleId} from "${task.metadata.title}"? Future runs will stop.`,
+        confirmLabel: "Delete",
+        destructive: true,
+      });
+      if (confirmed) {
+        deleteScheduleMutate({ task, scheduleId });
+      }
+    },
+    [deleteScheduleMutate],
+  );
   const getRunDisabled = useCallback(
     (task: StoredTask) => isTaskAgentActionDisabled(runTask.isPending, taskRunRepoRoot, task),
     [runTask.isPending, taskRunRepoRoot],
@@ -389,6 +458,17 @@ export function ProjectTasksScreen({
         .filter((schedule): schedule is ScheduleSummary => schedule !== undefined),
     [schedulesById],
   );
+  const projectScheduleItems = useMemo<ProjectScheduleItem[]>(
+    () =>
+      (tasksQuery.data ?? EMPTY_TASKS).flatMap((task) =>
+        task.metadata.scheduleIds.map((scheduleId) => ({
+          task,
+          scheduleId,
+          schedule: schedulesById.get(scheduleId) ?? null,
+        })),
+      ),
+    [schedulesById, tasksQuery.data],
+  );
   const getScheduleActions = useCallback(
     (task: StoredTask) => ({
       disabled: scheduleActionDisabled,
@@ -397,20 +477,10 @@ export function ProjectTasksScreen({
       onResume: resumeScheduleMutate,
       onUpdate: (scheduleId: string, draft: TaskScheduleUpdateDraft) =>
         updateScheduleMutate({ scheduleId, draft }),
-      onDelete: async (scheduleId: string) => {
-        const confirmed = await confirmDialog({
-          title: "Delete schedule?",
-          message: `Delete schedule ${scheduleId} from "${task.metadata.title}"? Future runs will stop.`,
-          confirmLabel: "Delete",
-          destructive: true,
-        });
-        if (confirmed) {
-          deleteScheduleMutate({ task, scheduleId });
-        }
-      },
+      onDelete: (scheduleId: string) => void confirmDeleteSchedule(task, scheduleId),
     }),
     [
-      deleteScheduleMutate,
+      confirmDeleteSchedule,
       pauseScheduleMutate,
       resumeScheduleMutate,
       runScheduleNowMutate,
@@ -421,6 +491,10 @@ export function ProjectTasksScreen({
   const handleToggleExpanded = useCallback((task: StoredTask) => {
     const key = taskKey(task);
     setExpandedId((current) => (current === key ? null : key));
+  }, []);
+  const handleOpenScheduledTask = useCallback((task: StoredTask) => {
+    setExpandedId(taskKey(task));
+    setView("tasks");
   }, []);
 
   const config = configQuery.data ?? EMPTY_CONFIG;
@@ -500,6 +574,12 @@ export function ProjectTasksScreen({
           onSelect={setView}
         />
         <ProjectTaskViewButton
+          label="Schedules"
+          value="schedules"
+          selected={view === "schedules"}
+          onSelect={setView}
+        />
+        <ProjectTaskViewButton
           label="Timesheet"
           value="timesheet"
           selected={view === "timesheet"}
@@ -525,46 +605,144 @@ export function ProjectTasksScreen({
           <Text style={styles.addButtonText}>Add</Text>
         </Pressable>
       </View>
-      {view === "timesheet" ? (
-        <ProjectTimesheetView
-          pending={tasksQuery.isPending}
-          error={tasksQuery.error}
-          tasks={tasksQuery.data ?? EMPTY_TASKS}
-          onOpenTask={setExpandedId}
-          onSelectTasksView={setView}
-        />
-      ) : (
-        <TaskList
-          pending={tasksQuery.isPending}
-          error={tasksQuery.error}
-          tasks={tasksQuery.data ?? EMPTY_TASKS}
-          emptyTitle="No Project tasks yet"
-          emptyDescription="Create the first task above. Tasks are stored as plain Markdown in this Project and can be opened beside agents, notes, terminals, and browser tabs."
-          expandedId={expandedId}
-          config={config}
-          onToggleExpanded={handleToggleExpanded}
-          onPatch={handlePatch}
-          onTimerStart={handleTimerStart}
-          onTimerStop={handleTimerStop}
-          onDelete={handleDelete}
-          onRun={handleRunTask}
-          getRunDisabled={getRunDisabled}
-          onSchedule={handleScheduleTask}
-          getScheduleDisabled={getScheduleDisabled}
-          getScheduleDisabledReason={getScheduleDisabledReason}
-          getSchedules={getTaskSchedules}
-          getScheduleActions={getScheduleActions}
-          projectOptions={projectOptions}
-          onChangeProject={handleChangeProject}
-          onAddType={handleAddType}
-          onAddPerson={handleAddPerson}
-          onAddContext={handleAddContext}
-          onRemoveType={handleRemoveType}
-          onRemovePerson={handleRemovePerson}
-          onRemoveContext={handleRemoveContext}
-        />
-      )}
+      <ProjectTaskViewContent
+        view={view}
+        tasksPending={tasksQuery.isPending}
+        tasksError={tasksQuery.error}
+        schedulesPending={schedulesQuery.isPending}
+        schedulesError={schedulesQuery.error}
+        tasks={tasksQuery.data ?? EMPTY_TASKS}
+        projectScheduleItems={projectScheduleItems}
+        scheduleActionDisabled={scheduleActionDisabled}
+        expandedId={expandedId}
+        config={config}
+        projectOptions={projectOptions}
+        onOpenScheduledTask={handleOpenScheduledTask}
+        onRunScheduleNow={runScheduleNowMutate}
+        onPauseSchedule={pauseScheduleMutate}
+        onResumeSchedule={resumeScheduleMutate}
+        onDeleteSchedule={confirmDeleteSchedule}
+        onOpenTimesheetTask={setExpandedId}
+        onSelectView={setView}
+        onToggleExpanded={handleToggleExpanded}
+        onPatch={handlePatch}
+        onTimerStart={handleTimerStart}
+        onTimerStop={handleTimerStop}
+        onDeleteTask={handleDelete}
+        onRunTask={handleRunTask}
+        getRunDisabled={getRunDisabled}
+        onScheduleTask={handleScheduleTask}
+        getScheduleDisabled={getScheduleDisabled}
+        getScheduleDisabledReason={getScheduleDisabledReason}
+        getSchedules={getTaskSchedules}
+        getScheduleActions={getScheduleActions}
+        onChangeProject={handleChangeProject}
+        onAddType={handleAddType}
+        onAddPerson={handleAddPerson}
+        onAddContext={handleAddContext}
+        onRemoveType={handleRemoveType}
+        onRemovePerson={handleRemovePerson}
+        onRemoveContext={handleRemoveContext}
+      />
     </View>
+  );
+}
+
+function ProjectTaskViewContent({
+  view,
+  tasksPending,
+  tasksError,
+  schedulesPending,
+  schedulesError,
+  tasks,
+  projectScheduleItems,
+  scheduleActionDisabled,
+  expandedId,
+  config,
+  projectOptions,
+  onOpenScheduledTask,
+  onRunScheduleNow,
+  onPauseSchedule,
+  onResumeSchedule,
+  onDeleteSchedule,
+  onOpenTimesheetTask,
+  onSelectView,
+  onToggleExpanded,
+  onPatch,
+  onTimerStart,
+  onTimerStop,
+  onDeleteTask,
+  onRunTask,
+  getRunDisabled,
+  onScheduleTask,
+  getScheduleDisabled,
+  getScheduleDisabledReason,
+  getSchedules,
+  getScheduleActions,
+  onChangeProject,
+  onAddType,
+  onAddPerson,
+  onAddContext,
+  onRemoveType,
+  onRemovePerson,
+  onRemoveContext,
+}: ProjectTaskViewContentProps) {
+  if (view === "timesheet") {
+    return (
+      <ProjectTimesheetView
+        pending={tasksPending}
+        error={tasksError}
+        tasks={tasks}
+        onOpenTask={onOpenTimesheetTask}
+        onSelectTasksView={onSelectView}
+      />
+    );
+  }
+  if (view === "schedules") {
+    return (
+      <ProjectSchedulesView
+        pending={tasksPending || schedulesPending}
+        error={tasksError ?? schedulesError}
+        items={projectScheduleItems}
+        disabled={scheduleActionDisabled}
+        onOpenTask={onOpenScheduledTask}
+        onRunNow={onRunScheduleNow}
+        onPause={onPauseSchedule}
+        onResume={onResumeSchedule}
+        onDelete={onDeleteSchedule}
+      />
+    );
+  }
+  return (
+    <TaskList
+      pending={tasksPending}
+      error={tasksError}
+      tasks={tasks}
+      emptyTitle="No Project tasks yet"
+      emptyDescription="Create the first task above. Tasks are stored as plain Markdown in this Project and can be opened beside agents, notes, terminals, and browser tabs."
+      expandedId={expandedId}
+      config={config}
+      onToggleExpanded={onToggleExpanded}
+      onPatch={onPatch}
+      onTimerStart={onTimerStart}
+      onTimerStop={onTimerStop}
+      onDelete={onDeleteTask}
+      onRun={onRunTask}
+      getRunDisabled={getRunDisabled}
+      onSchedule={onScheduleTask}
+      getScheduleDisabled={getScheduleDisabled}
+      getScheduleDisabledReason={getScheduleDisabledReason}
+      getSchedules={getSchedules}
+      getScheduleActions={getScheduleActions}
+      projectOptions={projectOptions}
+      onChangeProject={onChangeProject}
+      onAddType={onAddType}
+      onAddPerson={onAddPerson}
+      onAddContext={onAddContext}
+      onRemoveType={onRemoveType}
+      onRemovePerson={onRemovePerson}
+      onRemoveContext={onRemoveContext}
+    />
   );
 }
 
@@ -575,9 +753,9 @@ function ProjectTaskViewButton({
   onSelect,
 }: {
   label: string;
-  value: "tasks" | "timesheet";
+  value: ProjectTaskView;
   selected: boolean;
-  onSelect: (view: "tasks" | "timesheet") => void;
+  onSelect: (view: ProjectTaskView) => void;
 }) {
   const handlePress = useCallback(() => onSelect(value), [onSelect, value]);
   const buttonStyle = useMemo(
@@ -587,6 +765,171 @@ function ProjectTaskViewButton({
   return (
     <Pressable accessibilityRole="button" onPress={handlePress} style={buttonStyle}>
       <Text style={selected ? styles.viewLabelSelected : styles.viewLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function ProjectSchedulesView({
+  pending,
+  error,
+  items,
+  disabled,
+  onOpenTask,
+  onRunNow,
+  onPause,
+  onResume,
+  onDelete,
+}: {
+  pending: boolean;
+  error: Error | null;
+  items: ProjectScheduleItem[];
+  disabled: boolean;
+  onOpenTask: (task: StoredTask) => void;
+  onRunNow: (scheduleId: string) => void;
+  onPause: (scheduleId: string) => void;
+  onResume: (scheduleId: string) => void;
+  onDelete: (task: StoredTask, scheduleId: string) => void;
+}) {
+  if (pending) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.muted}>Loading schedules...</Text>
+      </View>
+    );
+  }
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.muted}>{error.message}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.schedules}>
+      <View style={styles.schedulesHeader}>
+        <Text style={styles.schedulesTitle}>Scheduled agent tasks</Text>
+        <Text style={styles.muted}>
+          {items.length} active task link{items.length === 1 ? "" : "s"}
+        </Text>
+      </View>
+      {items.length > 0 ? (
+        items.map((item) => (
+          <ProjectScheduleRow
+            key={`${item.task.metadata.id}:${item.scheduleId}`}
+            item={item}
+            disabled={disabled}
+            onOpenTask={onOpenTask}
+            onRunNow={onRunNow}
+            onPause={onPause}
+            onResume={onResume}
+            onDelete={onDelete}
+          />
+        ))
+      ) : (
+        <Text style={styles.muted}>No scheduled agent tasks in this Project</Text>
+      )}
+    </View>
+  );
+}
+
+function ProjectScheduleRow({
+  item,
+  disabled,
+  onOpenTask,
+  onRunNow,
+  onPause,
+  onResume,
+  onDelete,
+}: {
+  item: ProjectScheduleItem;
+  disabled: boolean;
+  onOpenTask: (task: StoredTask) => void;
+  onRunNow: (scheduleId: string) => void;
+  onPause: (scheduleId: string) => void;
+  onResume: (scheduleId: string) => void;
+  onDelete: (task: StoredTask, scheduleId: string) => void;
+}) {
+  const { task, schedule, scheduleId } = item;
+  const openTask = useCallback(() => onOpenTask(task), [onOpenTask, task]);
+  const runNow = useCallback(() => onRunNow(scheduleId), [onRunNow, scheduleId]);
+  const pause = useCallback(() => onPause(scheduleId), [onPause, scheduleId]);
+  const resume = useCallback(() => onResume(scheduleId), [onResume, scheduleId]);
+  const deleteSchedule = useCallback(
+    () => onDelete(task, scheduleId),
+    [onDelete, scheduleId, task],
+  );
+  const isPaused = schedule?.status === "paused";
+  const latestRun = task.metadata.scheduledRuns
+    .toReversed()
+    .find((run) => run.scheduleId === scheduleId);
+  return (
+    <View style={styles.scheduleRow}>
+      <View style={styles.scheduleRowMain}>
+        <Text style={styles.scheduleRowTitle} numberOfLines={1}>
+          {schedule?.name ?? task.metadata.title}
+        </Text>
+        <Text style={styles.scheduleRowTask} numberOfLines={1}>
+          {task.metadata.title}
+        </Text>
+        <Text style={styles.scheduleRowMeta}>{formatProjectScheduleTiming(schedule)}</Text>
+        {schedule ? (
+          <Text style={styles.scheduleRowMeta}>
+            {formatProjectScheduleCadence(schedule.cadence)}
+          </Text>
+        ) : (
+          <Text style={styles.scheduleRowError}>Schedule definition missing</Text>
+        )}
+        {latestRun ? (
+          <Text style={styles.scheduleRowMeta}>
+            Last run {latestRun.status} - {formatProjectScheduleTime(latestRun.scheduledFor)}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.scheduleRowActions}>
+        <ScheduleRowButton label="Open task" disabled={false} onPress={openTask} />
+        <ScheduleRowButton label="Run" disabled={disabled || !schedule} onPress={runNow} />
+        {isPaused ? (
+          <ScheduleRowButton label="Resume" disabled={disabled || !schedule} onPress={resume} />
+        ) : (
+          <ScheduleRowButton label="Pause" disabled={disabled || !schedule} onPress={pause} />
+        )}
+        <ScheduleRowButton
+          label="Delete"
+          destructive
+          disabled={disabled}
+          onPress={deleteSchedule}
+        />
+      </View>
+    </View>
+  );
+}
+
+function ScheduleRowButton({
+  label,
+  disabled,
+  destructive = false,
+  onPress,
+}: {
+  label: string;
+  disabled: boolean;
+  destructive?: boolean;
+  onPress: () => void;
+}) {
+  const buttonStyle = useMemo(
+    () => [
+      styles.scheduleRowButton,
+      destructive ? styles.scheduleRowButtonDanger : null,
+      disabled ? styles.disabled : null,
+    ],
+    [destructive, disabled],
+  );
+  const textStyle = useMemo(
+    () => [styles.scheduleRowButtonText, destructive ? styles.scheduleRowButtonDangerText : null],
+    [destructive],
+  );
+  return (
+    <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={buttonStyle}>
+      <Text style={textStyle}>{label}</Text>
     </Pressable>
   );
 }
@@ -665,6 +1008,57 @@ function ProjectTimesheetView({
       )}
     </View>
   );
+}
+
+function formatProjectScheduleTiming(schedule: ScheduleSummary | null): string {
+  if (!schedule) {
+    return "Missing schedule";
+  }
+  if (schedule.nextRunAt) {
+    return `${schedule.status} - next ${formatProjectScheduleTime(schedule.nextRunAt)}`;
+  }
+  if (schedule.lastRunAt) {
+    return `${schedule.status} - last ${formatProjectScheduleTime(schedule.lastRunAt)}`;
+  }
+  return `${schedule.status} - no runs yet`;
+}
+
+function formatProjectScheduleCadence(cadence: ScheduleSummary["cadence"]): string {
+  if (cadence.type === "cron") {
+    return cadence.timezone
+      ? `Cron ${cadence.expression} ${cadence.timezone}`
+      : `Cron ${cadence.expression}`;
+  }
+  return `Every ${formatProjectScheduleInterval(cadence.everyMs)}`;
+}
+
+function formatProjectScheduleInterval(value: number): string {
+  const units = [
+    { label: "week", ms: 604_800_000 },
+    { label: "day", ms: 86_400_000 },
+    { label: "hour", ms: 3_600_000 },
+    { label: "minute", ms: 60_000 },
+  ];
+  for (const unit of units) {
+    if (value % unit.ms === 0) {
+      const amount = value / unit.ms;
+      return `${amount} ${unit.label}${amount === 1 ? "" : "s"}`;
+    }
+  }
+  return `${value} ms`;
+}
+
+function formatProjectScheduleTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function TimesheetDayButton({ label, onPress }: { label: string; onPress: () => void }) {
@@ -786,6 +1180,49 @@ const styles = StyleSheet.create((theme) => ({
   pressed: { opacity: 0.8 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: theme.spacing[6] },
   muted: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  schedules: { padding: theme.spacing[4], gap: theme.spacing[2] },
+  schedulesHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: theme.spacing[3],
+  },
+  schedulesTitle: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
+  scheduleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: theme.spacing[3],
+    padding: theme.spacing[3],
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surface1,
+  },
+  scheduleRowMain: { flex: 1, minWidth: 0, gap: 2 },
+  scheduleRowTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  scheduleRowTask: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  scheduleRowMeta: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  scheduleRowError: { color: theme.colors.destructive, fontSize: theme.fontSize.xs },
+  scheduleRowActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: theme.spacing[1],
+  },
+  scheduleRowButton: {
+    minHeight: 28,
+    paddingHorizontal: theme.spacing[2],
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colors.surface2,
+  },
+  scheduleRowButtonDanger: { borderWidth: 1, borderColor: theme.colors.destructive },
+  scheduleRowButtonText: { color: theme.colors.foreground, fontSize: theme.fontSize.xs },
+  scheduleRowButtonDangerText: { color: theme.colors.destructive },
   timesheet: { padding: theme.spacing[4], gap: theme.spacing[2] },
   timesheetHeader: {
     flexDirection: "row",
