@@ -257,6 +257,11 @@ async function recordTaskScheduleRun(
     changedFiles: [],
     followUpTaskIds: [],
     externalMirrorUpdates: [],
+    acknowledgedAt:
+      tasks
+        .flatMap((task) => task.metadata.scheduledRuns)
+        .find((existing) => existing.scheduleId === schedule.id && existing.runId === run.id)
+        ?.acknowledgedAt ?? null,
   };
   await Promise.all(
     tasks.map((task) => {

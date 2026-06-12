@@ -54,6 +54,7 @@ describe("Task schemas", () => {
         changedFiles: [],
         followUpTaskIds: [],
         externalMirrorUpdates: [],
+        acknowledgedAt: null,
       },
     ]);
   });

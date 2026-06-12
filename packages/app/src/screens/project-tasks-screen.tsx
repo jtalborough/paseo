@@ -58,6 +58,7 @@ interface ProjectTaskViewContentProps {
   onPauseSchedule: (scheduleId: string) => void;
   onResumeSchedule: (scheduleId: string) => void;
   onDeleteSchedule: (task: StoredTask, scheduleId: string) => void;
+  onAcknowledgeScheduleRun: (task: StoredTask, scheduleId: string, runId: string) => void;
   onOpenTimesheetTask: (taskKey: string) => void;
   onSelectView: (view: ProjectTaskView) => void;
   onToggleExpanded: (task: StoredTask) => void;
@@ -388,6 +389,20 @@ export function ProjectTasksScreen({
     (task: StoredTask, patch: TaskUpdateRpcPatch) => patchMutate({ id: task.metadata.id, patch }),
     [patchMutate],
   );
+  const handleAcknowledgeScheduleRun = useCallback(
+    (task: StoredTask, scheduleId: string, runId: string) => {
+      const acknowledgedAt = new Date().toISOString();
+      patchMutate({
+        id: task.metadata.id,
+        patch: {
+          scheduledRuns: task.metadata.scheduledRuns.map((run) =>
+            run.scheduleId === scheduleId && run.runId === runId ? { ...run, acknowledgedAt } : run,
+          ),
+        },
+      });
+    },
+    [patchMutate],
+  );
   const deleteMutate = deleteTask.mutate;
   const handleDelete = useCallback(
     (task: StoredTask) => deleteMutate(task.metadata.id),
@@ -633,6 +648,7 @@ export function ProjectTasksScreen({
         onPauseSchedule={pauseScheduleMutate}
         onResumeSchedule={resumeScheduleMutate}
         onDeleteSchedule={confirmDeleteSchedule}
+        onAcknowledgeScheduleRun={handleAcknowledgeScheduleRun}
         onOpenTimesheetTask={setExpandedId}
         onSelectView={setView}
         onToggleExpanded={handleToggleExpanded}
@@ -676,6 +692,7 @@ function ProjectTaskViewContent({
   onPauseSchedule,
   onResumeSchedule,
   onDeleteSchedule,
+  onAcknowledgeScheduleRun,
   onOpenTimesheetTask,
   onSelectView,
   onToggleExpanded,
@@ -721,6 +738,7 @@ function ProjectTaskViewContent({
         onPause={onPauseSchedule}
         onResume={onResumeSchedule}
         onDelete={onDeleteSchedule}
+        onAcknowledge={onAcknowledgeScheduleRun}
       />
     );
   }
@@ -790,6 +808,7 @@ function ProjectSchedulesView({
   onPause,
   onResume,
   onDelete,
+  onAcknowledge,
 }: {
   pending: boolean;
   error: Error | null;
@@ -800,7 +819,9 @@ function ProjectSchedulesView({
   onPause: (scheduleId: string) => void;
   onResume: (scheduleId: string) => void;
   onDelete: (task: StoredTask, scheduleId: string) => void;
+  onAcknowledge: (task: StoredTask, scheduleId: string, runId: string) => void;
 }) {
+  const attentionCount = useMemo(() => items.filter(hasUnacknowledgedFailure).length, [items]);
   if (pending) {
     return (
       <View style={styles.centered}>
@@ -821,6 +842,7 @@ function ProjectSchedulesView({
         <Text style={styles.schedulesTitle}>Scheduled agent tasks</Text>
         <Text style={styles.muted}>
           {items.length} active task link{items.length === 1 ? "" : "s"}
+          {attentionCount > 0 ? ` - ${attentionCount} need attention` : ""}
         </Text>
       </View>
       {items.length > 0 ? (
@@ -834,6 +856,7 @@ function ProjectSchedulesView({
             onPause={onPause}
             onResume={onResume}
             onDelete={onDelete}
+            onAcknowledge={onAcknowledge}
           />
         ))
       ) : (
@@ -851,6 +874,7 @@ function ProjectScheduleRow({
   onPause,
   onResume,
   onDelete,
+  onAcknowledge,
 }: {
   item: ProjectScheduleItem;
   disabled: boolean;
@@ -859,6 +883,7 @@ function ProjectScheduleRow({
   onPause: (scheduleId: string) => void;
   onResume: (scheduleId: string) => void;
   onDelete: (task: StoredTask, scheduleId: string) => void;
+  onAcknowledge: (task: StoredTask, scheduleId: string, runId: string) => void;
 }) {
   const { task, schedule, scheduleId } = item;
   const openTask = useCallback(() => onOpenTask(task), [onOpenTask, task]);
@@ -873,8 +898,18 @@ function ProjectScheduleRow({
   const latestRun = task.metadata.scheduledRuns
     .toReversed()
     .find((run) => run.scheduleId === scheduleId);
+  const needsAttention = latestRun?.status === "failed" && latestRun.acknowledgedAt === null;
+  const acknowledge = useCallback(() => {
+    if (latestRun) {
+      onAcknowledge(task, scheduleId, latestRun.runId);
+    }
+  }, [latestRun, onAcknowledge, scheduleId, task]);
+  const rowStyle = useMemo(
+    () => [styles.scheduleRow, needsAttention ? styles.scheduleRowAttention : null],
+    [needsAttention],
+  );
   return (
-    <View style={styles.scheduleRow}>
+    <View style={rowStyle}>
       <View style={styles.scheduleRowMain}>
         <Text style={styles.scheduleRowTitle} numberOfLines={1}>
           {schedule?.name ?? task.metadata.title}
@@ -906,13 +941,17 @@ function ProjectScheduleRow({
           <Text style={styles.scheduleRowError}>Schedule definition missing</Text>
         )}
         {latestRun ? (
-          <Text style={styles.scheduleRowMeta}>
+          <Text style={needsAttention ? styles.scheduleRowError : styles.scheduleRowMeta}>
             Last run {latestRun.status} - {formatProjectScheduleTime(latestRun.scheduledFor)}
+            {needsAttention ? " - needs attention" : ""}
           </Text>
         ) : null}
       </View>
       <View style={styles.scheduleRowActions}>
         <ScheduleRowButton label="Open task" disabled={false} onPress={openTask} />
+        {needsAttention ? (
+          <ScheduleRowButton label="Acknowledge" disabled={disabled} onPress={acknowledge} />
+        ) : null}
         <ScheduleRowButton label="Run" disabled={disabled || !schedule} onPress={runNow} />
         {isPaused ? (
           <ScheduleRowButton label="Resume" disabled={disabled || !schedule} onPress={resume} />
@@ -1047,6 +1086,13 @@ function formatProjectScheduleTiming(schedule: ScheduleSummary | null): string {
     return `${schedule.status} - last ${formatProjectScheduleTime(schedule.lastRunAt)}`;
   }
   return `${schedule.status} - no runs yet`;
+}
+
+function hasUnacknowledgedFailure(item: ProjectScheduleItem): boolean {
+  return item.task.metadata.scheduledRuns.some(
+    (run) =>
+      run.scheduleId === item.scheduleId && run.status === "failed" && run.acknowledgedAt === null,
+  );
 }
 
 function formatProjectScheduleCadence(cadence: ScheduleSummary["cadence"]): string {
@@ -1248,6 +1294,10 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.spacing[3],
     borderRadius: theme.borderRadius.lg,
     backgroundColor: theme.colors.surface1,
+  },
+  scheduleRowAttention: {
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.destructive,
   },
   scheduleRowMain: { flex: 1, minWidth: 0, gap: 2 },
   scheduleRowTitle: {

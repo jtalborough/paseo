@@ -157,6 +157,7 @@ export const TaskScheduledAgentRunSchema = z.object({
   changedFiles: z.array(z.string()).default([]),
   followUpTaskIds: z.array(z.string()).default([]),
   externalMirrorUpdates: z.array(z.string()).default([]),
+  acknowledgedAt: nullableString(),
 });
 export type TaskScheduledAgentRun = z.infer<typeof TaskScheduledAgentRunSchema>;
 

@@ -243,7 +243,9 @@ moves from prototype into stable product behavior.
 - Add trust controls before unattended execution. Implemented controls include run now, pause, and
   schedule execution policy (`auto`, `plan_only`, `approval_before_edit`). Implemented failure
   controls include bounded retry policy with per-run attempt tracking and missed-run catch-up policy.
-  Remaining controls include dry run and failure notification routing.
+  Failed task run ledgers carry acknowledgment state so the Project Schedules tab can keep
+  unacknowledged failures visible. Remaining controls include dry run and broader failure
+  notification routing.
 - Keep scheduled work Project-scoped by default. Global schedule views should aggregate Project
   schedules, not own the schedule source of truth.
 
