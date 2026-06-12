@@ -215,6 +215,7 @@ One file per schedule. ID is 8 hex characters.
 | `prompt`       | `string`                                          | The prompt to send               |
 | `cadence`      | `ScheduleCadence`                                 | Timing (see below)               |
 | `approvalMode` | `"auto" \| "plan_only" \| "approval_before_edit"` | Execution trust policy           |
+| `retryPolicy`  | `{ maxAttempts: number, backoffMs: number }`      | Bounded failure retries          |
 | `target`       | `ScheduleTarget`                                  | What to run (see below)          |
 | `status`       | `"active" \| "paused" \| "completed"`             | Current state                    |
 | `createdAt`    | `string` (ISO 8601)                               |                                  |
@@ -242,6 +243,7 @@ One file per schedule. ID is 8 hex characters.
 | -------------- | -------------------------------------- | ----------------------- |
 | `id`           | `string`                               | Run ID                  |
 | `scheduledFor` | `string` (ISO 8601)                    | Intended execution time |
+| `attempt`      | `number`                               | Attempt for this run    |
 | `startedAt`    | `string` (ISO 8601)                    |                         |
 | `endedAt`      | `string?` (ISO 8601)                   |                         |
 | `status`       | `"running" \| "succeeded" \| "failed"` |                         |

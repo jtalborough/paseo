@@ -640,6 +640,7 @@ export interface CreateScheduleOptions {
   maxRuns?: number;
   expiresAt?: string;
   approvalMode?: "auto" | "plan_only" | "approval_before_edit";
+  retryPolicy?: { maxAttempts: number; backoffMs: number };
   runOnCreate?: boolean;
   requestId?: string;
 }
@@ -668,6 +669,7 @@ export interface UpdateScheduleOptions {
         timezone?: string;
       };
   approvalMode?: "auto" | "plan_only" | "approval_before_edit";
+  retryPolicy?: { maxAttempts: number; backoffMs: number };
   newAgentConfig?: UpdateScheduleNewAgentConfig;
   maxRuns?: number | null;
   expiresAt?: string | null;
@@ -4425,6 +4427,7 @@ export class DaemonClient {
         target: options.target,
         ...(options.name ? { name: options.name } : {}),
         ...(options.approvalMode !== undefined ? { approvalMode: options.approvalMode } : {}),
+        ...(options.retryPolicy !== undefined ? { retryPolicy: options.retryPolicy } : {}),
         ...(typeof options.maxRuns === "number" ? { maxRuns: options.maxRuns } : {}),
         ...(options.expiresAt ? { expiresAt: options.expiresAt } : {}),
         ...(typeof options.runOnCreate === "boolean" ? { runOnCreate: options.runOnCreate } : {}),
@@ -4527,6 +4530,7 @@ export class DaemonClient {
         ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
         ...(options.cadence !== undefined ? { cadence: options.cadence } : {}),
         ...(options.approvalMode !== undefined ? { approvalMode: options.approvalMode } : {}),
+        ...(options.retryPolicy !== undefined ? { retryPolicy: options.retryPolicy } : {}),
         ...(options.newAgentConfig !== undefined ? { newAgentConfig: options.newAgentConfig } : {}),
         ...(options.maxRuns !== undefined ? { maxRuns: options.maxRuns } : {}),
         ...(options.expiresAt !== undefined ? { expiresAt: options.expiresAt } : {}),

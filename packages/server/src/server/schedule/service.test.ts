@@ -186,6 +186,53 @@ describe("ScheduleService", () => {
     expect(inspected.nextRunAt).toBeNull();
   });
 
+  test("retries failed runs with bounded attempts before advancing cadence", async () => {
+    const service = new ScheduleService({
+      paseoHome: tempDir,
+      logger: createTestLogger(),
+      agentManager: new AgentManager({ logger: createTestLogger() }),
+      agentStorage,
+      providerSnapshotManager: NO_UNATTENDED_SCHEDULE_POLICY,
+      now: () => now,
+      runner: async () => {
+        throw new Error("temporary failure");
+      },
+    });
+
+    const created = await service.create({
+      prompt: "retry me",
+      cadence: { type: "every", everyMs: 60 * 60_000 },
+      retryPolicy: { maxAttempts: 2, backoffMs: 5 * 60_000 },
+      target: { type: "new-agent", config: { provider: "claude", cwd: tempDir } },
+    });
+
+    now = new Date("2026-01-01T00:01:00.000Z");
+    await service.tick();
+    const afterFailure = await service.inspect(created.id);
+    expect(afterFailure.runs).toMatchObject([
+      {
+        status: "failed",
+        scheduledFor: "2026-01-01T00:00:00.000Z",
+        attempt: 1,
+      },
+    ]);
+    expect(afterFailure.nextRunAt).toBe("2026-01-01T00:06:00.000Z");
+    expect(afterFailure.pendingRetry).toEqual({
+      scheduledFor: "2026-01-01T00:00:00.000Z",
+      attempt: 2,
+    });
+
+    now = new Date("2026-01-01T00:06:00.000Z");
+    await service.tick();
+    const afterRetry = await service.inspect(created.id);
+    expect(afterRetry.runs).toMatchObject([
+      { status: "failed", scheduledFor: "2026-01-01T00:00:00.000Z", attempt: 1 },
+      { status: "failed", scheduledFor: "2026-01-01T00:00:00.000Z", attempt: 2 },
+    ]);
+    expect(afterRetry.pendingRetry).toBeNull();
+    expect(afterRetry.nextRunAt).toBe("2026-01-01T01:00:00.000Z");
+  });
+
   test("executes new-agent schedules through AgentManager with real fake clients", async () => {
     const manager = new AgentManager({
       logger: createTestLogger(),
@@ -1108,6 +1155,7 @@ describe("ScheduleService", () => {
       name: "renamed",
       cadence: { type: "every", everyMs: 5 * 60_000 },
       approvalMode: "plan_only",
+      retryPolicy: { maxAttempts: 3, backoffMs: 120_000 },
       newAgentConfig: {
         provider: "codex",
         model: "gpt-5",
@@ -1120,6 +1168,7 @@ describe("ScheduleService", () => {
     expect(updated.name).toBe("renamed");
     expect(updated.cadence).toEqual({ type: "every", everyMs: 5 * 60_000 });
     expect(updated.approvalMode).toBe("plan_only");
+    expect(updated.retryPolicy).toEqual({ maxAttempts: 3, backoffMs: 120_000 });
     expect(updated.target).toEqual({
       type: "new-agent",
       config: {

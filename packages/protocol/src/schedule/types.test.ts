@@ -27,26 +27,27 @@ describe("ScheduleCadenceSchema", () => {
 
 describe("StoredScheduleSchema", () => {
   test("defaults old schedules to auto approval mode", () => {
-    expect(
-      StoredScheduleSchema.parse({
-        id: "schedule-1",
-        name: null,
-        prompt: "Run",
-        cadence: { type: "every", everyMs: 60_000 },
-        target: {
-          type: "new-agent",
-          config: { provider: "codex", cwd: "/repo" },
-        },
-        status: "active",
-        createdAt: "2026-06-12T00:00:00.000Z",
-        updatedAt: "2026-06-12T00:00:00.000Z",
-        nextRunAt: "2026-06-12T01:00:00.000Z",
-        lastRunAt: null,
-        pausedAt: null,
-        expiresAt: null,
-        maxRuns: null,
-        runs: [],
-      }).approvalMode,
-    ).toBe("auto");
+    const parsed = StoredScheduleSchema.parse({
+      id: "schedule-1",
+      name: null,
+      prompt: "Run",
+      cadence: { type: "every", everyMs: 60_000 },
+      target: {
+        type: "new-agent",
+        config: { provider: "codex", cwd: "/repo" },
+      },
+      status: "active",
+      createdAt: "2026-06-12T00:00:00.000Z",
+      updatedAt: "2026-06-12T00:00:00.000Z",
+      nextRunAt: "2026-06-12T01:00:00.000Z",
+      lastRunAt: null,
+      pausedAt: null,
+      expiresAt: null,
+      maxRuns: null,
+      runs: [],
+    });
+    expect(parsed.approvalMode).toBe("auto");
+    expect(parsed.retryPolicy).toEqual({ maxAttempts: 1, backoffMs: 5 * 60_000 });
+    expect(parsed.pendingRetry).toBeNull();
   });
 });

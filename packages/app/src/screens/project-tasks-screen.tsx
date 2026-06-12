@@ -3,7 +3,11 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import type { PressableStateCallbackType } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StoredTask, TaskConfig } from "@getpaseo/protocol/task/types";
-import type { ScheduleApprovalMode, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
+import type {
+  ScheduleApprovalMode,
+  ScheduleRetryPolicy,
+  ScheduleSummary,
+} from "@getpaseo/protocol/schedule/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
 import { StyleSheet } from "react-native-unistyles";
 import { ProjectSurfaceHeader } from "@/components/project-surface-header";
@@ -263,6 +267,7 @@ export function ProjectTasksScreen({
         provider,
         cadence: input.draft.cadence,
         approvalMode: input.draft.approvalMode,
+        retryPolicy: input.draft.retryPolicy,
         name: input.draft.name,
         runOnCreate: input.draft.runOnCreate,
       });
@@ -328,6 +333,7 @@ export function ProjectTasksScreen({
         id: input.scheduleId,
         cadence: input.draft.cadence,
         approvalMode: input.draft.approvalMode,
+        retryPolicy: input.draft.retryPolicy,
         ...(name !== undefined ? { name } : {}),
       });
       if (payload.error) {
@@ -881,6 +887,11 @@ function ProjectScheduleRow({
         ) : null}
         {schedule ? (
           <Text style={styles.scheduleRowMeta}>
+            {formatProjectScheduleRetryPolicy(schedule.retryPolicy)}
+          </Text>
+        ) : null}
+        {schedule ? (
+          <Text style={styles.scheduleRowMeta}>
             {formatProjectScheduleCadence(schedule.cadence)}
           </Text>
         ) : (
@@ -1049,6 +1060,13 @@ function formatProjectScheduleApprovalMode(value: ScheduleApprovalMode): string 
       return "Ask before edits";
   }
   return "Auto-run";
+}
+
+function formatProjectScheduleRetryPolicy(value: ScheduleRetryPolicy): string {
+  if (value.maxAttempts <= 1) {
+    return "No retry";
+  }
+  return `${value.maxAttempts - 1} ${value.maxAttempts === 2 ? "retry" : "retries"}`;
 }
 
 function formatProjectScheduleInterval(value: number): string {

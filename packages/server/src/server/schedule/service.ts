@@ -19,6 +19,7 @@ import type {
   CreateScheduleInput,
   ScheduleApprovalMode,
   ScheduleExecutionResult,
+  ScheduleRetryPolicy,
   ScheduleRun,
   ScheduleTarget,
   StoredSchedule,
@@ -53,6 +54,14 @@ function normalizePrompt(prompt: string): string {
 
 function normalizeApprovalMode(value: ScheduleApprovalMode | undefined): ScheduleApprovalMode {
   return value ?? "auto";
+}
+
+function normalizeRetryPolicy(value: ScheduleRetryPolicy | undefined): ScheduleRetryPolicy {
+  return value ?? { maxAttempts: 1, backoffMs: 5 * 60_000 };
+}
+
+function shouldRetryRun(run: ScheduleRun, retryPolicy: ScheduleRetryPolicy): boolean {
+  return run.status === "failed" && run.attempt < retryPolicy.maxAttempts;
 }
 
 function applyScheduleApprovalModeToPrompt(
@@ -151,6 +160,7 @@ function completeSchedule(schedule: StoredSchedule, now: Date): StoredSchedule {
     ...schedule,
     status: "completed",
     nextRunAt: null,
+    pendingRetry: null,
     pausedAt: null,
     updatedAt: now.toISOString(),
   };
@@ -247,6 +257,8 @@ export class ScheduleService {
       prompt,
       cadence: input.cadence,
       approvalMode: normalizeApprovalMode(input.approvalMode),
+      retryPolicy: normalizeRetryPolicy(input.retryPolicy),
+      pendingRetry: null,
       target: input.target,
       status: "active",
       createdAt: now.toISOString(),
@@ -291,6 +303,7 @@ export class ScheduleService {
       ...schedule,
       status: "paused" as const,
       nextRunAt: null,
+      pendingRetry: null,
       pausedAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
@@ -311,6 +324,7 @@ export class ScheduleService {
       ...schedule,
       status: "active" as const,
       pausedAt: null,
+      pendingRetry: null,
       nextRunAt: computeNextRunAt(schedule.cadence, now).toISOString(),
       updatedAt: now.toISOString(),
     };
@@ -335,11 +349,15 @@ export class ScheduleService {
       validateScheduleCadence(input.cadence);
       const nextRunAt =
         updated.status === "active" ? computeNextRunAt(input.cadence, now).toISOString() : null;
-      updated = { ...updated, cadence: input.cadence, nextRunAt };
+      updated = { ...updated, cadence: input.cadence, nextRunAt, pendingRetry: null };
     }
 
     if (input.approvalMode !== undefined) {
       updated = { ...updated, approvalMode: input.approvalMode };
+    }
+
+    if (input.retryPolicy !== undefined) {
+      updated = { ...updated, retryPolicy: normalizeRetryPolicy(input.retryPolicy) };
     }
 
     if (input.newAgentConfig !== undefined) {
@@ -475,7 +493,10 @@ export class ScheduleService {
     const runId = randomUUID();
     const runningRun: ScheduleRun = {
       id: runId,
-      scheduledFor: manual ? now.toISOString() : (schedule.nextRunAt ?? now.toISOString()),
+      scheduledFor: manual
+        ? now.toISOString()
+        : (schedule.pendingRetry?.scheduledFor ?? schedule.nextRunAt ?? now.toISOString()),
+      attempt: manual ? 1 : (schedule.pendingRetry?.attempt ?? 1),
       startedAt: now.toISOString(),
       endedAt: null,
       status: "running",
@@ -485,6 +506,7 @@ export class ScheduleService {
     };
     const scheduleWithRun = {
       ...schedule,
+      pendingRetry: null,
       updatedAt: now.toISOString(),
       runs: [...schedule.runs, runningRun],
     };
@@ -547,7 +569,22 @@ export class ScheduleService {
       updatedAt: now.toISOString(),
     };
 
-    if (params.manual) {
+    const finishedRun = completedRuns.find((run) => run.id === params.runId);
+    if (
+      !params.manual &&
+      updated.status === "active" &&
+      finishedRun &&
+      shouldRetryRun(finishedRun, updated.retryPolicy)
+    ) {
+      updated = {
+        ...updated,
+        nextRunAt: new Date(now.getTime() + updated.retryPolicy.backoffMs).toISOString(),
+        pendingRetry: {
+          scheduledFor: finishedRun.scheduledFor,
+          attempt: finishedRun.attempt + 1,
+        },
+      };
+    } else if (params.manual) {
       // Manual one-shot runs do not advance the cadence or recompute completion.
     } else if (shouldCompleteSchedule(updated, now)) {
       updated = completeSchedule(updated, now);
@@ -557,7 +594,7 @@ export class ScheduleService {
         nextRunAt: null,
       };
     } else {
-      const after = new Date(schedule.nextRunAt ?? now.toISOString());
+      const after = new Date(finishedRun?.scheduledFor ?? schedule.nextRunAt ?? now.toISOString());
       let nextRunAt = computeNextRunAt(updated.cadence, after);
       while (nextRunAt.getTime() <= now.getTime()) {
         nextRunAt = computeNextRunAt(updated.cadence, nextRunAt);
@@ -569,9 +606,9 @@ export class ScheduleService {
     }
 
     await this.store.put(updated);
-    const finishedRun = updated.runs.find((run) => run.id === params.runId);
-    if (finishedRun) {
-      await this.notifyRunFinished(updated, finishedRun);
+    const updatedFinishedRun = updated.runs.find((run) => run.id === params.runId);
+    if (updatedFinishedRun) {
+      await this.notifyRunFinished(updated, updatedFinishedRun);
     }
   }
 

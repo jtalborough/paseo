@@ -17,6 +17,7 @@ import {
 import {
   ScheduleApprovalModeSchema,
   ScheduleCadenceSchema,
+  ScheduleRetryPolicySchema,
   ScheduleSummarySchema,
 } from "@getpaseo/protocol/schedule/types";
 
@@ -231,6 +232,7 @@ export const TaskScheduleCreateRequestSchema = z.object({
   provider: z.string().min(1).optional(),
   cadence: ScheduleCadenceSchema,
   approvalMode: ScheduleApprovalModeSchema.optional(),
+  retryPolicy: ScheduleRetryPolicySchema.optional(),
   name: z.string().min(1).optional(),
   runOnCreate: z.boolean().optional(),
 });

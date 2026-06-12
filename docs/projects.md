@@ -241,8 +241,9 @@ moves from prototype into stable product behavior.
   time, context packet, provider/profile, Folder grants, result, summary, changed files, follow-up
   task links, and external mirror updates.
 - Add trust controls before unattended execution. Implemented controls include run now, pause, and
-  schedule execution policy (`auto`, `plan_only`, `approval_before_edit`). Remaining controls include
-  dry run, retry policy, missed-run policy, and failure notification routing.
+  schedule execution policy (`auto`, `plan_only`, `approval_before_edit`). Implemented failure
+  controls include bounded retry policy with per-run attempt tracking. Remaining controls include dry
+  run, missed-run policy, and failure notification routing.
 - Keep scheduled work Project-scoped by default. Global schedule views should aggregate Project
   schedules, not own the schedule source of truth.
 

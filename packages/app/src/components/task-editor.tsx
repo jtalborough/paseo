@@ -13,6 +13,7 @@ import type {
 import type {
   ScheduleApprovalMode,
   ScheduleCadence,
+  ScheduleRetryPolicy,
   ScheduleSummary,
 } from "@getpaseo/protocol/schedule/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
@@ -35,6 +36,11 @@ const SCHEDULE_APPROVAL_OPTIONS: Option<ScheduleApprovalMode>[] = [
   { value: "auto", label: "Auto" },
   { value: "plan_only", label: "Plan only" },
   { value: "approval_before_edit", label: "Ask before edits" },
+];
+const SCHEDULE_RETRY_OPTIONS: Array<Option<string> & { retryPolicy: ScheduleRetryPolicy }> = [
+  { value: "none", label: "No retry", retryPolicy: { maxAttempts: 1, backoffMs: 5 * 60_000 } },
+  { value: "once", label: "Retry once", retryPolicy: { maxAttempts: 2, backoffMs: 5 * 60_000 } },
+  { value: "three", label: "Retry 3x", retryPolicy: { maxAttempts: 4, backoffMs: 5 * 60_000 } },
 ];
 
 interface Option<T> {
@@ -64,6 +70,7 @@ const ATTENTIONS: Option<TaskAttention>[] = [
 export interface TaskScheduleDraft {
   cadence: ScheduleCadence;
   approvalMode: ScheduleApprovalMode;
+  retryPolicy: ScheduleRetryPolicy;
   name?: string;
   runOnCreate?: boolean;
 }
@@ -71,6 +78,7 @@ export interface TaskScheduleDraft {
 export interface TaskScheduleUpdateDraft {
   cadence: ScheduleCadence;
   approvalMode: ScheduleApprovalMode;
+  retryPolicy: ScheduleRetryPolicy;
   name?: string | null;
 }
 
@@ -372,6 +380,9 @@ function ScheduledAgentTaskSection({
   const [timezoneDraft, setTimezoneDraft] = useState("");
   const [nameDraft, setNameDraft] = useState("");
   const [approvalMode, setApprovalMode] = useState<ScheduleApprovalMode>("approval_before_edit");
+  const [retryPolicy, setRetryPolicy] = useState<ScheduleRetryPolicy>(
+    SCHEDULE_RETRY_OPTIONS[0].retryPolicy,
+  );
   const cadence = useMemo(
     () =>
       mode === "every" ? parseEveryCadence(everyDraft) : parseCronCadence(cronDraft, timezoneDraft),
@@ -392,10 +403,11 @@ function ScheduledAgentTaskSection({
     onSchedule({
       cadence,
       approvalMode,
+      retryPolicy,
       ...(name ? { name } : {}),
       ...(cadence.type === "every" ? { runOnCreate: false } : {}),
     });
-  }, [approvalMode, cadence, nameDraft, onSchedule]);
+  }, [approvalMode, cadence, nameDraft, onSchedule, retryPolicy]);
   const setEveryMode = useCallback(() => setMode("every"), []);
   const setCronMode = useCallback(() => setMode("cron"), []);
   return (
@@ -421,6 +433,7 @@ function ScheduledAgentTaskSection({
         placeholder="Schedule name"
       />
       <ScheduleApprovalModePicker value={approvalMode} onChange={setApprovalMode} />
+      <ScheduleRetryPolicyPicker value={retryPolicy} onChange={setRetryPolicy} />
       {mode === "every" ? (
         <ScheduleTextInput value={everyDraft} onChangeText={setEveryDraft} placeholder="1d" />
       ) : (
@@ -535,6 +548,41 @@ function ScheduleApprovalModeChip({
   return <QuickChip label={option.label} onPress={handlePress} selected={selected} />;
 }
 
+function ScheduleRetryPolicyPicker({
+  value,
+  onChange,
+}: {
+  value: ScheduleRetryPolicy;
+  onChange: (value: ScheduleRetryPolicy) => void;
+}) {
+  const selectedValue = retryPolicyToOption(value);
+  return (
+    <View style={styles.scheduleModeRow}>
+      {SCHEDULE_RETRY_OPTIONS.map((option) => (
+        <ScheduleRetryPolicyChip
+          key={option.value}
+          option={option}
+          selected={selectedValue === option.value}
+          onChange={onChange}
+        />
+      ))}
+    </View>
+  );
+}
+
+function ScheduleRetryPolicyChip({
+  option,
+  selected,
+  onChange,
+}: {
+  option: Option<string> & { retryPolicy: ScheduleRetryPolicy };
+  selected: boolean;
+  onChange: (value: ScheduleRetryPolicy) => void;
+}) {
+  const handlePress = useCallback(() => onChange(option.retryPolicy), [onChange, option]);
+  return <QuickChip label={option.label} onPress={handlePress} selected={selected} />;
+}
+
 function AttachedScheduleRow({
   scheduleId,
   schedule,
@@ -565,6 +613,7 @@ function AttachedScheduleRow({
   const timing = formatAttachedScheduleTiming(schedule);
   const cadence = schedule ? formatCadence(schedule.cadence) : null;
   const approvalMode = schedule ? formatApprovalMode(schedule.approvalMode) : null;
+  const retryPolicy = schedule ? formatRetryPolicy(schedule.retryPolicy) : null;
   const latestRuns = runs.slice(-3).toReversed();
   return (
     <View style={styles.attachedSchedule}>
@@ -577,6 +626,7 @@ function AttachedScheduleRow({
         </Text>
         {cadence ? <Text style={styles.attachedScheduleMeta}>{cadence}</Text> : null}
         {approvalMode ? <Text style={styles.attachedScheduleMeta}>{approvalMode}</Text> : null}
+        {retryPolicy ? <Text style={styles.attachedScheduleMeta}>{retryPolicy}</Text> : null}
       </View>
       <AttachedScheduleActions
         expanded={expanded}
@@ -689,6 +739,7 @@ function ScheduleEditForm({
     schedule.cadence.type === "cron" ? (schedule.cadence.timezone ?? "") : "",
   );
   const [approvalMode, setApprovalMode] = useState<ScheduleApprovalMode>(schedule.approvalMode);
+  const [retryPolicy, setRetryPolicy] = useState<ScheduleRetryPolicy>(schedule.retryPolicy);
   const cadence = useMemo(
     () =>
       mode === "every" ? parseEveryCadence(everyDraft) : parseCronCadence(cronDraft, timezoneDraft),
@@ -705,10 +756,11 @@ function ScheduleEditForm({
     onSave({
       cadence,
       approvalMode,
+      retryPolicy,
       name: name ? name : null,
     });
     onCancel();
-  }, [approvalMode, cadence, nameDraft, onCancel, onSave]);
+  }, [approvalMode, cadence, nameDraft, onCancel, onSave, retryPolicy]);
   return (
     <View style={styles.scheduleEdit}>
       <View style={styles.scheduleModeRow}>
@@ -721,6 +773,7 @@ function ScheduleEditForm({
         placeholder="Schedule name"
       />
       <ScheduleApprovalModePicker value={approvalMode} onChange={setApprovalMode} />
+      <ScheduleRetryPolicyPicker value={retryPolicy} onChange={setRetryPolicy} />
       {mode === "every" ? (
         <ScheduleTextInput value={everyDraft} onChangeText={setEveryDraft} placeholder="1d" />
       ) : (
@@ -838,6 +891,22 @@ function formatApprovalMode(value: ScheduleApprovalMode): string {
       return "Ask before edits";
   }
   return "Auto-run";
+}
+
+function formatRetryPolicy(value: ScheduleRetryPolicy): string {
+  if (value.maxAttempts <= 1) {
+    return "No retry";
+  }
+  return `${value.maxAttempts - 1} ${value.maxAttempts === 2 ? "retry" : "retries"}`;
+}
+
+function retryPolicyToOption(value: ScheduleRetryPolicy): string {
+  const option = SCHEDULE_RETRY_OPTIONS.find(
+    (candidate) =>
+      candidate.retryPolicy.maxAttempts === value.maxAttempts &&
+      candidate.retryPolicy.backoffMs === value.backoffMs,
+  );
+  return option?.value ?? "none";
 }
 
 function formatEveryMs(value: number): string {

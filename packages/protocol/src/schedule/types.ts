@@ -22,6 +22,27 @@ export const ScheduleApprovalModeSchema = z
   .default("auto");
 export type ScheduleApprovalMode = z.infer<typeof ScheduleApprovalModeSchema>;
 
+export const ScheduleRetryPolicySchema = z
+  .object({
+    maxAttempts: z.number().int().positive().default(1),
+    backoffMs: z
+      .number()
+      .int()
+      .nonnegative()
+      .default(5 * 60_000),
+  })
+  .default({ maxAttempts: 1, backoffMs: 5 * 60_000 });
+export type ScheduleRetryPolicy = z.infer<typeof ScheduleRetryPolicySchema>;
+
+export const SchedulePendingRetrySchema = z
+  .object({
+    scheduledFor: z.string(),
+    attempt: z.number().int().positive(),
+  })
+  .nullable()
+  .default(null);
+export type SchedulePendingRetry = z.infer<typeof SchedulePendingRetrySchema>;
+
 export const ScheduleTargetSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("agent"),
@@ -58,6 +79,7 @@ export type ScheduleTarget = z.infer<typeof ScheduleTargetSchema>;
 export const ScheduleRunSchema = z.object({
   id: z.string(),
   scheduledFor: z.string(),
+  attempt: z.number().int().positive().default(1),
   startedAt: z.string(),
   endedAt: z.string().nullable(),
   status: z.enum(["running", "succeeded", "failed"]),
@@ -73,6 +95,8 @@ export const StoredScheduleSchema = z.object({
   prompt: z.string().min(1),
   cadence: ScheduleCadenceSchema,
   approvalMode: ScheduleApprovalModeSchema,
+  retryPolicy: ScheduleRetryPolicySchema,
+  pendingRetry: SchedulePendingRetrySchema,
   target: ScheduleTargetSchema,
   status: ScheduleStatusSchema,
   createdAt: z.string(),
@@ -88,6 +112,7 @@ export type StoredSchedule = z.infer<typeof StoredScheduleSchema>;
 
 export const ScheduleSummarySchema = StoredScheduleSchema.omit({
   runs: true,
+  pendingRetry: true,
 });
 export type ScheduleSummary = z.infer<typeof ScheduleSummarySchema>;
 
@@ -96,6 +121,7 @@ export interface CreateScheduleInput {
   prompt: string;
   cadence: ScheduleCadence;
   approvalMode?: ScheduleApprovalMode;
+  retryPolicy?: ScheduleRetryPolicy;
   target: ScheduleTarget;
   maxRuns?: number | null;
   expiresAt?: string | null;
@@ -115,6 +141,7 @@ export interface UpdateScheduleInput {
   prompt?: string;
   cadence?: ScheduleCadence;
   approvalMode?: ScheduleApprovalMode;
+  retryPolicy?: ScheduleRetryPolicy;
   newAgentConfig?: UpdateScheduleNewAgentConfig;
   maxRuns?: number | null;
   expiresAt?: string | null;
