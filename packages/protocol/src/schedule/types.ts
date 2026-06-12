@@ -17,6 +17,11 @@ export const ScheduleCadenceSchema = z.discriminatedUnion("type", [
 ]);
 export type ScheduleCadence = z.infer<typeof ScheduleCadenceSchema>;
 
+export const ScheduleApprovalModeSchema = z
+  .enum(["auto", "plan_only", "approval_before_edit"])
+  .default("auto");
+export type ScheduleApprovalMode = z.infer<typeof ScheduleApprovalModeSchema>;
+
 export const ScheduleTargetSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("agent"),
@@ -67,6 +72,7 @@ export const StoredScheduleSchema = z.object({
   name: z.string().nullable(),
   prompt: z.string().min(1),
   cadence: ScheduleCadenceSchema,
+  approvalMode: ScheduleApprovalModeSchema,
   target: ScheduleTargetSchema,
   status: ScheduleStatusSchema,
   createdAt: z.string(),
@@ -89,6 +95,7 @@ export interface CreateScheduleInput {
   name?: string | null;
   prompt: string;
   cadence: ScheduleCadence;
+  approvalMode?: ScheduleApprovalMode;
   target: ScheduleTarget;
   maxRuns?: number | null;
   expiresAt?: string | null;
@@ -107,6 +114,7 @@ export interface UpdateScheduleInput {
   name?: string | null;
   prompt?: string;
   cadence?: ScheduleCadence;
+  approvalMode?: ScheduleApprovalMode;
   newAgentConfig?: UpdateScheduleNewAgentConfig;
   maxRuns?: number | null;
   expiresAt?: string | null;

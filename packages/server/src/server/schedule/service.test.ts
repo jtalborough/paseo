@@ -226,6 +226,77 @@ describe("ScheduleService", () => {
     );
   });
 
+  test("applies scheduled task approval modes to new-agent execution", async () => {
+    const prompts: string[] = [];
+    const configs: AgentSessionConfig[] = [];
+    const clients = createTestAgentClients();
+    const codexClient = clients.codex;
+    if (!codexClient) {
+      throw new Error("Expected Codex test client");
+    }
+    clients.codex = {
+      provider: codexClient.provider,
+      capabilities: codexClient.capabilities,
+      createSession: async (...args) => {
+        configs.push(args[0]);
+        const session = await codexClient.createSession(...args);
+        const run = session.run.bind(session);
+        const startTurn = session.startTurn.bind(session);
+        session.run = async (prompt, options) => {
+          prompts.push(typeof prompt === "string" ? prompt : JSON.stringify(prompt));
+          return run(prompt, options);
+        };
+        session.startTurn = async (prompt) => {
+          prompts.push(typeof prompt === "string" ? prompt : JSON.stringify(prompt));
+          return startTurn(prompt);
+        };
+        return session;
+      },
+      resumeSession: (...args) => codexClient.resumeSession(...args),
+      listModels: (...args) => codexClient.listModels(...args),
+      isAvailable: () => codexClient.isAvailable(),
+    } satisfies AgentClient;
+    const manager = new AgentManager({
+      logger: createTestLogger(),
+      clients,
+      registry: agentStorage,
+    });
+    const service = new ScheduleService({
+      paseoHome: tempDir,
+      logger: createTestLogger(),
+      agentManager: manager,
+      agentStorage,
+      providerSnapshotManager: NO_UNATTENDED_SCHEDULE_POLICY,
+      now: () => now,
+    });
+
+    await service.create({
+      prompt: "Inspect the task",
+      cadence: { type: "every", everyMs: 60_000 },
+      approvalMode: "plan_only",
+      target: { type: "new-agent", config: { provider: "codex", cwd: tempDir } },
+      maxRuns: 1,
+    });
+    now = new Date("2026-01-01T00:01:00.000Z");
+    await service.tick();
+
+    await service.create({
+      prompt: "Edit the task",
+      cadence: { type: "every", everyMs: 60_000 },
+      approvalMode: "approval_before_edit",
+      target: { type: "new-agent", config: { provider: "codex", cwd: tempDir } },
+      maxRuns: 1,
+    });
+    now = new Date("2026-01-01T00:02:00.000Z");
+    await service.tick();
+
+    expect(prompts[0]).toContain("Execution policy: plan only");
+    expect(prompts[0]).toContain("Inspect the task");
+    expect(configs[1]?.approvalPolicy).toBe("default");
+    expect(prompts[1]).toContain("Execution policy: ask before edits");
+    expect(prompts[1]).toContain("Edit the task");
+  });
+
   test("titles scheduled new agents from the schedule prompt", async () => {
     const manager = new AgentManager({
       logger: createTestLogger(),
@@ -859,6 +930,7 @@ describe("ScheduleService", () => {
         name: null,
         prompt: "Check archived agent",
         cadence: { type: "every", everyMs: 60_000 },
+        approvalMode: "auto",
         target: {
           type: "agent",
           agentId: "archived-agent",
@@ -1021,6 +1093,7 @@ describe("ScheduleService", () => {
       name: "morning",
       prompt: "first prompt",
       cadence: { type: "every", everyMs: 60_000 },
+      approvalMode: "approval_before_edit",
       target: {
         type: "new-agent",
         config: { provider: "claude", cwd: tempDir, modeId: "default" },
@@ -1034,6 +1107,7 @@ describe("ScheduleService", () => {
       prompt: "second prompt",
       name: "renamed",
       cadence: { type: "every", everyMs: 5 * 60_000 },
+      approvalMode: "plan_only",
       newAgentConfig: {
         provider: "codex",
         model: "gpt-5",
@@ -1045,6 +1119,7 @@ describe("ScheduleService", () => {
     expect(updated.prompt).toBe("second prompt");
     expect(updated.name).toBe("renamed");
     expect(updated.cadence).toEqual({ type: "every", everyMs: 5 * 60_000 });
+    expect(updated.approvalMode).toBe("plan_only");
     expect(updated.target).toEqual({
       type: "new-agent",
       config: {

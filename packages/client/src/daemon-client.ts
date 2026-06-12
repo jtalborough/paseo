@@ -639,6 +639,7 @@ export interface CreateScheduleOptions {
       };
   maxRuns?: number;
   expiresAt?: string;
+  approvalMode?: "auto" | "plan_only" | "approval_before_edit";
   runOnCreate?: boolean;
   requestId?: string;
 }
@@ -666,6 +667,7 @@ export interface UpdateScheduleOptions {
         expression: string;
         timezone?: string;
       };
+  approvalMode?: "auto" | "plan_only" | "approval_before_edit";
   newAgentConfig?: UpdateScheduleNewAgentConfig;
   maxRuns?: number | null;
   expiresAt?: string | null;
@@ -4422,6 +4424,7 @@ export class DaemonClient {
         cadence: options.cadence,
         target: options.target,
         ...(options.name ? { name: options.name } : {}),
+        ...(options.approvalMode !== undefined ? { approvalMode: options.approvalMode } : {}),
         ...(typeof options.maxRuns === "number" ? { maxRuns: options.maxRuns } : {}),
         ...(options.expiresAt ? { expiresAt: options.expiresAt } : {}),
         ...(typeof options.runOnCreate === "boolean" ? { runOnCreate: options.runOnCreate } : {}),
@@ -4523,6 +4526,7 @@ export class DaemonClient {
         ...(options.name !== undefined ? { name: options.name } : {}),
         ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
         ...(options.cadence !== undefined ? { cadence: options.cadence } : {}),
+        ...(options.approvalMode !== undefined ? { approvalMode: options.approvalMode } : {}),
         ...(options.newAgentConfig !== undefined ? { newAgentConfig: options.newAgentConfig } : {}),
         ...(options.maxRuns !== undefined ? { maxRuns: options.maxRuns } : {}),
         ...(options.expiresAt !== undefined ? { expiresAt: options.expiresAt } : {}),

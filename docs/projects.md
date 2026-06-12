@@ -240,8 +240,9 @@ moves from prototype into stable product behavior.
 - Scheduled runs need an execution ledger: task file, schedule id, intended run time, actual start
   time, context packet, provider/profile, Folder grants, result, summary, changed files, follow-up
   task links, and external mirror updates.
-- Add trust controls before unattended execution: dry run, run now, pause, approval-before-edit,
-  comment-only mode, retry policy, missed-run policy, and failure notification routing.
+- Add trust controls before unattended execution. Implemented controls include run now, pause, and
+  schedule execution policy (`auto`, `plan_only`, `approval_before_edit`). Remaining controls include
+  dry run, retry policy, missed-run policy, and failure notification routing.
 - Keep scheduled work Project-scoped by default. Global schedule views should aggregate Project
   schedules, not own the schedule source of truth.
 

@@ -59,11 +59,13 @@ describe("Task message schemas", () => {
         repoRoot: "/repo",
         provider: "codex",
         cadence: { type: "cron", expression: "0 9 * * *", timezone: "America/New_York" },
+        approvalMode: "approval_before_edit",
         name: "Daily task",
       }),
     ).toMatchObject({
       type: "task.schedule.create.request",
       cadence: { type: "cron", expression: "0 9 * * *" },
+      approvalMode: "approval_before_edit",
     });
 
     expect(
@@ -77,6 +79,7 @@ describe("Task message schemas", () => {
             name: "Daily task",
             prompt: "Run the task",
             cadence: { type: "cron", expression: "0 9 * * *" },
+            approvalMode: "approval_before_edit",
             target: {
               type: "new-agent",
               config: { provider: "codex", cwd: "/repo" },
@@ -107,7 +110,7 @@ describe("Task message schemas", () => {
       type: "task.schedule.create.response",
       payload: {
         ok: true,
-        schedule: { id: "abc12345" },
+        schedule: { id: "abc12345", approvalMode: "approval_before_edit" },
         task: { metadata: { scheduleIds: ["abc12345"] } },
       },
     });

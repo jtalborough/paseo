@@ -17,6 +17,7 @@ import type {
 } from "../agent/provider-snapshot-manager.js";
 import type {
   CreateScheduleInput,
+  ScheduleApprovalMode,
   ScheduleExecutionResult,
   ScheduleRun,
   ScheduleTarget,
@@ -39,7 +40,7 @@ function buildScheduleFireBody(schedule: StoredSchedule, runId: string): string 
   const heading = schedule.name
     ? `Schedule "${schedule.name}" fired (id=${schedule.id}, run=${runId}).`
     : `Schedule fired (id=${schedule.id}, run=${runId}).`;
-  return `${heading}\n${schedule.prompt}`;
+  return `${heading}\n${applyScheduleApprovalModeToPrompt(schedule.approvalMode, schedule.prompt)}`;
 }
 
 function normalizePrompt(prompt: string): string {
@@ -48,6 +49,39 @@ function normalizePrompt(prompt: string): string {
     throw new Error("Schedule prompt is required");
   }
   return trimmed;
+}
+
+function normalizeApprovalMode(value: ScheduleApprovalMode | undefined): ScheduleApprovalMode {
+  return value ?? "auto";
+}
+
+function applyScheduleApprovalModeToPrompt(
+  approvalMode: ScheduleApprovalMode,
+  prompt: string,
+): string {
+  if (approvalMode === "plan_only") {
+    return [
+      "Execution policy: plan only. Do not edit files, run mutating commands, commit, push, install dependencies, or change external state. Inspect context and return a concrete plan/status report.",
+      prompt,
+    ].join("\n\n");
+  }
+  if (approvalMode === "approval_before_edit") {
+    return [
+      "Execution policy: ask before edits. Inspect context first. Before editing files, running mutating commands, committing, pushing, installing dependencies, or changing external state, ask for approval and wait.",
+      prompt,
+    ].join("\n\n");
+  }
+  return prompt;
+}
+
+function approvalPolicyForSchedule(
+  schedule: StoredSchedule,
+  existing: string | undefined,
+): string | undefined {
+  if (schedule.approvalMode === "approval_before_edit") {
+    return existing ?? "default";
+  }
+  return existing;
 }
 
 function applyNewAgentConfig(
@@ -212,6 +246,7 @@ export class ScheduleService {
       name: trimOptionalName(input.name),
       prompt,
       cadence: input.cadence,
+      approvalMode: normalizeApprovalMode(input.approvalMode),
       target: input.target,
       status: "active",
       createdAt: now.toISOString(),
@@ -301,6 +336,10 @@ export class ScheduleService {
       const nextRunAt =
         updated.status === "active" ? computeNextRunAt(input.cadence, now).toISOString() : null;
       updated = { ...updated, cadence: input.cadence, nextRunAt };
+    }
+
+    if (input.approvalMode !== undefined) {
+      updated = { ...updated, approvalMode: input.approvalMode };
     }
 
     if (input.newAgentConfig !== undefined) {
@@ -613,7 +652,7 @@ export class ScheduleService {
       model: targetConfig.model,
       thinkingOptionId: targetConfig.thinkingOptionId,
       title: targetConfig.title,
-      approvalPolicy: targetConfig.approvalPolicy,
+      approvalPolicy: approvalPolicyForSchedule(schedule, targetConfig.approvalPolicy),
       sandboxMode: targetConfig.sandboxMode,
       networkAccess: targetConfig.networkAccess,
       webSearch: targetConfig.webSearch,
@@ -632,12 +671,15 @@ export class ScheduleService {
     };
     const agent = await this.agentManager.createAgent(config, undefined, {
       labels,
-      initialPrompt: schedule.prompt,
+      initialPrompt: applyScheduleApprovalModeToPrompt(schedule.approvalMode, schedule.prompt),
       initialTitle: provisionalTitle,
     });
     let result;
     try {
-      result = await this.agentManager.runAgent(agent.id, schedule.prompt);
+      result = await this.agentManager.runAgent(
+        agent.id,
+        applyScheduleApprovalModeToPrompt(schedule.approvalMode, schedule.prompt),
+      );
     } catch (error) {
       try {
         await this.agentManager.archiveAgent(agent.id);

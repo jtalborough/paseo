@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import type { PressableStateCallbackType } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StoredTask, TaskConfig } from "@getpaseo/protocol/task/types";
-import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
+import type { ScheduleApprovalMode, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
 import { StyleSheet } from "react-native-unistyles";
 import { ProjectSurfaceHeader } from "@/components/project-surface-header";
@@ -262,6 +262,7 @@ export function ProjectTasksScreen({
         repoRoot: taskRunRepoRoot,
         provider,
         cadence: input.draft.cadence,
+        approvalMode: input.draft.approvalMode,
         name: input.draft.name,
         runOnCreate: input.draft.runOnCreate,
       });
@@ -326,6 +327,7 @@ export function ProjectTasksScreen({
       const payload = await client.scheduleUpdate({
         id: input.scheduleId,
         cadence: input.draft.cadence,
+        approvalMode: input.draft.approvalMode,
         ...(name !== undefined ? { name } : {}),
       });
       if (payload.error) {
@@ -874,6 +876,11 @@ function ProjectScheduleRow({
         <Text style={styles.scheduleRowMeta}>{formatProjectScheduleTiming(schedule)}</Text>
         {schedule ? (
           <Text style={styles.scheduleRowMeta}>
+            {formatProjectScheduleApprovalMode(schedule.approvalMode)}
+          </Text>
+        ) : null}
+        {schedule ? (
+          <Text style={styles.scheduleRowMeta}>
             {formatProjectScheduleCadence(schedule.cadence)}
           </Text>
         ) : (
@@ -1030,6 +1037,18 @@ function formatProjectScheduleCadence(cadence: ScheduleSummary["cadence"]): stri
       : `Cron ${cadence.expression}`;
   }
   return `Every ${formatProjectScheduleInterval(cadence.everyMs)}`;
+}
+
+function formatProjectScheduleApprovalMode(value: ScheduleApprovalMode): string {
+  switch (value) {
+    case "auto":
+      return "Auto-run";
+    case "plan_only":
+      return "Plan only";
+    case "approval_before_edit":
+      return "Ask before edits";
+  }
+  return "Auto-run";
 }
 
 function formatProjectScheduleInterval(value: number): string {

@@ -3079,6 +3079,7 @@ export class Session {
           repoRoot: msg.repoRoot,
         }),
         cadence: msg.cadence,
+        approvalMode: msg.approvalMode,
         target: {
           type: "new-agent",
           config: {
@@ -9987,6 +9988,7 @@ export class Session {
         prompt: request.prompt,
         name: request.name,
         cadence: request.cadence,
+        approvalMode: request.approvalMode,
         target,
         maxRuns: request.maxRuns,
         expiresAt: request.expiresAt,
@@ -10140,6 +10142,7 @@ export class Session {
         ...(request.name !== undefined ? { name: request.name } : {}),
         ...(request.prompt !== undefined ? { prompt: request.prompt } : {}),
         ...(request.cadence !== undefined ? { cadence: request.cadence } : {}),
+        ...(request.approvalMode !== undefined ? { approvalMode: request.approvalMode } : {}),
         ...(request.newAgentConfig !== undefined ? { newAgentConfig: request.newAgentConfig } : {}),
         ...(request.maxRuns !== undefined ? { maxRuns: request.maxRuns } : {}),
         ...(request.expiresAt !== undefined ? { expiresAt: request.expiresAt } : {}),

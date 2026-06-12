@@ -14,7 +14,11 @@ import {
   TaskViewsSchema,
   TaskWireSchema,
 } from "@getpaseo/protocol/task/types";
-import { ScheduleCadenceSchema, ScheduleSummarySchema } from "@getpaseo/protocol/schedule/types";
+import {
+  ScheduleApprovalModeSchema,
+  ScheduleCadenceSchema,
+  ScheduleSummarySchema,
+} from "@getpaseo/protocol/schedule/types";
 
 /** Editable GTD fields shared by create input and update patch. */
 const TaskEditableFields = {
@@ -226,6 +230,7 @@ export const TaskScheduleCreateRequestSchema = z.object({
   repoRoot: z.string().min(1),
   provider: z.string().min(1).optional(),
   cadence: ScheduleCadenceSchema,
+  approvalMode: ScheduleApprovalModeSchema.optional(),
   name: z.string().min(1).optional(),
   runOnCreate: z.boolean().optional(),
 });

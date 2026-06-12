@@ -10,7 +10,11 @@ import type {
   TaskConfig,
   TaskPriority,
 } from "@getpaseo/protocol/task/types";
-import type { ScheduleCadence, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
+import type {
+  ScheduleApprovalMode,
+  ScheduleCadence,
+  ScheduleSummary,
+} from "@getpaseo/protocol/schedule/types";
 import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
 import { type SelectOption, TaskMultiSelect, TaskSelect } from "@/components/task-select";
 import {
@@ -27,6 +31,11 @@ import { StyleSheet } from "react-native-unistyles";
 const PLACEHOLDER_COLOR = "#9ca3af";
 const EMPTY_SCHEDULES: ScheduleSummary[] = [];
 const EMPTY_SCHEDULE_RUNS: TaskScheduledAgentRun[] = [];
+const SCHEDULE_APPROVAL_OPTIONS: Option<ScheduleApprovalMode>[] = [
+  { value: "auto", label: "Auto" },
+  { value: "plan_only", label: "Plan only" },
+  { value: "approval_before_edit", label: "Ask before edits" },
+];
 
 interface Option<T> {
   value: T;
@@ -54,12 +63,14 @@ const ATTENTIONS: Option<TaskAttention>[] = [
 
 export interface TaskScheduleDraft {
   cadence: ScheduleCadence;
+  approvalMode: ScheduleApprovalMode;
   name?: string;
   runOnCreate?: boolean;
 }
 
 export interface TaskScheduleUpdateDraft {
   cadence: ScheduleCadence;
+  approvalMode: ScheduleApprovalMode;
   name?: string | null;
 }
 
@@ -360,6 +371,7 @@ function ScheduledAgentTaskSection({
   const [cronDraft, setCronDraft] = useState("0 9 * * *");
   const [timezoneDraft, setTimezoneDraft] = useState("");
   const [nameDraft, setNameDraft] = useState("");
+  const [approvalMode, setApprovalMode] = useState<ScheduleApprovalMode>("approval_before_edit");
   const cadence = useMemo(
     () =>
       mode === "every" ? parseEveryCadence(everyDraft) : parseCronCadence(cronDraft, timezoneDraft),
@@ -379,10 +391,11 @@ function ScheduledAgentTaskSection({
     const name = nameDraft.trim();
     onSchedule({
       cadence,
+      approvalMode,
       ...(name ? { name } : {}),
       ...(cadence.type === "every" ? { runOnCreate: false } : {}),
     });
-  }, [cadence, nameDraft, onSchedule]);
+  }, [approvalMode, cadence, nameDraft, onSchedule]);
   const setEveryMode = useCallback(() => setMode("every"), []);
   const setCronMode = useCallback(() => setMode("cron"), []);
   return (
@@ -407,6 +420,7 @@ function ScheduledAgentTaskSection({
         onChangeText={setNameDraft}
         placeholder="Schedule name"
       />
+      <ScheduleApprovalModePicker value={approvalMode} onChange={setApprovalMode} />
       {mode === "every" ? (
         <ScheduleTextInput value={everyDraft} onChangeText={setEveryDraft} placeholder="1d" />
       ) : (
@@ -487,6 +501,40 @@ function ScheduleTextInput({
   );
 }
 
+function ScheduleApprovalModePicker({
+  value,
+  onChange,
+}: {
+  value: ScheduleApprovalMode;
+  onChange: (value: ScheduleApprovalMode) => void;
+}) {
+  return (
+    <View style={styles.scheduleModeRow}>
+      {SCHEDULE_APPROVAL_OPTIONS.map((option) => (
+        <ScheduleApprovalModeChip
+          key={option.value}
+          option={option}
+          selected={value === option.value}
+          onChange={onChange}
+        />
+      ))}
+    </View>
+  );
+}
+
+function ScheduleApprovalModeChip({
+  option,
+  selected,
+  onChange,
+}: {
+  option: Option<ScheduleApprovalMode>;
+  selected: boolean;
+  onChange: (value: ScheduleApprovalMode) => void;
+}) {
+  const handlePress = useCallback(() => onChange(option.value), [onChange, option.value]);
+  return <QuickChip label={option.label} onPress={handlePress} selected={selected} />;
+}
+
 function AttachedScheduleRow({
   scheduleId,
   schedule,
@@ -516,6 +564,7 @@ function AttachedScheduleRow({
   const status = schedule?.status ?? "missing";
   const timing = formatAttachedScheduleTiming(schedule);
   const cadence = schedule ? formatCadence(schedule.cadence) : null;
+  const approvalMode = schedule ? formatApprovalMode(schedule.approvalMode) : null;
   const latestRuns = runs.slice(-3).toReversed();
   return (
     <View style={styles.attachedSchedule}>
@@ -527,6 +576,7 @@ function AttachedScheduleRow({
           {status} - {timing}
         </Text>
         {cadence ? <Text style={styles.attachedScheduleMeta}>{cadence}</Text> : null}
+        {approvalMode ? <Text style={styles.attachedScheduleMeta}>{approvalMode}</Text> : null}
       </View>
       <AttachedScheduleActions
         expanded={expanded}
@@ -638,6 +688,7 @@ function ScheduleEditForm({
   const [timezoneDraft, setTimezoneDraft] = useState(
     schedule.cadence.type === "cron" ? (schedule.cadence.timezone ?? "") : "",
   );
+  const [approvalMode, setApprovalMode] = useState<ScheduleApprovalMode>(schedule.approvalMode);
   const cadence = useMemo(
     () =>
       mode === "every" ? parseEveryCadence(everyDraft) : parseCronCadence(cronDraft, timezoneDraft),
@@ -653,10 +704,11 @@ function ScheduleEditForm({
     const name = nameDraft.trim();
     onSave({
       cadence,
+      approvalMode,
       name: name ? name : null,
     });
     onCancel();
-  }, [cadence, nameDraft, onCancel, onSave]);
+  }, [approvalMode, cadence, nameDraft, onCancel, onSave]);
   return (
     <View style={styles.scheduleEdit}>
       <View style={styles.scheduleModeRow}>
@@ -668,6 +720,7 @@ function ScheduleEditForm({
         onChangeText={setNameDraft}
         placeholder="Schedule name"
       />
+      <ScheduleApprovalModePicker value={approvalMode} onChange={setApprovalMode} />
       {mode === "every" ? (
         <ScheduleTextInput value={everyDraft} onChangeText={setEveryDraft} placeholder="1d" />
       ) : (
@@ -773,6 +826,18 @@ function formatCadence(cadence: ScheduleCadence): string {
       : `Cron ${cadence.expression}`;
   }
   return `Every ${formatEveryMs(cadence.everyMs)}`;
+}
+
+function formatApprovalMode(value: ScheduleApprovalMode): string {
+  switch (value) {
+    case "auto":
+      return "Auto-run";
+    case "plan_only":
+      return "Plan only";
+    case "approval_before_edit":
+      return "Ask before edits";
+  }
+  return "Auto-run";
 }
 
 function formatEveryMs(value: number): string {
