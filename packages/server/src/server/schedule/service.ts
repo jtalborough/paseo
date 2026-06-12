@@ -19,6 +19,7 @@ import type {
   CreateScheduleInput,
   ScheduleApprovalMode,
   ScheduleExecutionResult,
+  ScheduleMissedRunPolicy,
   ScheduleRetryPolicy,
   ScheduleRun,
   ScheduleTarget,
@@ -54,6 +55,12 @@ function normalizePrompt(prompt: string): string {
 
 function normalizeApprovalMode(value: ScheduleApprovalMode | undefined): ScheduleApprovalMode {
   return value ?? "auto";
+}
+
+function normalizeMissedRunPolicy(
+  value: ScheduleMissedRunPolicy | undefined,
+): ScheduleMissedRunPolicy {
+  return value ?? "skip";
 }
 
 function normalizeRetryPolicy(value: ScheduleRetryPolicy | undefined): ScheduleRetryPolicy {
@@ -257,6 +264,7 @@ export class ScheduleService {
       prompt,
       cadence: input.cadence,
       approvalMode: normalizeApprovalMode(input.approvalMode),
+      missedRunPolicy: normalizeMissedRunPolicy(input.missedRunPolicy),
       retryPolicy: normalizeRetryPolicy(input.retryPolicy),
       pendingRetry: null,
       target: input.target,
@@ -354,6 +362,10 @@ export class ScheduleService {
 
     if (input.approvalMode !== undefined) {
       updated = { ...updated, approvalMode: input.approvalMode };
+    }
+
+    if (input.missedRunPolicy !== undefined) {
+      updated = { ...updated, missedRunPolicy: input.missedRunPolicy };
     }
 
     if (input.retryPolicy !== undefined) {
@@ -467,11 +479,15 @@ export class ScheduleService {
           updated.nextRunAt &&
           new Date(updated.nextRunAt).getTime() <= now.getTime()
         ) {
-          let nextRunAt = computeNextRunAt(updated.cadence, new Date(updated.nextRunAt));
-          while (nextRunAt.getTime() <= now.getTime()) {
-            nextRunAt = computeNextRunAt(updated.cadence, nextRunAt);
+          if (updated.missedRunPolicy === "run_once") {
+            updated = { ...updated, nextRunAt: now.toISOString() };
+          } else {
+            let nextRunAt = computeNextRunAt(updated.cadence, new Date(updated.nextRunAt));
+            while (nextRunAt.getTime() <= now.getTime()) {
+              nextRunAt = computeNextRunAt(updated.cadence, nextRunAt);
+            }
+            updated = { ...updated, nextRunAt: nextRunAt.toISOString() };
           }
-          updated = { ...updated, nextRunAt: nextRunAt.toISOString() };
           dirty = true;
         }
 

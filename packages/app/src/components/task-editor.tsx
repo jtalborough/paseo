@@ -13,6 +13,7 @@ import type {
 import type {
   ScheduleApprovalMode,
   ScheduleCadence,
+  ScheduleMissedRunPolicy,
   ScheduleRetryPolicy,
   ScheduleSummary,
 } from "@getpaseo/protocol/schedule/types";
@@ -42,6 +43,10 @@ const SCHEDULE_RETRY_OPTIONS: Array<Option<string> & { retryPolicy: ScheduleRetr
   { value: "once", label: "Retry once", retryPolicy: { maxAttempts: 2, backoffMs: 5 * 60_000 } },
   { value: "three", label: "Retry 3x", retryPolicy: { maxAttempts: 4, backoffMs: 5 * 60_000 } },
 ];
+const SCHEDULE_MISSED_RUN_OPTIONS: Option<ScheduleMissedRunPolicy>[] = [
+  { value: "skip", label: "Skip missed" },
+  { value: "run_once", label: "Run once" },
+];
 
 interface Option<T> {
   value: T;
@@ -70,6 +75,7 @@ const ATTENTIONS: Option<TaskAttention>[] = [
 export interface TaskScheduleDraft {
   cadence: ScheduleCadence;
   approvalMode: ScheduleApprovalMode;
+  missedRunPolicy: ScheduleMissedRunPolicy;
   retryPolicy: ScheduleRetryPolicy;
   name?: string;
   runOnCreate?: boolean;
@@ -78,6 +84,7 @@ export interface TaskScheduleDraft {
 export interface TaskScheduleUpdateDraft {
   cadence: ScheduleCadence;
   approvalMode: ScheduleApprovalMode;
+  missedRunPolicy: ScheduleMissedRunPolicy;
   retryPolicy: ScheduleRetryPolicy;
   name?: string | null;
 }
@@ -380,6 +387,7 @@ function ScheduledAgentTaskSection({
   const [timezoneDraft, setTimezoneDraft] = useState("");
   const [nameDraft, setNameDraft] = useState("");
   const [approvalMode, setApprovalMode] = useState<ScheduleApprovalMode>("approval_before_edit");
+  const [missedRunPolicy, setMissedRunPolicy] = useState<ScheduleMissedRunPolicy>("skip");
   const [retryPolicy, setRetryPolicy] = useState<ScheduleRetryPolicy>(
     SCHEDULE_RETRY_OPTIONS[0].retryPolicy,
   );
@@ -403,11 +411,12 @@ function ScheduledAgentTaskSection({
     onSchedule({
       cadence,
       approvalMode,
+      missedRunPolicy,
       retryPolicy,
       ...(name ? { name } : {}),
       ...(cadence.type === "every" ? { runOnCreate: false } : {}),
     });
-  }, [approvalMode, cadence, nameDraft, onSchedule, retryPolicy]);
+  }, [approvalMode, cadence, missedRunPolicy, nameDraft, onSchedule, retryPolicy]);
   const setEveryMode = useCallback(() => setMode("every"), []);
   const setCronMode = useCallback(() => setMode("cron"), []);
   return (
@@ -433,6 +442,7 @@ function ScheduledAgentTaskSection({
         placeholder="Schedule name"
       />
       <ScheduleApprovalModePicker value={approvalMode} onChange={setApprovalMode} />
+      <ScheduleMissedRunPolicyPicker value={missedRunPolicy} onChange={setMissedRunPolicy} />
       <ScheduleRetryPolicyPicker value={retryPolicy} onChange={setRetryPolicy} />
       {mode === "every" ? (
         <ScheduleTextInput value={everyDraft} onChangeText={setEveryDraft} placeholder="1d" />
@@ -583,6 +593,40 @@ function ScheduleRetryPolicyChip({
   return <QuickChip label={option.label} onPress={handlePress} selected={selected} />;
 }
 
+function ScheduleMissedRunPolicyPicker({
+  value,
+  onChange,
+}: {
+  value: ScheduleMissedRunPolicy;
+  onChange: (value: ScheduleMissedRunPolicy) => void;
+}) {
+  return (
+    <View style={styles.scheduleModeRow}>
+      {SCHEDULE_MISSED_RUN_OPTIONS.map((option) => (
+        <ScheduleMissedRunPolicyChip
+          key={option.value}
+          option={option}
+          selected={value === option.value}
+          onChange={onChange}
+        />
+      ))}
+    </View>
+  );
+}
+
+function ScheduleMissedRunPolicyChip({
+  option,
+  selected,
+  onChange,
+}: {
+  option: Option<ScheduleMissedRunPolicy>;
+  selected: boolean;
+  onChange: (value: ScheduleMissedRunPolicy) => void;
+}) {
+  const handlePress = useCallback(() => onChange(option.value), [onChange, option.value]);
+  return <QuickChip label={option.label} onPress={handlePress} selected={selected} />;
+}
+
 function AttachedScheduleRow({
   scheduleId,
   schedule,
@@ -613,6 +657,7 @@ function AttachedScheduleRow({
   const timing = formatAttachedScheduleTiming(schedule);
   const cadence = schedule ? formatCadence(schedule.cadence) : null;
   const approvalMode = schedule ? formatApprovalMode(schedule.approvalMode) : null;
+  const missedRunPolicy = schedule ? formatMissedRunPolicy(schedule.missedRunPolicy) : null;
   const retryPolicy = schedule ? formatRetryPolicy(schedule.retryPolicy) : null;
   const latestRuns = runs.slice(-3).toReversed();
   return (
@@ -626,6 +671,9 @@ function AttachedScheduleRow({
         </Text>
         {cadence ? <Text style={styles.attachedScheduleMeta}>{cadence}</Text> : null}
         {approvalMode ? <Text style={styles.attachedScheduleMeta}>{approvalMode}</Text> : null}
+        {missedRunPolicy ? (
+          <Text style={styles.attachedScheduleMeta}>{missedRunPolicy}</Text>
+        ) : null}
         {retryPolicy ? <Text style={styles.attachedScheduleMeta}>{retryPolicy}</Text> : null}
       </View>
       <AttachedScheduleActions
@@ -739,6 +787,9 @@ function ScheduleEditForm({
     schedule.cadence.type === "cron" ? (schedule.cadence.timezone ?? "") : "",
   );
   const [approvalMode, setApprovalMode] = useState<ScheduleApprovalMode>(schedule.approvalMode);
+  const [missedRunPolicy, setMissedRunPolicy] = useState<ScheduleMissedRunPolicy>(
+    schedule.missedRunPolicy,
+  );
   const [retryPolicy, setRetryPolicy] = useState<ScheduleRetryPolicy>(schedule.retryPolicy);
   const cadence = useMemo(
     () =>
@@ -756,11 +807,12 @@ function ScheduleEditForm({
     onSave({
       cadence,
       approvalMode,
+      missedRunPolicy,
       retryPolicy,
       name: name ? name : null,
     });
     onCancel();
-  }, [approvalMode, cadence, nameDraft, onCancel, onSave, retryPolicy]);
+  }, [approvalMode, cadence, missedRunPolicy, nameDraft, onCancel, onSave, retryPolicy]);
   return (
     <View style={styles.scheduleEdit}>
       <View style={styles.scheduleModeRow}>
@@ -773,6 +825,7 @@ function ScheduleEditForm({
         placeholder="Schedule name"
       />
       <ScheduleApprovalModePicker value={approvalMode} onChange={setApprovalMode} />
+      <ScheduleMissedRunPolicyPicker value={missedRunPolicy} onChange={setMissedRunPolicy} />
       <ScheduleRetryPolicyPicker value={retryPolicy} onChange={setRetryPolicy} />
       {mode === "every" ? (
         <ScheduleTextInput value={everyDraft} onChangeText={setEveryDraft} placeholder="1d" />
@@ -898,6 +951,13 @@ function formatRetryPolicy(value: ScheduleRetryPolicy): string {
     return "No retry";
   }
   return `${value.maxAttempts - 1} ${value.maxAttempts === 2 ? "retry" : "retries"}`;
+}
+
+function formatMissedRunPolicy(value: ScheduleMissedRunPolicy): string {
+  if (value === "run_once") {
+    return "Run once if missed";
+  }
+  return "Skip missed runs";
 }
 
 function retryPolicyToOption(value: ScheduleRetryPolicy): string {

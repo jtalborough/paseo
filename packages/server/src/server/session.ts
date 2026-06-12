@@ -3080,6 +3080,7 @@ export class Session {
         }),
         cadence: msg.cadence,
         approvalMode: msg.approvalMode,
+        missedRunPolicy: msg.missedRunPolicy,
         retryPolicy: msg.retryPolicy,
         target: {
           type: "new-agent",
@@ -9990,6 +9991,7 @@ export class Session {
         name: request.name,
         cadence: request.cadence,
         approvalMode: request.approvalMode,
+        missedRunPolicy: request.missedRunPolicy,
         retryPolicy: request.retryPolicy,
         target,
         maxRuns: request.maxRuns,
@@ -10145,6 +10147,9 @@ export class Session {
         ...(request.prompt !== undefined ? { prompt: request.prompt } : {}),
         ...(request.cadence !== undefined ? { cadence: request.cadence } : {}),
         ...(request.approvalMode !== undefined ? { approvalMode: request.approvalMode } : {}),
+        ...(request.missedRunPolicy !== undefined
+          ? { missedRunPolicy: request.missedRunPolicy }
+          : {}),
         ...(request.retryPolicy !== undefined ? { retryPolicy: request.retryPolicy } : {}),
         ...(request.newAgentConfig !== undefined ? { newAgentConfig: request.newAgentConfig } : {}),
         ...(request.maxRuns !== undefined ? { maxRuns: request.maxRuns } : {}),

@@ -233,6 +233,33 @@ describe("ScheduleService", () => {
     expect(afterRetry.nextRunAt).toBe("2026-01-01T01:00:00.000Z");
   });
 
+  test("run_once missed-run policy preserves one due run on daemon recovery", async () => {
+    const service = new ScheduleService({
+      paseoHome: tempDir,
+      logger: createTestLogger(),
+      agentManager: new AgentManager({ logger: createTestLogger() }),
+      agentStorage,
+      providerSnapshotManager: NO_UNATTENDED_SCHEDULE_POLICY,
+      now: () => now,
+      runner: async () => ({ agentId: null, output: "ok" }),
+    });
+
+    const created = await service.create({
+      prompt: "catch up",
+      cadence: { type: "every", everyMs: 60 * 60_000 },
+      missedRunPolicy: "run_once",
+      target: { type: "new-agent", config: { provider: "claude", cwd: tempDir } },
+    });
+    expect(created.nextRunAt).toBe("2026-01-01T00:00:00.000Z");
+
+    now = new Date("2026-01-01T02:00:00.000Z");
+    await service.start();
+    await service.stop();
+
+    const recovered = await service.inspect(created.id);
+    expect(recovered.nextRunAt).toBe("2026-01-01T02:00:00.000Z");
+  });
+
   test("executes new-agent schedules through AgentManager with real fake clients", async () => {
     const manager = new AgentManager({
       logger: createTestLogger(),
@@ -1155,6 +1182,7 @@ describe("ScheduleService", () => {
       name: "renamed",
       cadence: { type: "every", everyMs: 5 * 60_000 },
       approvalMode: "plan_only",
+      missedRunPolicy: "run_once",
       retryPolicy: { maxAttempts: 3, backoffMs: 120_000 },
       newAgentConfig: {
         provider: "codex",
@@ -1168,6 +1196,7 @@ describe("ScheduleService", () => {
     expect(updated.name).toBe("renamed");
     expect(updated.cadence).toEqual({ type: "every", everyMs: 5 * 60_000 });
     expect(updated.approvalMode).toBe("plan_only");
+    expect(updated.missedRunPolicy).toBe("run_once");
     expect(updated.retryPolicy).toEqual({ maxAttempts: 3, backoffMs: 120_000 });
     expect(updated.target).toEqual({
       type: "new-agent",

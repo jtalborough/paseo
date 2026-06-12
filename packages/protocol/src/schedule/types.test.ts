@@ -47,6 +47,7 @@ describe("StoredScheduleSchema", () => {
       runs: [],
     });
     expect(parsed.approvalMode).toBe("auto");
+    expect(parsed.missedRunPolicy).toBe("skip");
     expect(parsed.retryPolicy).toEqual({ maxAttempts: 1, backoffMs: 5 * 60_000 });
     expect(parsed.pendingRetry).toBeNull();
   });

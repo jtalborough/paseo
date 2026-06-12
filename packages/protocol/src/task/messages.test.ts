@@ -60,6 +60,7 @@ describe("Task message schemas", () => {
         provider: "codex",
         cadence: { type: "cron", expression: "0 9 * * *", timezone: "America/New_York" },
         approvalMode: "approval_before_edit",
+        missedRunPolicy: "run_once",
         retryPolicy: { maxAttempts: 2, backoffMs: 300000 },
         name: "Daily task",
       }),
@@ -67,6 +68,7 @@ describe("Task message schemas", () => {
       type: "task.schedule.create.request",
       cadence: { type: "cron", expression: "0 9 * * *" },
       approvalMode: "approval_before_edit",
+      missedRunPolicy: "run_once",
       retryPolicy: { maxAttempts: 2, backoffMs: 300000 },
     });
 
@@ -82,6 +84,7 @@ describe("Task message schemas", () => {
             prompt: "Run the task",
             cadence: { type: "cron", expression: "0 9 * * *" },
             approvalMode: "approval_before_edit",
+            missedRunPolicy: "run_once",
             retryPolicy: { maxAttempts: 2, backoffMs: 300000 },
             target: {
               type: "new-agent",
@@ -116,6 +119,7 @@ describe("Task message schemas", () => {
         schedule: {
           id: "abc12345",
           approvalMode: "approval_before_edit",
+          missedRunPolicy: "run_once",
           retryPolicy: { maxAttempts: 2, backoffMs: 300000 },
         },
         task: { metadata: { scheduleIds: ["abc12345"] } },

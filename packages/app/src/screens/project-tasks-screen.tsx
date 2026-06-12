@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StoredTask, TaskConfig } from "@getpaseo/protocol/task/types";
 import type {
   ScheduleApprovalMode,
+  ScheduleMissedRunPolicy,
   ScheduleRetryPolicy,
   ScheduleSummary,
 } from "@getpaseo/protocol/schedule/types";
@@ -267,6 +268,7 @@ export function ProjectTasksScreen({
         provider,
         cadence: input.draft.cadence,
         approvalMode: input.draft.approvalMode,
+        missedRunPolicy: input.draft.missedRunPolicy,
         retryPolicy: input.draft.retryPolicy,
         name: input.draft.name,
         runOnCreate: input.draft.runOnCreate,
@@ -333,6 +335,7 @@ export function ProjectTasksScreen({
         id: input.scheduleId,
         cadence: input.draft.cadence,
         approvalMode: input.draft.approvalMode,
+        missedRunPolicy: input.draft.missedRunPolicy,
         retryPolicy: input.draft.retryPolicy,
         ...(name !== undefined ? { name } : {}),
       });
@@ -887,6 +890,11 @@ function ProjectScheduleRow({
         ) : null}
         {schedule ? (
           <Text style={styles.scheduleRowMeta}>
+            {formatProjectScheduleMissedRunPolicy(schedule.missedRunPolicy)}
+          </Text>
+        ) : null}
+        {schedule ? (
+          <Text style={styles.scheduleRowMeta}>
             {formatProjectScheduleRetryPolicy(schedule.retryPolicy)}
           </Text>
         ) : null}
@@ -1067,6 +1075,13 @@ function formatProjectScheduleRetryPolicy(value: ScheduleRetryPolicy): string {
     return "No retry";
   }
   return `${value.maxAttempts - 1} ${value.maxAttempts === 2 ? "retry" : "retries"}`;
+}
+
+function formatProjectScheduleMissedRunPolicy(value: ScheduleMissedRunPolicy): string {
+  if (value === "run_once") {
+    return "Run once if missed";
+  }
+  return "Skip missed runs";
 }
 
 function formatProjectScheduleInterval(value: number): string {

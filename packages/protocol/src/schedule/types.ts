@@ -22,6 +22,9 @@ export const ScheduleApprovalModeSchema = z
   .default("auto");
 export type ScheduleApprovalMode = z.infer<typeof ScheduleApprovalModeSchema>;
 
+export const ScheduleMissedRunPolicySchema = z.enum(["skip", "run_once"]).default("skip");
+export type ScheduleMissedRunPolicy = z.infer<typeof ScheduleMissedRunPolicySchema>;
+
 export const ScheduleRetryPolicySchema = z
   .object({
     maxAttempts: z.number().int().positive().default(1),
@@ -95,6 +98,7 @@ export const StoredScheduleSchema = z.object({
   prompt: z.string().min(1),
   cadence: ScheduleCadenceSchema,
   approvalMode: ScheduleApprovalModeSchema,
+  missedRunPolicy: ScheduleMissedRunPolicySchema,
   retryPolicy: ScheduleRetryPolicySchema,
   pendingRetry: SchedulePendingRetrySchema,
   target: ScheduleTargetSchema,
@@ -121,6 +125,7 @@ export interface CreateScheduleInput {
   prompt: string;
   cadence: ScheduleCadence;
   approvalMode?: ScheduleApprovalMode;
+  missedRunPolicy?: ScheduleMissedRunPolicy;
   retryPolicy?: ScheduleRetryPolicy;
   target: ScheduleTarget;
   maxRuns?: number | null;
@@ -141,6 +146,7 @@ export interface UpdateScheduleInput {
   prompt?: string;
   cadence?: ScheduleCadence;
   approvalMode?: ScheduleApprovalMode;
+  missedRunPolicy?: ScheduleMissedRunPolicy;
   retryPolicy?: ScheduleRetryPolicy;
   newAgentConfig?: UpdateScheduleNewAgentConfig;
   maxRuns?: number | null;
