@@ -639,6 +639,7 @@ export interface CreateScheduleOptions {
       };
   maxRuns?: number;
   expiresAt?: string;
+  executionMode?: "live" | "dry_run";
   approvalMode?: "auto" | "plan_only" | "approval_before_edit";
   missedRunPolicy?: "skip" | "run_once";
   retryPolicy?: { maxAttempts: number; backoffMs: number };
@@ -669,6 +670,7 @@ export interface UpdateScheduleOptions {
         expression: string;
         timezone?: string;
       };
+  executionMode?: "live" | "dry_run";
   approvalMode?: "auto" | "plan_only" | "approval_before_edit";
   missedRunPolicy?: "skip" | "run_once";
   retryPolicy?: { maxAttempts: number; backoffMs: number };
@@ -4428,6 +4430,7 @@ export class DaemonClient {
         cadence: options.cadence,
         target: options.target,
         ...(options.name ? { name: options.name } : {}),
+        ...(options.executionMode !== undefined ? { executionMode: options.executionMode } : {}),
         ...(options.approvalMode !== undefined ? { approvalMode: options.approvalMode } : {}),
         ...(options.missedRunPolicy !== undefined
           ? { missedRunPolicy: options.missedRunPolicy }
@@ -4534,6 +4537,7 @@ export class DaemonClient {
         ...(options.name !== undefined ? { name: options.name } : {}),
         ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
         ...(options.cadence !== undefined ? { cadence: options.cadence } : {}),
+        ...(options.executionMode !== undefined ? { executionMode: options.executionMode } : {}),
         ...(options.approvalMode !== undefined ? { approvalMode: options.approvalMode } : {}),
         ...(options.missedRunPolicy !== undefined
           ? { missedRunPolicy: options.missedRunPolicy }

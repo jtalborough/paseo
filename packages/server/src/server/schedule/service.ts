@@ -18,6 +18,7 @@ import type {
 import type {
   CreateScheduleInput,
   ScheduleApprovalMode,
+  ScheduleExecutionMode,
   ScheduleExecutionResult,
   ScheduleMissedRunPolicy,
   ScheduleRetryPolicy,
@@ -42,7 +43,11 @@ function buildScheduleFireBody(schedule: StoredSchedule, runId: string): string 
   const heading = schedule.name
     ? `Schedule "${schedule.name}" fired (id=${schedule.id}, run=${runId}).`
     : `Schedule fired (id=${schedule.id}, run=${runId}).`;
-  return `${heading}\n${applyScheduleApprovalModeToPrompt(schedule.approvalMode, schedule.prompt)}`;
+  return `${heading}\n${applyScheduleApprovalModeToPrompt(
+    schedule.approvalMode,
+    schedule.executionMode,
+    schedule.prompt,
+  )}`;
 }
 
 function normalizePrompt(prompt: string): string {
@@ -55,6 +60,10 @@ function normalizePrompt(prompt: string): string {
 
 function normalizeApprovalMode(value: ScheduleApprovalMode | undefined): ScheduleApprovalMode {
   return value ?? "auto";
+}
+
+function normalizeExecutionMode(value: ScheduleExecutionMode | undefined): ScheduleExecutionMode {
+  return value ?? "live";
 }
 
 function normalizeMissedRunPolicy(
@@ -73,8 +82,15 @@ function shouldRetryRun(run: ScheduleRun, retryPolicy: ScheduleRetryPolicy): boo
 
 function applyScheduleApprovalModeToPrompt(
   approvalMode: ScheduleApprovalMode,
+  executionMode: ScheduleExecutionMode,
   prompt: string,
 ): string {
+  if (executionMode === "dry_run") {
+    return [
+      "Execution mode: dry run. Do not edit files, run mutating commands, commit, push, install dependencies, or change external state. Inspect context and report what would happen if this schedule ran live.",
+      prompt,
+    ].join("\n\n");
+  }
   if (approvalMode === "plan_only") {
     return [
       "Execution policy: plan only. Do not edit files, run mutating commands, commit, push, install dependencies, or change external state. Inspect context and return a concrete plan/status report.",
@@ -94,7 +110,7 @@ function approvalPolicyForSchedule(
   schedule: StoredSchedule,
   existing: string | undefined,
 ): string | undefined {
-  if (schedule.approvalMode === "approval_before_edit") {
+  if (schedule.executionMode === "dry_run" || schedule.approvalMode === "approval_before_edit") {
     return existing ?? "default";
   }
   return existing;
@@ -263,6 +279,7 @@ export class ScheduleService {
       name: trimOptionalName(input.name),
       prompt,
       cadence: input.cadence,
+      executionMode: normalizeExecutionMode(input.executionMode),
       approvalMode: normalizeApprovalMode(input.approvalMode),
       missedRunPolicy: normalizeMissedRunPolicy(input.missedRunPolicy),
       retryPolicy: normalizeRetryPolicy(input.retryPolicy),
@@ -358,6 +375,10 @@ export class ScheduleService {
       const nextRunAt =
         updated.status === "active" ? computeNextRunAt(input.cadence, now).toISOString() : null;
       updated = { ...updated, cadence: input.cadence, nextRunAt, pendingRetry: null };
+    }
+
+    if (input.executionMode !== undefined) {
+      updated = { ...updated, executionMode: input.executionMode };
     }
 
     if (input.approvalMode !== undefined) {
@@ -724,14 +745,22 @@ export class ScheduleService {
     };
     const agent = await this.agentManager.createAgent(config, undefined, {
       labels,
-      initialPrompt: applyScheduleApprovalModeToPrompt(schedule.approvalMode, schedule.prompt),
+      initialPrompt: applyScheduleApprovalModeToPrompt(
+        schedule.approvalMode,
+        schedule.executionMode,
+        schedule.prompt,
+      ),
       initialTitle: provisionalTitle,
     });
     let result;
     try {
       result = await this.agentManager.runAgent(
         agent.id,
-        applyScheduleApprovalModeToPrompt(schedule.approvalMode, schedule.prompt),
+        applyScheduleApprovalModeToPrompt(
+          schedule.approvalMode,
+          schedule.executionMode,
+          schedule.prompt,
+        ),
       );
     } catch (error) {
       try {

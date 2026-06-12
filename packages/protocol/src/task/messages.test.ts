@@ -59,6 +59,7 @@ describe("Task message schemas", () => {
         repoRoot: "/repo",
         provider: "codex",
         cadence: { type: "cron", expression: "0 9 * * *", timezone: "America/New_York" },
+        executionMode: "dry_run",
         approvalMode: "approval_before_edit",
         missedRunPolicy: "run_once",
         retryPolicy: { maxAttempts: 2, backoffMs: 300000 },
@@ -67,6 +68,7 @@ describe("Task message schemas", () => {
     ).toMatchObject({
       type: "task.schedule.create.request",
       cadence: { type: "cron", expression: "0 9 * * *" },
+      executionMode: "dry_run",
       approvalMode: "approval_before_edit",
       missedRunPolicy: "run_once",
       retryPolicy: { maxAttempts: 2, backoffMs: 300000 },
@@ -83,6 +85,7 @@ describe("Task message schemas", () => {
             name: "Daily task",
             prompt: "Run the task",
             cadence: { type: "cron", expression: "0 9 * * *" },
+            executionMode: "dry_run",
             approvalMode: "approval_before_edit",
             missedRunPolicy: "run_once",
             retryPolicy: { maxAttempts: 2, backoffMs: 300000 },
@@ -118,6 +121,7 @@ describe("Task message schemas", () => {
         ok: true,
         schedule: {
           id: "abc12345",
+          executionMode: "dry_run",
           approvalMode: "approval_before_edit",
           missedRunPolicy: "run_once",
           retryPolicy: { maxAttempts: 2, backoffMs: 300000 },

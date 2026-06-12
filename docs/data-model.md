@@ -214,6 +214,7 @@ One file per schedule. ID is 8 hex characters.
 | `name`            | `string?`                                         | Human-readable name              |
 | `prompt`          | `string`                                          | The prompt to send               |
 | `cadence`         | `ScheduleCadence`                                 | Timing (see below)               |
+| `executionMode`   | `"live" \| "dry_run"`                             | Live execution vs rehearsal      |
 | `approvalMode`    | `"auto" \| "plan_only" \| "approval_before_edit"` | Execution trust policy           |
 | `missedRunPolicy` | `"skip" \| "run_once"`                            | Host-offline catch-up behavior   |
 | `retryPolicy`     | `{ maxAttempts: number, backoffMs: number }`      | Bounded failure retries          |

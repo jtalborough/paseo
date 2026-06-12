@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   ScheduleApprovalModeSchema,
   ScheduleCadenceSchema,
+  ScheduleExecutionModeSchema,
   ScheduleMissedRunPolicySchema,
   ScheduleRetryPolicySchema,
   ScheduleRunSchema,
@@ -31,6 +32,7 @@ export const ScheduleCreateRequestSchema = z.object({
   prompt: z.string().min(1),
   name: z.string().optional(),
   cadence: ScheduleCadenceSchema,
+  executionMode: ScheduleExecutionModeSchema.optional(),
   approvalMode: ScheduleApprovalModeSchema.optional(),
   missedRunPolicy: ScheduleMissedRunPolicySchema.optional(),
   retryPolicy: ScheduleRetryPolicySchema.optional(),
@@ -95,6 +97,7 @@ export const ScheduleUpdateRequestSchema = z.object({
   name: z.string().nullable().optional(),
   prompt: z.string().min(1).optional(),
   cadence: ScheduleCadenceSchema.optional(),
+  executionMode: ScheduleExecutionModeSchema.optional(),
   approvalMode: ScheduleApprovalModeSchema.optional(),
   missedRunPolicy: ScheduleMissedRunPolicySchema.optional(),
   retryPolicy: ScheduleRetryPolicySchema.optional(),

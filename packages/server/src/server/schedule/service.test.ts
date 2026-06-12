@@ -364,11 +364,25 @@ describe("ScheduleService", () => {
     now = new Date("2026-01-01T00:02:00.000Z");
     await service.tick();
 
+    await service.create({
+      prompt: "Rehearse the task",
+      cadence: { type: "every", everyMs: 60_000 },
+      executionMode: "dry_run",
+      approvalMode: "auto",
+      target: { type: "new-agent", config: { provider: "codex", cwd: tempDir } },
+      maxRuns: 1,
+    });
+    now = new Date("2026-01-01T00:03:00.000Z");
+    await service.tick();
+
     expect(prompts[0]).toContain("Execution policy: plan only");
     expect(prompts[0]).toContain("Inspect the task");
     expect(configs[1]?.approvalPolicy).toBe("default");
     expect(prompts[1]).toContain("Execution policy: ask before edits");
     expect(prompts[1]).toContain("Edit the task");
+    expect(configs[2]?.approvalPolicy).toBe("default");
+    expect(prompts[2]).toContain("Execution mode: dry run");
+    expect(prompts[2]).toContain("Rehearse the task");
   });
 
   test("titles scheduled new agents from the schedule prompt", async () => {

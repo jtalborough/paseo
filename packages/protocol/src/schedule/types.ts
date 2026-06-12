@@ -22,6 +22,9 @@ export const ScheduleApprovalModeSchema = z
   .default("auto");
 export type ScheduleApprovalMode = z.infer<typeof ScheduleApprovalModeSchema>;
 
+export const ScheduleExecutionModeSchema = z.enum(["live", "dry_run"]).default("live");
+export type ScheduleExecutionMode = z.infer<typeof ScheduleExecutionModeSchema>;
+
 export const ScheduleMissedRunPolicySchema = z.enum(["skip", "run_once"]).default("skip");
 export type ScheduleMissedRunPolicy = z.infer<typeof ScheduleMissedRunPolicySchema>;
 
@@ -97,6 +100,7 @@ export const StoredScheduleSchema = z.object({
   name: z.string().nullable(),
   prompt: z.string().min(1),
   cadence: ScheduleCadenceSchema,
+  executionMode: ScheduleExecutionModeSchema,
   approvalMode: ScheduleApprovalModeSchema,
   missedRunPolicy: ScheduleMissedRunPolicySchema,
   retryPolicy: ScheduleRetryPolicySchema,
@@ -124,6 +128,7 @@ export interface CreateScheduleInput {
   name?: string | null;
   prompt: string;
   cadence: ScheduleCadence;
+  executionMode?: ScheduleExecutionMode;
   approvalMode?: ScheduleApprovalMode;
   missedRunPolicy?: ScheduleMissedRunPolicy;
   retryPolicy?: ScheduleRetryPolicy;
@@ -145,6 +150,7 @@ export interface UpdateScheduleInput {
   name?: string | null;
   prompt?: string;
   cadence?: ScheduleCadence;
+  executionMode?: ScheduleExecutionMode;
   approvalMode?: ScheduleApprovalMode;
   missedRunPolicy?: ScheduleMissedRunPolicy;
   retryPolicy?: ScheduleRetryPolicy;

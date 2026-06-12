@@ -13,6 +13,7 @@ import type {
 import type {
   ScheduleApprovalMode,
   ScheduleCadence,
+  ScheduleExecutionMode,
   ScheduleMissedRunPolicy,
   ScheduleRetryPolicy,
   ScheduleSummary,
@@ -37,6 +38,10 @@ const SCHEDULE_APPROVAL_OPTIONS: Option<ScheduleApprovalMode>[] = [
   { value: "auto", label: "Auto" },
   { value: "plan_only", label: "Plan only" },
   { value: "approval_before_edit", label: "Ask before edits" },
+];
+const SCHEDULE_EXECUTION_MODE_OPTIONS: Option<ScheduleExecutionMode>[] = [
+  { value: "live", label: "Live" },
+  { value: "dry_run", label: "Dry run" },
 ];
 const SCHEDULE_RETRY_OPTIONS: Array<Option<string> & { retryPolicy: ScheduleRetryPolicy }> = [
   { value: "none", label: "No retry", retryPolicy: { maxAttempts: 1, backoffMs: 5 * 60_000 } },
@@ -74,6 +79,7 @@ const ATTENTIONS: Option<TaskAttention>[] = [
 
 export interface TaskScheduleDraft {
   cadence: ScheduleCadence;
+  executionMode: ScheduleExecutionMode;
   approvalMode: ScheduleApprovalMode;
   missedRunPolicy: ScheduleMissedRunPolicy;
   retryPolicy: ScheduleRetryPolicy;
@@ -83,6 +89,7 @@ export interface TaskScheduleDraft {
 
 export interface TaskScheduleUpdateDraft {
   cadence: ScheduleCadence;
+  executionMode: ScheduleExecutionMode;
   approvalMode: ScheduleApprovalMode;
   missedRunPolicy: ScheduleMissedRunPolicy;
   retryPolicy: ScheduleRetryPolicy;
@@ -386,6 +393,7 @@ function ScheduledAgentTaskSection({
   const [cronDraft, setCronDraft] = useState("0 9 * * *");
   const [timezoneDraft, setTimezoneDraft] = useState("");
   const [nameDraft, setNameDraft] = useState("");
+  const [executionMode, setExecutionMode] = useState<ScheduleExecutionMode>("live");
   const [approvalMode, setApprovalMode] = useState<ScheduleApprovalMode>("approval_before_edit");
   const [missedRunPolicy, setMissedRunPolicy] = useState<ScheduleMissedRunPolicy>("skip");
   const [retryPolicy, setRetryPolicy] = useState<ScheduleRetryPolicy>(
@@ -410,13 +418,14 @@ function ScheduledAgentTaskSection({
     const name = nameDraft.trim();
     onSchedule({
       cadence,
+      executionMode,
       approvalMode,
       missedRunPolicy,
       retryPolicy,
       ...(name ? { name } : {}),
       ...(cadence.type === "every" ? { runOnCreate: false } : {}),
     });
-  }, [approvalMode, cadence, missedRunPolicy, nameDraft, onSchedule, retryPolicy]);
+  }, [approvalMode, cadence, executionMode, missedRunPolicy, nameDraft, onSchedule, retryPolicy]);
   const setEveryMode = useCallback(() => setMode("every"), []);
   const setCronMode = useCallback(() => setMode("cron"), []);
   return (
@@ -441,6 +450,7 @@ function ScheduledAgentTaskSection({
         onChangeText={setNameDraft}
         placeholder="Schedule name"
       />
+      <ScheduleExecutionModePicker value={executionMode} onChange={setExecutionMode} />
       <ScheduleApprovalModePicker value={approvalMode} onChange={setApprovalMode} />
       <ScheduleMissedRunPolicyPicker value={missedRunPolicy} onChange={setMissedRunPolicy} />
       <ScheduleRetryPolicyPicker value={retryPolicy} onChange={setRetryPolicy} />
@@ -543,6 +553,40 @@ function ScheduleApprovalModePicker({
       ))}
     </View>
   );
+}
+
+function ScheduleExecutionModePicker({
+  value,
+  onChange,
+}: {
+  value: ScheduleExecutionMode;
+  onChange: (value: ScheduleExecutionMode) => void;
+}) {
+  return (
+    <View style={styles.scheduleModeRow}>
+      {SCHEDULE_EXECUTION_MODE_OPTIONS.map((option) => (
+        <ScheduleExecutionModeChip
+          key={option.value}
+          option={option}
+          selected={value === option.value}
+          onChange={onChange}
+        />
+      ))}
+    </View>
+  );
+}
+
+function ScheduleExecutionModeChip({
+  option,
+  selected,
+  onChange,
+}: {
+  option: Option<ScheduleExecutionMode>;
+  selected: boolean;
+  onChange: (value: ScheduleExecutionMode) => void;
+}) {
+  const handlePress = useCallback(() => onChange(option.value), [onChange, option.value]);
+  return <QuickChip label={option.label} onPress={handlePress} selected={selected} />;
 }
 
 function ScheduleApprovalModeChip({
@@ -656,6 +700,7 @@ function AttachedScheduleRow({
   const status = schedule?.status ?? "missing";
   const timing = formatAttachedScheduleTiming(schedule);
   const cadence = schedule ? formatCadence(schedule.cadence) : null;
+  const executionMode = schedule ? formatExecutionMode(schedule.executionMode) : null;
   const approvalMode = schedule ? formatApprovalMode(schedule.approvalMode) : null;
   const missedRunPolicy = schedule ? formatMissedRunPolicy(schedule.missedRunPolicy) : null;
   const retryPolicy = schedule ? formatRetryPolicy(schedule.retryPolicy) : null;
@@ -670,6 +715,7 @@ function AttachedScheduleRow({
           {status} - {timing}
         </Text>
         {cadence ? <Text style={styles.attachedScheduleMeta}>{cadence}</Text> : null}
+        {executionMode ? <Text style={styles.attachedScheduleMeta}>{executionMode}</Text> : null}
         {approvalMode ? <Text style={styles.attachedScheduleMeta}>{approvalMode}</Text> : null}
         {missedRunPolicy ? (
           <Text style={styles.attachedScheduleMeta}>{missedRunPolicy}</Text>
@@ -786,6 +832,7 @@ function ScheduleEditForm({
   const [timezoneDraft, setTimezoneDraft] = useState(
     schedule.cadence.type === "cron" ? (schedule.cadence.timezone ?? "") : "",
   );
+  const [executionMode, setExecutionMode] = useState<ScheduleExecutionMode>(schedule.executionMode);
   const [approvalMode, setApprovalMode] = useState<ScheduleApprovalMode>(schedule.approvalMode);
   const [missedRunPolicy, setMissedRunPolicy] = useState<ScheduleMissedRunPolicy>(
     schedule.missedRunPolicy,
@@ -806,13 +853,23 @@ function ScheduleEditForm({
     const name = nameDraft.trim();
     onSave({
       cadence,
+      executionMode,
       approvalMode,
       missedRunPolicy,
       retryPolicy,
       name: name ? name : null,
     });
     onCancel();
-  }, [approvalMode, cadence, missedRunPolicy, nameDraft, onCancel, onSave, retryPolicy]);
+  }, [
+    approvalMode,
+    cadence,
+    executionMode,
+    missedRunPolicy,
+    nameDraft,
+    onCancel,
+    onSave,
+    retryPolicy,
+  ]);
   return (
     <View style={styles.scheduleEdit}>
       <View style={styles.scheduleModeRow}>
@@ -824,6 +881,7 @@ function ScheduleEditForm({
         onChangeText={setNameDraft}
         placeholder="Schedule name"
       />
+      <ScheduleExecutionModePicker value={executionMode} onChange={setExecutionMode} />
       <ScheduleApprovalModePicker value={approvalMode} onChange={setApprovalMode} />
       <ScheduleMissedRunPolicyPicker value={missedRunPolicy} onChange={setMissedRunPolicy} />
       <ScheduleRetryPolicyPicker value={retryPolicy} onChange={setRetryPolicy} />
@@ -944,6 +1002,13 @@ function formatApprovalMode(value: ScheduleApprovalMode): string {
       return "Ask before edits";
   }
   return "Auto-run";
+}
+
+function formatExecutionMode(value: ScheduleExecutionMode): string {
+  if (value === "dry_run") {
+    return "Dry run";
+  }
+  return "Live run";
 }
 
 function formatRetryPolicy(value: ScheduleRetryPolicy): string {

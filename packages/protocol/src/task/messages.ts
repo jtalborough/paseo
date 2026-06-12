@@ -17,6 +17,7 @@ import {
 import {
   ScheduleApprovalModeSchema,
   ScheduleCadenceSchema,
+  ScheduleExecutionModeSchema,
   ScheduleMissedRunPolicySchema,
   ScheduleRetryPolicySchema,
   ScheduleSummarySchema,
@@ -232,6 +233,7 @@ export const TaskScheduleCreateRequestSchema = z.object({
   repoRoot: z.string().min(1),
   provider: z.string().min(1).optional(),
   cadence: ScheduleCadenceSchema,
+  executionMode: ScheduleExecutionModeSchema.optional(),
   approvalMode: ScheduleApprovalModeSchema.optional(),
   missedRunPolicy: ScheduleMissedRunPolicySchema.optional(),
   retryPolicy: ScheduleRetryPolicySchema.optional(),

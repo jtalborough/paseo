@@ -3079,6 +3079,7 @@ export class Session {
           repoRoot: msg.repoRoot,
         }),
         cadence: msg.cadence,
+        executionMode: msg.executionMode,
         approvalMode: msg.approvalMode,
         missedRunPolicy: msg.missedRunPolicy,
         retryPolicy: msg.retryPolicy,
@@ -9990,6 +9991,7 @@ export class Session {
         prompt: request.prompt,
         name: request.name,
         cadence: request.cadence,
+        executionMode: request.executionMode,
         approvalMode: request.approvalMode,
         missedRunPolicy: request.missedRunPolicy,
         retryPolicy: request.retryPolicy,
@@ -10146,6 +10148,7 @@ export class Session {
         ...(request.name !== undefined ? { name: request.name } : {}),
         ...(request.prompt !== undefined ? { prompt: request.prompt } : {}),
         ...(request.cadence !== undefined ? { cadence: request.cadence } : {}),
+        ...(request.executionMode !== undefined ? { executionMode: request.executionMode } : {}),
         ...(request.approvalMode !== undefined ? { approvalMode: request.approvalMode } : {}),
         ...(request.missedRunPolicy !== undefined
           ? { missedRunPolicy: request.missedRunPolicy }

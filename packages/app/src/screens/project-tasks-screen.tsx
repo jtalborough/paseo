@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StoredTask, TaskConfig } from "@getpaseo/protocol/task/types";
 import type {
   ScheduleApprovalMode,
+  ScheduleExecutionMode,
   ScheduleMissedRunPolicy,
   ScheduleRetryPolicy,
   ScheduleSummary,
@@ -268,6 +269,7 @@ export function ProjectTasksScreen({
         repoRoot: taskRunRepoRoot,
         provider,
         cadence: input.draft.cadence,
+        executionMode: input.draft.executionMode,
         approvalMode: input.draft.approvalMode,
         missedRunPolicy: input.draft.missedRunPolicy,
         retryPolicy: input.draft.retryPolicy,
@@ -335,6 +337,7 @@ export function ProjectTasksScreen({
       const payload = await client.scheduleUpdate({
         id: input.scheduleId,
         cadence: input.draft.cadence,
+        executionMode: input.draft.executionMode,
         approvalMode: input.draft.approvalMode,
         missedRunPolicy: input.draft.missedRunPolicy,
         retryPolicy: input.draft.retryPolicy,
@@ -920,6 +923,11 @@ function ProjectScheduleRow({
         <Text style={styles.scheduleRowMeta}>{formatProjectScheduleTiming(schedule)}</Text>
         {schedule ? (
           <Text style={styles.scheduleRowMeta}>
+            {formatProjectScheduleExecutionMode(schedule.executionMode)}
+          </Text>
+        ) : null}
+        {schedule ? (
+          <Text style={styles.scheduleRowMeta}>
             {formatProjectScheduleApprovalMode(schedule.approvalMode)}
           </Text>
         ) : null}
@@ -1114,6 +1122,13 @@ function formatProjectScheduleApprovalMode(value: ScheduleApprovalMode): string 
       return "Ask before edits";
   }
   return "Auto-run";
+}
+
+function formatProjectScheduleExecutionMode(value: ScheduleExecutionMode): string {
+  if (value === "dry_run") {
+    return "Dry run";
+  }
+  return "Live run";
 }
 
 function formatProjectScheduleRetryPolicy(value: ScheduleRetryPolicy): string {
