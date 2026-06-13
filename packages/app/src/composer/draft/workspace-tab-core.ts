@@ -5,6 +5,17 @@ export interface WorkspaceDraftAutoSubmitConfig {
   model: string | null;
 }
 
+export function updateProfileFormField<TForm extends { provider: string; model: string }>(
+  current: TForm,
+  field: keyof TForm,
+  value: string,
+): TForm {
+  if (field !== "provider" || current.provider === value) {
+    return { ...current, [field]: value };
+  }
+  return { ...current, provider: value, model: "" };
+}
+
 export function validateDraftSubmission(input: {
   text: string;
   allowsEmptyAutoSubmit: boolean;

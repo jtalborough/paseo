@@ -19,6 +19,7 @@ export interface WorkspaceDraftTabSetup {
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown>;
+  initialPrompt?: string;
 }
 
 export type WorkspaceTabTarget =
@@ -40,7 +41,7 @@ export type WorkspaceTabTarget =
   | { kind: "project-tasks"; groupId: string }
   | { kind: "project-notes"; groupId: string }
   | { kind: "project-agents"; groupId: string }
-  | { kind: "project-context"; groupId: string }
+  | { kind: "project-context"; groupId: string; packetPath?: string | null }
   | { kind: "project-files"; groupId: string };
 
 const PROJECT_WORKSPACE_TAB_KINDS = new Set<string>([
@@ -563,9 +564,22 @@ function coerceWorkspaceTabTarget(raw: Record<string, unknown>): WorkspaceTabTar
     return normalizeWorkspaceTabTarget({ kind: "setup", workspaceId: raw.workspaceId });
   }
   if (isProjectWorkspaceTabKind(kind) && typeof raw.groupId === "string") {
-    return normalizeWorkspaceTabTarget({ kind, groupId: raw.groupId });
+    return coerceProjectWorkspaceTabTarget(kind, raw);
   }
   return null;
+}
+
+function coerceProjectWorkspaceTabTarget(
+  kind: ProjectWorkspaceTabKind,
+  raw: Record<string, unknown>,
+): WorkspaceTabTarget | null {
+  return normalizeWorkspaceTabTarget({
+    kind,
+    groupId: typeof raw.groupId === "string" ? raw.groupId : "",
+    ...(kind === "project-context" && typeof raw.packetPath === "string"
+      ? { packetPath: raw.packetPath }
+      : {}),
+  });
 }
 
 function coerceDraftWorkspaceTabTarget(raw: Record<string, unknown>): WorkspaceTabTarget | null {

@@ -1460,6 +1460,7 @@ function buildWorkspaceTerminalScopeKey(serverId: string, workspaceId: string): 
 
 interface WorkspaceTerminalTabActionsInput {
   persistenceKey: string | null;
+  workspaceDirectory: string | null;
   focusWorkspacePane: (workspaceKey: string, paneId: string) => void;
   openWorkspaceTabFocused: (workspaceKey: string, target: WorkspaceTabTarget) => string | null;
   toast: {
@@ -1477,6 +1478,7 @@ interface WorkspaceTerminalTabActions {
 
 function useWorkspaceTerminalTabActions({
   persistenceKey,
+  workspaceDirectory,
   focusWorkspacePane,
   openWorkspaceTabFocused,
   toast,
@@ -1489,18 +1491,26 @@ function useWorkspaceTerminalTabActions({
       if (paneId) {
         focusWorkspacePane(persistenceKey, paneId);
       }
-      openWorkspaceTabFocused(persistenceKey, { kind: "terminal", terminalId });
+      openWorkspaceTabFocused(persistenceKey, {
+        kind: "terminal",
+        terminalId,
+        cwd: workspaceDirectory,
+      });
     },
-    [focusWorkspacePane, openWorkspaceTabFocused, persistenceKey],
+    [focusWorkspacePane, openWorkspaceTabFocused, persistenceKey, workspaceDirectory],
   );
   const handleScriptTerminalSelected = useCallback(
     (terminalId: string) => {
       if (!persistenceKey) {
         return;
       }
-      openWorkspaceTabFocused(persistenceKey, { kind: "terminal", terminalId });
+      openWorkspaceTabFocused(persistenceKey, {
+        kind: "terminal",
+        terminalId,
+        cwd: workspaceDirectory,
+      });
     },
-    [openWorkspaceTabFocused, persistenceKey],
+    [openWorkspaceTabFocused, persistenceKey, workspaceDirectory],
   );
   const handleWorkspacePathUnavailable = useCallback(() => {
     toast.error("Workspace path is not available yet");
@@ -1663,6 +1673,7 @@ function WorkspaceScreenContent({
     handleTerminalCreateQueued,
   } = useWorkspaceTerminalTabActions({
     persistenceKey,
+    workspaceDirectory,
     focusWorkspacePane,
     openWorkspaceTabFocused,
     toast,
@@ -2351,9 +2362,23 @@ function WorkspaceScreenContent({
       if (input?.paneId && persistenceKey) {
         focusWorkspacePane(persistenceKey, input.paneId);
       }
-      openWorkspaceDraftTab();
+      if (!persistenceKey) {
+        return;
+      }
+      openWorkspaceTabFocused(persistenceKey, {
+        kind: "draft",
+        draftId: generateDraftId(),
+        cwd: workspaceDescriptor?.workspaceDirectory ?? null,
+        projectGroupId: workspaceProjectGroupId,
+      });
     },
-    [focusWorkspacePane, openWorkspaceDraftTab, persistenceKey],
+    [
+      focusWorkspacePane,
+      openWorkspaceTabFocused,
+      persistenceKey,
+      workspaceDescriptor?.workspaceDirectory,
+      workspaceProjectGroupId,
+    ],
   );
 
   const handleCreateTerminal = useStableEvent(createTerminal);

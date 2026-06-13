@@ -12,12 +12,14 @@ interface ProjectContextScreenProps {
   serverId: string;
   groupId: string;
   embedded?: boolean;
+  selectedPacketPath?: string | null;
 }
 
 export function ProjectContextScreen({
   serverId,
   groupId,
   embedded = false,
+  selectedPacketPath = null,
 }: ProjectContextScreenProps) {
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const { groups, supported } = useProjectGroups(serverId);
@@ -91,7 +93,11 @@ export function ProjectContextScreen({
           ) : (
             <View style={styles.packetList}>
               {packets.map((entry) => (
-                <ContextPacketCard key={entry.path} entry={entry} />
+                <ContextPacketCard
+                  key={entry.path}
+                  entry={entry}
+                  selected={entry.path === selectedPacketPath}
+                />
               ))}
             </View>
           )}
@@ -101,8 +107,18 @@ export function ProjectContextScreen({
   );
 }
 
-function ContextPacketCard({ entry }: { entry: ProjectContextPacketEntry }) {
+function ContextPacketCard({
+  entry,
+  selected,
+}: {
+  entry: ProjectContextPacketEntry;
+  selected: boolean;
+}) {
   const packet = entry.packet;
+  const packetCardStyle = useMemo(
+    () => [styles.packetCard, selected ? styles.packetCardSelected : null],
+    [selected],
+  );
   const counts = [
     packet.files.length
       ? `${packet.files.length} file${packet.files.length === 1 ? "" : "s"}`
@@ -116,10 +132,13 @@ function ContextPacketCard({ entry }: { entry: ProjectContextPacketEntry }) {
     packet.browser.length
       ? `${packet.browser.length} browser state${packet.browser.length === 1 ? "" : "s"}`
       : null,
+    packet.tools.length
+      ? `${packet.tools.length} tool${packet.tools.length === 1 ? "" : "s"}`
+      : null,
   ].filter(Boolean);
 
   return (
-    <View style={styles.packetCard}>
+    <View style={packetCardStyle}>
       <View style={styles.packetHeader}>
         <View style={styles.packetTitleBlock}>
           <Text style={styles.packetTitle}>{packet.launchReason ?? packet.id}</Text>
@@ -128,11 +147,16 @@ function ContextPacketCard({ entry }: { entry: ProjectContextPacketEntry }) {
         <Text style={styles.packetDate}>{formatDate(packet.createdAt)}</Text>
       </View>
       <View style={styles.metaGrid}>
+        <Meta label="Profile" value={packet.profile} />
         <Meta label="Task" value={packet.task} />
         <Meta label="Prompt" value={packet.prompt} />
+        <Meta label="Provider" value={formatProviderModel(packet.provider, packet.model)} />
         <Meta label="Created by" value={packet.createdByAgentId} />
         <Meta label="Agent" value={packet.launchedAgentId} />
       </View>
+      {packet.tools.length ? (
+        <Text style={styles.summary}>Tools: {packet.tools.join(", ")}</Text>
+      ) : null}
       {counts.length ? <Text style={styles.summary}>{counts.join(" · ")}</Text> : null}
       {packet.folderGrants.length ? (
         <View style={styles.grants}>
@@ -145,6 +169,19 @@ function ContextPacketCard({ entry }: { entry: ProjectContextPacketEntry }) {
       ) : null}
     </View>
   );
+}
+
+function formatProviderModel(provider?: string | null, model?: string | null): string | null {
+  if (!provider && !model) {
+    return null;
+  }
+  if (!model) {
+    return provider ?? null;
+  }
+  if (!provider) {
+    return model;
+  }
+  return `${provider} / ${model}`;
 }
 
 function Meta({ label, value }: { label: string; value?: string | null }) {
@@ -245,6 +282,10 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.md,
     backgroundColor: theme.colors.surface0,
     padding: theme.spacing[4],
+  },
+  packetCardSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surface1,
   },
   packetHeader: {
     flexDirection: "row",

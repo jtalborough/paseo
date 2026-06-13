@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { validateDraftSubmission } from "./workspace-tab-core";
+import { updateProfileFormField, validateDraftSubmission } from "./workspace-tab-core";
 
 const baseComposerState = {
   providerDefinitions: [{ id: "deepseek-tui" }],
@@ -47,5 +47,31 @@ describe("workspace draft agent model validation", () => {
         },
       }),
     ).toBe("No model is available for the selected provider");
+  });
+});
+
+describe("profile form field updates", () => {
+  const profileForm = {
+    id: "reviewer",
+    name: "Reviewer",
+    provider: "codex",
+    model: "gpt-5.4",
+    prompt: "prompts/reviewer.md",
+    defaultTools: "project-files",
+  };
+
+  test("clears model when provider changes", () => {
+    expect(updateProfileFormField(profileForm, "provider", "claude")).toEqual({
+      ...profileForm,
+      provider: "claude",
+      model: "",
+    });
+  });
+
+  test("preserves model when other fields change", () => {
+    expect(updateProfileFormField(profileForm, "name", "QA Tester")).toEqual({
+      ...profileForm,
+      name: "QA Tester",
+    });
   });
 });

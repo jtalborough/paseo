@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { StyleSheet } from "react-native-unistyles";
 import { Composer } from "@/composer";
 import { splitComposerAttachmentsForSubmit } from "@/composer/attachments/submit";
@@ -17,19 +18,26 @@ import { encodeImages } from "@/utils/encode-images";
 import { generateMessageId } from "@/types/stream";
 import { normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { buildHostAgentDetailRoute, buildHostProjectRoute } from "@/utils/host-routes";
+import { applyProjectAgentProfileToDraft } from "@/screens/new-project-agent-screen-core";
 
 interface NewProjectAgentScreenProps {
   serverId: string;
   groupId: string;
+  profilePath?: string | null;
 }
 
-export function NewProjectAgentScreen({ serverId, groupId }: NewProjectAgentScreenProps) {
+export function NewProjectAgentScreen({
+  serverId,
+  groupId,
+  profilePath = null,
+}: NewProjectAgentScreenProps) {
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { groups, supported } = useProjectGroups(serverId);
   const projects = useHostProjects(serverId);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const group = useMemo(
     () => groups.find((candidate) => candidate.groupId === groupId) ?? null,
     [groupId, groups],
@@ -42,6 +50,7 @@ export function NewProjectAgentScreen({ serverId, groupId }: NewProjectAgentScre
     () => (group ? resolveProjectLaunchTarget({ group, folders }).cwd : ""),
     [group, folders],
   );
+  const projectDirectory = group?.cwd ?? null;
   const draft = useAgentInputDraft({
     draftKey: `new-project-agent:${serverId}:${groupId}`,
     composer: {
@@ -57,6 +66,49 @@ export function NewProjectAgentScreen({ serverId, groupId }: NewProjectAgentScre
     () => (composerState ? { ...composerState.agentControls, disabled: isSubmitting } : undefined),
     [composerState, isSubmitting],
   );
+  const appliedProfileKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!client || !composerState || !projectDirectory || !profilePath) {
+      return;
+    }
+    const applyKey = `${groupId}:${profilePath}`;
+    if (appliedProfileKeyRef.current === applyKey) {
+      return;
+    }
+    appliedProfileKeyRef.current = applyKey;
+    let cancelled = false;
+    const applyProfile = async () => {
+      try {
+        await applyProjectAgentProfileToDraft({
+          client,
+          composerState,
+          projectGroupId: groupId,
+          projectDirectory,
+          profilePath,
+          setText: (text) => {
+            if (!cancelled) {
+              draft.setText(text);
+            }
+          },
+        });
+        if (!cancelled) {
+          void queryClient.invalidateQueries({
+            queryKey: ["project-context-packets", serverId, groupId],
+          });
+        }
+      } catch (profileError) {
+        if (!cancelled) {
+          setError(profileError instanceof Error ? profileError.message : String(profileError));
+          appliedProfileKeyRef.current = null;
+        }
+      }
+    };
+    void applyProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [client, composerState, draft, groupId, profilePath, projectDirectory, queryClient, serverId]);
 
   const handleBack = useCallback(() => {
     router.replace(buildHostProjectRoute(serverId, groupId));

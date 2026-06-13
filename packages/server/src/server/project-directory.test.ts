@@ -1,4 +1,12 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ProjectDirectoryManifestSchema } from "@getpaseo/protocol/project-context/types";
@@ -49,6 +57,10 @@ describe("Project directory", () => {
       "projectGroupId: grp_example",
     );
     expect(readFileSync(path.join(cwd, "notes", "README.md"), "utf8")).toBe("# Notes\n\n");
+    expect(JSON.parse(readFileSync(path.join(cwd, ".paseo-seeds.json"), "utf8"))).toMatchObject({
+      schemaVersion: 1,
+      seeded: expect.arrayContaining(["qa-tester-agent", "qa-tester-prompt"]),
+    });
     expect(readFileSync(path.join(cwd, "context", "README.md"), "utf8")).toContain(
       "Runtime agent state still lives",
     );
@@ -61,8 +73,14 @@ describe("Project directory", () => {
     expect(readFileSync(path.join(cwd, "prompts", "project-manager.md"), "utf8")).toContain(
       "You are the Project manager",
     );
+    expect(readFileSync(path.join(cwd, "prompts", "qa-tester.md"), "utf8")).toContain(
+      "You are the QA tester",
+    );
     expect(readFileSync(path.join(cwd, "agents", "project-manager.yaml"), "utf8")).toContain(
       "prompt: prompts/project-manager.md",
+    );
+    expect(readFileSync(path.join(cwd, "agents", "qa-tester.yaml"), "utf8")).toContain(
+      "prompt: prompts/qa-tester.md",
     );
     expect(readFileSync(path.join(cwd, "context", "packets", "README.md"), "utf8")).toContain(
       "Context packets",
@@ -99,8 +117,10 @@ describe("Project directory", () => {
     writeFileSync(path.join(cwd, "project.md"), "# My notes\n");
     writeFileSync(path.join(cwd, "prompts", "README.md"), "# My prompts\n");
     writeFileSync(path.join(cwd, "prompts", "project-manager.md"), "# My manager prompt\n");
+    writeFileSync(path.join(cwd, "prompts", "qa-tester.md"), "# My QA prompt\n");
     writeFileSync(path.join(cwd, "agents", "README.md"), "# My agents\n");
     writeFileSync(path.join(cwd, "agents", "project-manager.yaml"), "id: custom-manager\n");
+    writeFileSync(path.join(cwd, "agents", "qa-tester.yaml"), "id: custom-qa\n");
     writeFileSync(path.join(cwd, "context", "README.md"), "# My context\n");
     writeFileSync(path.join(cwd, "context", "packets", "README.md"), "# My packets\n");
 
@@ -114,9 +134,15 @@ describe("Project directory", () => {
     expect(readFileSync(path.join(cwd, "prompts", "project-manager.md"), "utf8")).toBe(
       "# My manager prompt\n",
     );
+    expect(readFileSync(path.join(cwd, "prompts", "qa-tester.md"), "utf8")).toBe(
+      "# My QA prompt\n",
+    );
     expect(readFileSync(path.join(cwd, "agents", "README.md"), "utf8")).toBe("# My agents\n");
     expect(readFileSync(path.join(cwd, "agents", "project-manager.yaml"), "utf8")).toBe(
       "id: custom-manager\n",
+    );
+    expect(readFileSync(path.join(cwd, "agents", "qa-tester.yaml"), "utf8")).toBe(
+      "id: custom-qa\n",
     );
     expect(readFileSync(path.join(cwd, "context", "README.md"), "utf8")).toBe("# My context\n");
     expect(readFileSync(path.join(cwd, "context", "packets", "README.md"), "utf8")).toBe(
@@ -132,6 +158,27 @@ describe("Project directory", () => {
       ),
     ).toBe("# My notes\n");
     expect(readFileSync(path.join(externalChild, ".keep"), "utf8")).toBe("");
+  });
+
+  test("does not recreate deleted seed files after they have been materialized", async () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-project-directory-"));
+    roots.push(paseoHome);
+    const group = createPersistedGroupRecord({
+      groupId: "grp_work",
+      displayName: "Work",
+      createdAt: "2026-06-07T00:00:00.000Z",
+      updatedAt: "2026-06-07T00:00:00.000Z",
+    });
+    const cwd = await syncProjectDirectory({ paseoHome, group, children: [] });
+    const qaTesterProfile = path.join(cwd, "agents", "qa-tester.yaml");
+    const qaTesterPrompt = path.join(cwd, "prompts", "qa-tester.md");
+
+    unlinkSync(qaTesterProfile);
+    unlinkSync(qaTesterPrompt);
+    await syncProjectDirectory({ paseoHome, group, children: [] });
+
+    expect(existsSync(qaTesterProfile)).toBe(false);
+    expect(existsSync(qaTesterPrompt)).toBe(false);
   });
 
   test("rejects Project ids that could escape the managed Projects directory", () => {

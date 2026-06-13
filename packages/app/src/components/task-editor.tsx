@@ -102,6 +102,8 @@ export interface TaskScheduleActions {
   onResume?: (scheduleId: string) => void;
   onUpdate?: (scheduleId: string, draft: TaskScheduleUpdateDraft) => void;
   onDelete?: (scheduleId: string) => void;
+  onOpenPacket?: (packetPath: string) => void;
+  onOpenAgent?: (agentId: string) => void;
   disabled?: boolean;
 }
 
@@ -500,9 +502,7 @@ function ScheduledAgentTaskSection({
                 {run.status} - {formatScheduleRunTime(run.scheduledFor)}
               </Text>
               {run.summary ? <Text style={styles.scheduleRunDetail}>{run.summary}</Text> : null}
-              <Text style={styles.scheduleRunMeta}>
-                {run.provider ?? "agent"} {run.contextPacket ? `- ${run.contextPacket}` : ""}
-              </Text>
+              <ScheduledRunMeta run={run} actions={actions} />
             </View>
           ))}
         </View>
@@ -742,7 +742,9 @@ function AttachedScheduleRow({
           onCancel={closeEditing}
         />
       ) : null}
-      {expanded ? <ScheduleDetails scheduleId={scheduleId} runs={latestRuns} /> : null}
+      {expanded ? (
+        <ScheduleDetails scheduleId={scheduleId} runs={latestRuns} actions={actions} />
+      ) : null}
     </View>
   );
 }
@@ -917,9 +919,11 @@ function ScheduleEditForm({
 function ScheduleDetails({
   scheduleId,
   runs,
+  actions,
 }: {
   scheduleId: string;
   runs: TaskScheduledAgentRun[];
+  actions?: TaskScheduleActions;
 }) {
   return (
     <View style={styles.scheduleDetails}>
@@ -931,11 +935,60 @@ function ScheduleDetails({
               {run.status} - {formatScheduleRunTime(run.scheduledFor)}
             </Text>
             {run.summary ? <Text style={styles.scheduleRunDetail}>{run.summary}</Text> : null}
+            <ScheduledRunMeta run={run} actions={actions} />
           </View>
         ))
       ) : (
         <Text style={styles.scheduleDetailText}>No task run history yet</Text>
       )}
+    </View>
+  );
+}
+
+function ScheduledRunMeta({
+  run,
+  actions,
+}: {
+  run: TaskScheduledAgentRun;
+  actions?: TaskScheduleActions;
+}) {
+  const entries = [
+    run.provider ? `Provider ${run.provider}` : null,
+    run.contextPacket ? `Packet ${run.contextPacket}` : null,
+    run.agentId ? `Agent ${run.agentId.slice(0, 8)}` : null,
+  ].filter(Boolean);
+  const canOpenPacket = Boolean(actions?.onOpenPacket && run.contextPacket);
+  const canOpenAgent = Boolean(actions?.onOpenAgent && run.agentId);
+  const openPacket = useCallback(() => {
+    if (run.contextPacket) {
+      actions?.onOpenPacket?.(run.contextPacket);
+    }
+  }, [actions, run.contextPacket]);
+  const openAgent = useCallback(() => {
+    if (run.agentId) {
+      actions?.onOpenAgent?.(run.agentId);
+    }
+  }, [actions, run.agentId]);
+  if (entries.length === 0 && !canOpenPacket && !canOpenAgent) {
+    return null;
+  }
+  return (
+    <View style={styles.scheduleRunMetaBlock}>
+      {entries.length > 0 ? (
+        <Text style={styles.scheduleRunMeta} numberOfLines={2}>
+          {entries.join(" · ")}
+        </Text>
+      ) : null}
+      {canOpenPacket || canOpenAgent ? (
+        <View style={styles.scheduleRunLinks}>
+          {canOpenPacket ? (
+            <ScheduleActionButton label="Open packet" disabled={false} onPress={openPacket} />
+          ) : null}
+          {canOpenAgent ? (
+            <ScheduleActionButton label="Open agent" disabled={false} onPress={openAgent} />
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1583,6 +1636,12 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.xs,
   },
   scheduleRunMeta: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  scheduleRunMetaBlock: { gap: theme.spacing[1] },
+  scheduleRunLinks: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[1],
+  },
   scheduleError: { color: theme.colors.destructive, fontSize: theme.fontSize.xs },
   notesInput: {
     minHeight: 80,

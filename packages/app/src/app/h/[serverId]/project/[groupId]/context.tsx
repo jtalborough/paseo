@@ -11,9 +11,17 @@ export default function HostProjectContextRoute() {
 }
 
 function HostProjectContextRouteContent() {
-  const params = useLocalSearchParams<{ serverId?: string; groupId?: string }>();
+  const params = useLocalSearchParams<{ serverId?: string; groupId?: string; packet?: string }>();
   const serverId = typeof params.serverId === "string" ? params.serverId : "";
   const groupId = typeof params.groupId === "string" ? params.groupId : "";
+  const packetPath = typeof params.packet === "string" ? params.packet : null;
 
-  return <ProjectSurfaceScreen serverId={serverId} groupId={groupId} initialTab="context" />;
+  return (
+    <ProjectSurfaceScreen
+      serverId={serverId}
+      groupId={groupId}
+      initialTab="context"
+      initialContextPacketPath={packetPath}
+    />
+  );
 }

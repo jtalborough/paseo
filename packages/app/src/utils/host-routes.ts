@@ -1,4 +1,5 @@
 import { Buffer } from "buffer";
+import type { Href } from "expo-router";
 
 type NullableString = string | null | undefined;
 const BASE64_WORKSPACE_ID_PREFIX = "b64_";
@@ -408,12 +409,20 @@ export function buildHostProjectNotesRoute(serverId: string, groupId: string) {
   return `${projectRoute}/notes` as const;
 }
 
-export function buildHostProjectContextRoute(serverId: string, groupId: string) {
+export function buildHostProjectContextRoute(
+  serverId: string,
+  groupId: string,
+  options?: { packetPath?: string | null },
+) {
   const projectRoute = buildHostProjectRoute(serverId, groupId);
   if (projectRoute === "/") {
     return "/" as const;
   }
-  return `${projectRoute}/context` as const;
+  const packetPath = trimNonEmpty(options?.packetPath);
+  if (!packetPath) {
+    return `${projectRoute}/context` as const;
+  }
+  return `${projectRoute}/context?packet=${encodeURIComponent(packetPath)}` as const;
 }
 
 export function buildHostProjectAgentsRoute(serverId: string, groupId: string) {
@@ -424,12 +433,20 @@ export function buildHostProjectAgentsRoute(serverId: string, groupId: string) {
   return `${projectRoute}/agents` as const;
 }
 
-export function buildHostNewProjectAgentRoute(serverId: string, groupId: string) {
+export function buildHostNewProjectAgentRoute(
+  serverId: string,
+  groupId: string,
+  options?: { profilePath?: string | null },
+): Href {
   const projectRoute = buildHostProjectRoute(serverId, groupId);
   if (projectRoute === "/") {
-    return "/" as const;
+    return "/";
   }
-  return `${projectRoute}/new-agent` as const;
+  const route = `${projectRoute}/new-agent`;
+  if (!options?.profilePath) {
+    return route as Href;
+  }
+  return `${route}?profilePath=${encodeURIComponent(options.profilePath)}` as Href;
 }
 
 export function buildHostNewWorkspaceRoute(

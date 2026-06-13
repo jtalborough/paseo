@@ -112,11 +112,13 @@ function ProjectOverviewPanel() {
 }
 
 function ProjectTasksPanel() {
-  const { serverId, target } = usePaneContext();
+  const { openTab, serverId, target } = usePaneContext();
   if (target.kind !== "tasks" && target.kind !== "project-tasks") {
     return <View />;
   }
-  return <ProjectTasksScreen serverId={serverId} groupId={target.groupId} embedded />;
+  return (
+    <ProjectTasksScreen serverId={serverId} groupId={target.groupId} embedded onOpenTab={openTab} />
+  );
 }
 
 function ProjectNotesPanel() {
@@ -160,7 +162,14 @@ function ProjectContextPanel() {
   if (target.kind !== "project-context") {
     return <View />;
   }
-  return <ProjectContextScreen serverId={serverId} groupId={target.groupId} embedded />;
+  return (
+    <ProjectContextScreen
+      serverId={serverId}
+      groupId={target.groupId}
+      embedded
+      selectedPacketPath={target.packetPath ?? null}
+    />
+  );
 }
 
 function createProjectPanelRegistration<K extends ProjectPanelKind>(

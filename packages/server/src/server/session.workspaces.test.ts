@@ -5592,6 +5592,121 @@ test("project context packets: list returns durable packet files", async () => {
   }
 });
 
+test("project context packets: create writes durable launch packet files", async () => {
+  const h = createProjectGroupHarness();
+  try {
+    await h.session.handleMessage({
+      type: "project.group.create.request",
+      displayName: "Work",
+      requestId: "c1",
+    });
+    const groupId = (
+      lastPayloadOfType(h.emitted, "project.group.create.response").group as {
+        groupId: string;
+      }
+    ).groupId;
+
+    await h.session.handleMessage({
+      type: "project.context.packets.create.request",
+      projectGroupId: groupId,
+      requestId: "ctx-create",
+      launchReason: "Use profile: QA Tester",
+      provider: "codex",
+      model: "gpt-5.4",
+      profile: "agents/qa-tester.yaml",
+      prompt: "prompts/qa-tester.md",
+      tools: ["project-files"],
+      folderGrants: [{ projectId: "project-1", path: ".", mode: "read-write" }],
+    });
+
+    expect(lastPayloadOfType(h.emitted, "project.context.packets.create.response")).toMatchObject({
+      requestId: "ctx-create",
+      path: expect.stringMatching(/^context\/packets\/.+\.yaml$/),
+      packet: {
+        projectGroupId: groupId,
+        launchReason: "Use profile: QA Tester",
+        provider: "codex",
+        model: "gpt-5.4",
+        profile: "agents/qa-tester.yaml",
+        prompt: "prompts/qa-tester.md",
+        tools: ["project-files"],
+        folderGrants: [{ projectId: "project-1", path: ".", mode: "read-write" }],
+      },
+    });
+  } finally {
+    rmSync(h.workdir, { recursive: true, force: true });
+  }
+});
+
+test("project agent profiles: list and upsert durable profile files", async () => {
+  const h = createProjectGroupHarness();
+  try {
+    await h.session.handleMessage({
+      type: "project.group.create.request",
+      displayName: "Work",
+      requestId: "c1",
+    });
+    const groupId = (
+      lastPayloadOfType(h.emitted, "project.group.create.response").group as {
+        groupId: string;
+      }
+    ).groupId;
+
+    await h.session.handleMessage({
+      type: "project.agent.profiles.list.request",
+      projectGroupId: groupId,
+      requestId: "profiles1",
+    });
+
+    expect(lastPayloadOfType(h.emitted, "project.agent.profiles.list.response")).toMatchObject({
+      requestId: "profiles1",
+      profiles: [
+        {
+          path: "agents/project-manager.yaml",
+          profile: {
+            id: "project-manager",
+            name: "Project Manager",
+            prompt: "prompts/project-manager.md",
+          },
+        },
+        {
+          path: "agents/qa-tester.yaml",
+          profile: {
+            id: "qa-tester",
+            name: "QA Tester",
+            prompt: "prompts/qa-tester.md",
+          },
+        },
+      ],
+    });
+
+    await h.session.handleMessage({
+      type: "project.agent.profiles.upsert.request",
+      projectGroupId: groupId,
+      requestId: "profiles2",
+      profile: {
+        id: "reviewer",
+        name: "Reviewer",
+        provider: "codex",
+        prompt: "prompts/project-manager.md",
+      },
+    });
+
+    expect(lastPayloadOfType(h.emitted, "project.agent.profiles.upsert.response")).toMatchObject({
+      requestId: "profiles2",
+      path: "agents/reviewer.yaml",
+      profile: {
+        id: "reviewer",
+        name: "Reviewer",
+        provider: "codex",
+        model: null,
+      },
+    });
+  } finally {
+    rmSync(h.workdir, { recursive: true, force: true });
+  }
+});
+
 test("project groups: create rejects an empty name", async () => {
   const h = createProjectGroupHarness();
   try {

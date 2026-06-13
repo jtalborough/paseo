@@ -9,6 +9,8 @@ import type { PersistedGroupRecord, PersistedProjectRecord } from "./workspace-r
 
 const PROJECT_MANIFEST_FILENAME = "project.json";
 const PROJECT_NOTES_FILENAME = "project.md";
+const PROJECT_SEED_STATE_FILENAME = ".paseo-seeds.json";
+const PROJECT_SEED_STATE_VERSION = 1;
 const AGENTS_README_CONTENT = `# Agent Profiles
 
 Project agent profiles are durable, syncable definitions for reusable agent roles.
@@ -88,6 +90,38 @@ defaultTools:
   - project-context-packets
 folderGrants: []
 `;
+const QA_TESTER_PROMPT_CONTENT = `# QA Tester
+
+You are the QA tester for this Project. Your job is to verify that recent work is actually ready
+for the human to use.
+
+Responsibilities:
+- Turn the task, changed files, and user-visible behavior into a concrete test checklist.
+- Run focused, deterministic checks that match the changed surface.
+- Exercise the UI path when the feature is user-facing, using screenshots or exact steps when
+  automation is not available.
+- Report blockers, regressions, and polish issues separately.
+- Cite the exact commands, files, and results you used as evidence.
+
+Do not mark work complete just because code exists. Mark it complete only when the behavior is
+observable, the relevant checks pass, and any remaining risk is explicit.
+
+If you find a defect, write the smallest reproduction and the expected behavior. Do not fix code
+unless the human or lead agent asks you to switch from QA into implementation.
+`;
+const QA_TESTER_AGENT_CONTENT = `schemaVersion: 1
+id: qa-tester
+name: QA Tester
+provider: null
+model: null
+prompt: prompts/qa-tester.md
+defaultTools:
+  - project-files
+  - project-tasks
+  - project-notes
+  - project-context-packets
+folderGrants: []
+`;
 const TASKS_README_CONTENT = `# Tasks
 
 Each structured Task is a Markdown file with YAML frontmatter and a free-form Markdown body.
@@ -107,6 +141,75 @@ updatedAt: 2026-06-08T00:00:00.000Z
 Notes, context, and acceptance criteria.
 \`\`\`
 `;
+
+interface ProjectSeedFile {
+  id: string;
+  relativePath: string;
+  contents: string;
+}
+
+interface ProjectSeedState {
+  schemaVersion: typeof PROJECT_SEED_STATE_VERSION;
+  seeded: string[];
+}
+
+const PROJECT_SEED_FILES: ProjectSeedFile[] = [
+  {
+    id: "project-notes",
+    relativePath: PROJECT_NOTES_FILENAME,
+    contents: "",
+  },
+  {
+    id: "agents-readme",
+    relativePath: "agents/README.md",
+    contents: AGENTS_README_CONTENT,
+  },
+  {
+    id: "context-readme",
+    relativePath: "context/README.md",
+    contents: CONTEXT_README_CONTENT,
+  },
+  {
+    id: "context-packets-readme",
+    relativePath: "context/packets/README.md",
+    contents: CONTEXT_PACKETS_README_CONTENT,
+  },
+  {
+    id: "prompts-readme",
+    relativePath: "prompts/README.md",
+    contents: PROMPTS_README_CONTENT,
+  },
+  {
+    id: "project-manager-prompt",
+    relativePath: "prompts/project-manager.md",
+    contents: PROJECT_MANAGER_PROMPT_CONTENT,
+  },
+  {
+    id: "qa-tester-prompt",
+    relativePath: "prompts/qa-tester.md",
+    contents: QA_TESTER_PROMPT_CONTENT,
+  },
+  {
+    id: "project-manager-agent",
+    relativePath: "agents/project-manager.yaml",
+    contents: PROJECT_MANAGER_AGENT_CONTENT,
+  },
+  {
+    id: "qa-tester-agent",
+    relativePath: "agents/qa-tester.yaml",
+    contents: QA_TESTER_AGENT_CONTENT,
+  },
+  {
+    id: "tasks-readme",
+    relativePath: "tasks/README.md",
+    contents: TASKS_README_CONTENT,
+  },
+  {
+    id: "notes-readme",
+    relativePath: "notes/README.md",
+    contents: "# Notes\n\n",
+  },
+];
 
 export function projectDirectoryPath(paseoHome: string, groupId: string): string {
   assertProjectGroupId(groupId);
@@ -134,27 +237,7 @@ export async function syncProjectDirectory(input: {
   await fs.mkdir(path.join(cwd, "prompts"), { recursive: true });
   await fs.mkdir(path.join(cwd, "tasks"), { recursive: true });
   await fs.mkdir(path.join(cwd, "notes"), { recursive: true });
-  await writeFileIfMissing(
-    path.join(cwd, PROJECT_NOTES_FILENAME),
-    `# ${input.group.displayName}\n\n`,
-  );
-  await writeFileIfMissing(path.join(cwd, "agents", "README.md"), AGENTS_README_CONTENT);
-  await writeFileIfMissing(path.join(cwd, "context", "README.md"), CONTEXT_README_CONTENT);
-  await writeFileIfMissing(
-    path.join(cwd, "context", "packets", "README.md"),
-    CONTEXT_PACKETS_README_CONTENT,
-  );
-  await writeFileIfMissing(path.join(cwd, "prompts", "README.md"), PROMPTS_README_CONTENT);
-  await writeFileIfMissing(
-    path.join(cwd, "prompts", "project-manager.md"),
-    PROJECT_MANAGER_PROMPT_CONTENT,
-  );
-  await writeFileIfMissing(
-    path.join(cwd, "agents", "project-manager.yaml"),
-    PROJECT_MANAGER_AGENT_CONTENT,
-  );
-  await writeFileIfMissing(path.join(cwd, "tasks", "README.md"), TASKS_README_CONTENT);
-  await writeFileIfMissing(path.join(cwd, "notes", "README.md"), "# Notes\n\n");
+  await syncSeedFiles(cwd, input.group.displayName);
   const manifest: ProjectDirectoryManifest = ProjectDirectoryManifestSchema.parse({
     schemaVersion: 1,
     groupId: input.group.groupId,
@@ -192,6 +275,59 @@ export async function archiveProjectDirectory(input: {
   const archived = archivedProjectDirectoryPath(input.paseoHome, input.groupId, input.archivedAt);
   await fs.mkdir(path.dirname(archived), { recursive: true });
   await fs.rename(current, archived);
+}
+
+async function syncSeedFiles(cwd: string, displayName: string): Promise<void> {
+  const state = await readSeedState(cwd);
+  const seeded = new Set(state.seeded);
+  for (const seed of PROJECT_SEED_FILES) {
+    if (seeded.has(seed.id) && !(await fileExists(path.join(cwd, seed.relativePath)))) {
+      continue;
+    }
+    const contents =
+      seed.relativePath === PROJECT_NOTES_FILENAME ? `# ${displayName}\n\n` : seed.contents;
+    await writeFileIfMissing(path.join(cwd, seed.relativePath), contents);
+    seeded.add(seed.id);
+  }
+  await writeSeedState(cwd, { schemaVersion: PROJECT_SEED_STATE_VERSION, seeded: [...seeded] });
+}
+
+async function readSeedState(cwd: string): Promise<ProjectSeedState> {
+  try {
+    const parsed = JSON.parse(
+      await fs.readFile(path.join(cwd, PROJECT_SEED_STATE_FILENAME), "utf8"),
+    ) as Partial<ProjectSeedState>;
+    return {
+      schemaVersion: PROJECT_SEED_STATE_VERSION,
+      seeded: Array.isArray(parsed.seeded)
+        ? parsed.seeded.filter((entry): entry is string => typeof entry === "string")
+        : [],
+    };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { schemaVersion: PROJECT_SEED_STATE_VERSION, seeded: [] };
+    }
+    throw error;
+  }
+}
+
+async function writeSeedState(cwd: string, state: ProjectSeedState): Promise<void> {
+  await writeFileAtomic(
+    path.join(cwd, PROJECT_SEED_STATE_FILENAME),
+    JSON.stringify(state, null, 2),
+  );
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath, constants.F_OK);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
 }
 
 async function writeFileIfMissing(filePath: string, contents: string): Promise<void> {

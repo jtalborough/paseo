@@ -424,6 +424,80 @@ test("lists Project context packets", async () => {
   ]);
 });
 
+test("creates Project context packets", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const promise = client.projectContextPacketCreate({
+    projectGroupId: "grp_project",
+    launchReason: "Use profile: QA Tester",
+    provider: "codex",
+    model: "gpt-5.4",
+    profile: "agents/qa-tester.yaml",
+    prompt: "prompts/qa-tester.md",
+    tools: ["project-files"],
+  });
+
+  expect(mock.sent).toHaveLength(1);
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request).toMatchObject({
+    type: "project.context.packets.create.request",
+    projectGroupId: "grp_project",
+    launchReason: "Use profile: QA Tester",
+    provider: "codex",
+    model: "gpt-5.4",
+    profile: "agents/qa-tester.yaml",
+    prompt: "prompts/qa-tester.md",
+    tools: ["project-files"],
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "project.context.packets.create.response",
+      payload: {
+        requestId: request.requestId,
+        path: "context/packets/profile-launch.yaml",
+        packet: {
+          id: "profile-launch",
+          projectGroupId: "grp_project",
+          createdAt: "2026-06-10T12:00:00.000Z",
+          launchReason: "Use profile: QA Tester",
+          provider: "codex",
+          model: "gpt-5.4",
+          profile: "agents/qa-tester.yaml",
+          prompt: "prompts/qa-tester.md",
+          tools: ["project-files"],
+        },
+      },
+    }),
+  );
+
+  await expect(promise).resolves.toMatchObject({
+    path: "context/packets/profile-launch.yaml",
+    packet: {
+      id: "profile-launch",
+      provider: "codex",
+      model: "gpt-5.4",
+      profile: "agents/qa-tester.yaml",
+      prompt: "prompts/qa-tester.md",
+      tools: ["project-files"],
+    },
+  });
+});
+
 test("passes password as HTTP bearer header and WebSocket subprotocol", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

@@ -186,6 +186,7 @@ import {
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import { PushTokenStore } from "./push/token-store.js";
 import { ProjectContextPacketStore } from "./project-context/packet-store.js";
+import { ProjectAgentProfileStore } from "./project-context/profile-store.js";
 import { TaskStore } from "./task/store.js";
 import type { StoredTask } from "@getpaseo/protocol/task/types";
 import {
@@ -862,6 +863,7 @@ export class Session {
   private readonly groupRegistry: GroupRegistry;
   private readonly taskStore: TaskStore;
   private readonly contextPacketStore: ProjectContextPacketStore;
+  private readonly agentProfileStore: ProjectAgentProfileStore;
   private readonly chatService: FileBackedChatService;
   private readonly scheduleService: ScheduleService;
   private readonly loopService: LoopService;
@@ -987,6 +989,7 @@ export class Session {
     this.groupRegistry = groupRegistry ?? createNoopGroupRegistry();
     this.taskStore = new TaskStore(paseoHome);
     this.contextPacketStore = new ProjectContextPacketStore(paseoHome);
+    this.agentProfileStore = new ProjectAgentProfileStore(paseoHome);
     this.chatService = chatService;
     this.scheduleService = scheduleService;
     this.loopService = loopService;
@@ -2800,6 +2803,14 @@ export class Session {
     switch (msg.type) {
       case "project.context.packets.list.request":
         return this.handleProjectContextPacketListRequest(msg);
+      case "project.context.packets.create.request":
+        return this.handleProjectContextPacketCreateRequest(msg);
+      case "project.agent.profiles.list.request":
+        return this.handleProjectAgentProfileListRequest(msg);
+      case "project.agent.profiles.upsert.request":
+        return this.handleProjectAgentProfileUpsertRequest(msg);
+      case "project.agent.profiles.delete.request":
+        return this.handleProjectAgentProfileDeleteRequest(msg);
       default:
         return undefined;
     }
@@ -2820,6 +2831,71 @@ export class Session {
     this.emit({
       type: "project.context.packets.list.response",
       payload: { requestId: msg.requestId, packets },
+    });
+  }
+
+  private async handleProjectContextPacketCreateRequest(
+    msg: Extract<SessionInboundMessage, { type: "project.context.packets.create.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const packet = await this.contextPacketStore.create({
+      id: msg.id,
+      projectGroupId: msg.projectGroupId,
+      createdByAgentId: msg.createdByAgentId,
+      launchedAgentId: msg.launchedAgentId,
+      launchReason: msg.launchReason,
+      provider: msg.provider,
+      model: msg.model,
+      profile: msg.profile,
+      prompt: msg.prompt,
+      task: msg.task,
+      tools: msg.tools,
+      notes: msg.notes,
+      files: msg.files,
+      bookmarks: msg.bookmarks,
+      browser: msg.browser,
+      folderGrants: msg.folderGrants,
+    });
+    this.emit({
+      type: "project.context.packets.create.response",
+      payload: { requestId: msg.requestId, ...packet },
+    });
+  }
+
+  private async handleProjectAgentProfileListRequest(
+    msg: Extract<SessionInboundMessage, { type: "project.agent.profiles.list.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const profiles = await this.agentProfileStore.list(msg.projectGroupId);
+    this.emit({
+      type: "project.agent.profiles.list.response",
+      payload: { requestId: msg.requestId, profiles },
+    });
+  }
+
+  private async handleProjectAgentProfileUpsertRequest(
+    msg: Extract<SessionInboundMessage, { type: "project.agent.profiles.upsert.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    const profile = await this.agentProfileStore.upsert({
+      projectGroupId: msg.projectGroupId,
+      path: msg.path,
+      profile: msg.profile,
+    });
+    this.emit({
+      type: "project.agent.profiles.upsert.response",
+      payload: { requestId: msg.requestId, ...profile },
+    });
+  }
+
+  private async handleProjectAgentProfileDeleteRequest(
+    msg: Extract<SessionInboundMessage, { type: "project.agent.profiles.delete.request" }>,
+  ): Promise<void> {
+    await this.assertActiveTaskProject(msg.projectGroupId);
+    await this.agentProfileStore.delete(msg.projectGroupId, msg.path);
+    this.emit({
+      type: "project.agent.profiles.delete.response",
+      payload: { requestId: msg.requestId, path: msg.path },
     });
   }
 

@@ -1087,6 +1087,10 @@ export class VoiceAssistantWebSocketServer {
         projectGroups: true,
         // COMPAT(tasks): added in v0.1.90, remove gate after 2026-12-15.
         tasks: true,
+        // COMPAT(projectAgentProfiles): added in v0.1.X, drop the gate when floor >= v0.1.X.
+        projectAgentProfiles: true,
+        // COMPAT(projectContextPacketCreate): added in v0.1.X, drop the gate when floor >= v0.1.X.
+        projectContextPacketCreate: true,
       },
     };
   }

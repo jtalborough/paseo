@@ -1428,6 +1428,64 @@ describe("workspace-layout-store actions", () => {
     expect(findPaneById(layout.root, "main")?.focusedTabId).toBe("agent_agent-1");
   });
 
+  it("reconcileTabs preserves stale terminal tabs that can be recreated from cwd", () => {
+    const workspaceKey = createWorkspaceKey();
+
+    workspaceLayoutStore.setState((state) => ({
+      ...state,
+      layoutByWorkspace: {
+        ...state.layoutByWorkspace,
+        [workspaceKey]: {
+          root: {
+            kind: "pane",
+            pane: {
+              id: "main",
+              tabIds: ["terminal_recoverable"],
+              focusedTabId: "terminal_recoverable",
+              tabs: [
+                {
+                  tabId: "terminal_recoverable",
+                  target: {
+                    kind: "terminal",
+                    terminalId: "term-stale",
+                    cwd: "/tmp/paseo-workspace",
+                  },
+                  createdAt: 1,
+                },
+              ],
+            } as SplitPane,
+          },
+          focusedPaneId: "main",
+        },
+      },
+    }));
+
+    workspaceLayoutStore.getState().reconcileTabs(workspaceKey, {
+      agentsHydrated: true,
+      terminalsHydrated: true,
+      activeAgentIds: [],
+      autoOpenAgentIds: [],
+      knownAgentIds: [],
+      standaloneTerminalIds: [],
+      hasActivePendingDraftCreate: false,
+    });
+
+    const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+
+    expect(collectAllTabs(layout.root)).toEqual([
+      {
+        tabId: "terminal_recoverable",
+        target: {
+          kind: "terminal",
+          terminalId: "term-stale",
+          cwd: "/tmp/paseo-workspace",
+        },
+        createdAt: 1,
+      },
+    ]);
+    expect(findPaneById(layout.root, "main")?.focusedTabId).toBe("terminal_recoverable");
+  });
+
   it("reconcileTabs preserves a draft-origin agent tab id when there is no duplicate", () => {
     const workspaceKey = createWorkspaceKey();
 

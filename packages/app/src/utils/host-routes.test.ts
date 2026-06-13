@@ -157,10 +157,20 @@ describe("workspace route parsing", () => {
     expect(buildHostProjectTasksRoute("local", "grp_1")).toBe("/h/local/project/grp_1/tasks");
     expect(buildHostProjectNotesRoute("local", "grp_1")).toBe("/h/local/project/grp_1/notes");
     expect(buildHostProjectContextRoute("local", "grp_1")).toBe("/h/local/project/grp_1/context");
+    expect(
+      buildHostProjectContextRoute("local", "grp_1", {
+        packetPath: "context/packets/scheduled-run.yaml",
+      }),
+    ).toBe("/h/local/project/grp_1/context?packet=context%2Fpackets%2Fscheduled-run.yaml");
     expect(buildHostProjectAgentsRoute("local", "grp_1")).toBe("/h/local/project/grp_1/agents");
     expect(buildHostNewProjectAgentRoute("local", "grp_1")).toBe(
       "/h/local/project/grp_1/new-agent",
     );
+    expect(
+      buildHostNewProjectAgentRoute("local", "grp_1", {
+        profilePath: "agents/qa-tester.yaml",
+      }),
+    ).toBe("/h/local/project/grp_1/new-agent?profilePath=agents%2Fqa-tester.yaml");
   });
 
   it("maps host Project home routes to another host", () => {

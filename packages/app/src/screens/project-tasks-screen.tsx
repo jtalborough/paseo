@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "expo-router";
 import { Pressable, Text, TextInput, View } from "react-native";
 import type { PressableStateCallbackType } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +22,9 @@ import { useToast } from "@/contexts/toast-context";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { useSessionStore } from "@/stores/session-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
+import { buildHostProjectContextRoute } from "@/utils/host-routes";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
+import type { WorkspaceTabTarget } from "@/stores/workspace-tabs-store";
 import {
   addTaskTimeDays,
   aggregateTaskDayTotals,
@@ -32,6 +36,7 @@ interface ProjectTasksScreenProps {
   serverId: string;
   groupId: string;
   embedded?: boolean;
+  onOpenTab?: (target: WorkspaceTabTarget) => void;
 }
 
 type ProjectTaskView = "tasks" | "schedules" | "timesheet";
@@ -80,6 +85,8 @@ interface ProjectTaskViewContentProps {
     onResume: (scheduleId: string) => void;
     onUpdate: (scheduleId: string, draft: TaskScheduleUpdateDraft) => void;
     onDelete: (scheduleId: string) => void;
+    onOpenPacket: (packetPath: string) => void;
+    onOpenAgent: (agentId: string) => void;
   };
   onChangeProject: (task: StoredTask, projectGroupId: string) => void;
   onAddType: (value: string) => void;
@@ -97,7 +104,9 @@ export function ProjectTasksScreen({
   serverId,
   groupId,
   embedded = false,
+  onOpenTab,
 }: ProjectTasksScreenProps) {
+  const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
@@ -507,13 +516,28 @@ export function ProjectTasksScreen({
       onUpdate: (scheduleId: string, draft: TaskScheduleUpdateDraft) =>
         updateScheduleMutate({ scheduleId, draft }),
       onDelete: (scheduleId: string) => void confirmDeleteSchedule(task, scheduleId),
+      onOpenPacket: (packetPath: string) => {
+        if (onOpenTab) {
+          onOpenTab({ kind: "project-context", groupId: task.metadata.projectGroupId, packetPath });
+          return;
+        }
+        router.navigate(
+          buildHostProjectContextRoute(serverId, task.metadata.projectGroupId, { packetPath }),
+        );
+      },
+      onOpenAgent: (agentId: string) => {
+        navigateToAgent({ serverId, agentId });
+      },
     }),
     [
       confirmDeleteSchedule,
+      onOpenTab,
       pauseScheduleMutate,
       resumeScheduleMutate,
+      router,
       runScheduleNowMutate,
       scheduleActionDisabled,
+      serverId,
       updateScheduleMutate,
     ],
   );

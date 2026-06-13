@@ -40,7 +40,18 @@ function normalizeProjectWorkspaceTabTarget(
     return null;
   }
   const groupId = trimNonEmpty(value.groupId);
-  return groupId ? { kind: value.kind, groupId } : null;
+  if (!groupId) {
+    return null;
+  }
+  if (value.kind === "project-context") {
+    const packetPath = trimOptionalString(value.packetPath);
+    return {
+      kind: value.kind,
+      groupId,
+      ...(packetPath ? { packetPath } : {}),
+    };
+  }
+  return { kind: value.kind, groupId };
 }
 
 function isProjectWorkspaceTabTarget(
@@ -131,6 +142,9 @@ export function normalizeWorkspaceDraftTabSetup(
       typeof record.thinkingOptionId === "string" ? record.thinkingOptionId : null,
     ),
     featureValues: isPlainRecord(record.featureValues) ? { ...record.featureValues } : {},
+    ...(typeof record.initialPrompt === "string" && record.initialPrompt.length > 0
+      ? { initialPrompt: record.initialPrompt }
+      : {}),
   };
 }
 
@@ -160,9 +174,21 @@ export function workspaceTabTargetsEqual(
     return left.workspaceId === right.workspaceId;
   }
   if (isProjectWorkspaceTabTarget(left) && isProjectWorkspaceTabTarget(right)) {
-    return left.groupId === right.groupId;
+    return projectWorkspaceTargetsEqual(left, right);
   }
   return false;
+}
+
+function projectWorkspaceTargetsEqual(
+  left: ProjectWorkspaceTabTarget,
+  right: ProjectWorkspaceTabTarget,
+): boolean {
+  if (left.kind === "project-context" && right.kind === "project-context") {
+    return (
+      left.groupId === right.groupId && (left.packetPath ?? null) === (right.packetPath ?? null)
+    );
+  }
+  return left.groupId === right.groupId;
 }
 
 function workspaceDraftTargetsEqual(
@@ -190,6 +216,7 @@ function workspaceDraftTabSetupsEqual(
     left.modeId === right.modeId &&
     left.model === right.model &&
     left.thinkingOptionId === right.thinkingOptionId &&
+    (left.initialPrompt ?? null) === (right.initialPrompt ?? null) &&
     recordsShallowEqual(left.featureValues, right.featureValues)
   );
 }

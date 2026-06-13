@@ -40,9 +40,14 @@ interface ProjectSurfaceScreenProps {
   serverId: string;
   groupId: string;
   initialTab?: ProjectSurfaceTab;
+  initialContextPacketPath?: string | null;
 }
 
-function projectTargetForTab(tab: ProjectSurfaceTab, groupId: string): WorkspaceTabTarget | null {
+function projectTargetForTab(
+  tab: ProjectSurfaceTab,
+  groupId: string,
+  options?: { contextPacketPath?: string | null },
+): WorkspaceTabTarget | null {
   if (!groupId) {
     return null;
   }
@@ -50,7 +55,13 @@ function projectTargetForTab(tab: ProjectSurfaceTab, groupId: string): Workspace
   if (tab === "tasks") return { kind: "tasks", groupId };
   if (tab === "notes") return { kind: "notes", groupId };
   if (tab === "agents") return { kind: "project-agents", groupId };
-  if (tab === "context") return { kind: "project-context", groupId };
+  if (tab === "context") {
+    return {
+      kind: "project-context",
+      groupId,
+      ...(options?.contextPacketPath ? { packetPath: options.contextPacketPath } : {}),
+    };
+  }
   if (tab === "files") return { kind: "project-files", groupId };
   return null;
 }
@@ -89,6 +100,7 @@ export function ProjectSurfaceScreen({
   serverId,
   groupId,
   initialTab = "overview",
+  initialContextPacketPath = null,
 }: ProjectSurfaceScreenProps) {
   const scope = useMemo(() => projectSurfaceScope(groupId), [groupId]);
   const persistenceKey = useMemo(
@@ -167,12 +179,14 @@ export function ProjectSurfaceScreen({
         return;
       }
 
-      const target = projectTargetForTab(tab, groupId);
+      const target = projectTargetForTab(tab, groupId, {
+        contextPacketPath: initialContextPacketPath,
+      });
       if (target) {
         openProjectTarget(target);
       }
     },
-    [groupId, openProjectTarget],
+    [groupId, initialContextPacketPath, openProjectTarget],
   );
 
   const handleNavigateTab = useCallback(

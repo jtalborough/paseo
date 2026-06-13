@@ -5,6 +5,8 @@ description: Paseo reference for managing agents and worktrees. Load whenever yo
 
 Paseo is a daemon that supervises AI coding agents on your machine. Control it through tools or a CLI.
 
+For the operating model around when to create agents, how to brief and supervise them, and how to clean up subagents/worktrees, load `paseo-agent-stewardship` after this reference.
+
 ## Worktrees
 
 **`create_worktree`** — three modes:

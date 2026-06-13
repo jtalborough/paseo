@@ -19,7 +19,8 @@ $PASEO_HOME/projects/{groupId}/
 ├── project.md
 ├── agents/
 │   ├── README.md
-│   └── project-manager.yaml
+│   ├── project-manager.yaml
+│   └── qa-tester.yaml
 ├── context/
 │   ├── README.md
 │   └── packets/
@@ -28,7 +29,8 @@ $PASEO_HOME/projects/{groupId}/
 │   └── README.md
 ├── prompts/
 │   ├── README.md
-│   └── project-manager.md
+│   ├── project-manager.md
+│   └── qa-tester.md
 └── tasks/
     └── README.md
 ```
@@ -156,10 +158,29 @@ Durable agent context is split into explicit files:
 - `context/packets/`: explicit launch bundles for a specific run. A packet records which prompt,
   task, notes, bookmarks, files, browser state, and Folder grants were selected.
 
-New Projects seed `prompts/project-manager.md` and `agents/project-manager.yaml`. These files are
-ordinary user-owned Project files, not hidden defaults. The Project manager role exists to keep
-`tasks/`, `notes/`, and `context/packets/` coherent and to make agent launches explainable from
-local files. Sync never overwrites user edits to those files.
+New Projects seed `prompts/project-manager.md`, `agents/project-manager.yaml`,
+`prompts/qa-tester.md`, and `agents/qa-tester.yaml`. These files are ordinary user-owned Project
+files, not hidden defaults. The Project manager role exists to keep `tasks/`, `notes/`, and
+`context/packets/` coherent and to make agent launches explainable from local files. The QA Tester
+role exists to turn recent work into concrete checks, verify user-visible behavior, and report
+blockers without quietly switching into implementation. Sync never overwrites user edits to those
+files.
+
+The daemon also writes `.paseo-seeds.json` to remember which starter files have already been
+materialized. Missing starter files are created once, so upgraded Projects can receive new defaults,
+but a user-deleted starter file is not recreated on later syncs.
+
+The Project Agents surface manages `agents/*.yaml` profile files through
+`project.agent.profiles.*` RPCs. The daemon validates each profile with the shared
+`ProjectAgentProfileSchema`, normalizes missing nullable/default fields on read/write, and stores
+edits back as YAML. Deleting a profile only removes that durable definition; existing runtime agent
+sessions under `$PASEO_HOME/agents/` are not changed. When a profile has a provider, the UI can use
+it to open a draft Project agent with that provider and model preselected.
+
+Using an agent profile creates a context packet through `project.context.packets.create.*`. The
+packet records the profile path, prompt path, provider, model, default tools, Folder grants, and a
+launch reason such as `Use profile: QA Tester`. The Project Context tab surfaces that packet path
+and metadata so the user can audit profile-based launches without opening YAML manually.
 
 Within these durable files, references use Project-root-relative POSIX paths such as
 `prompts/implementation.md`, `agents/planner.yaml`, and `tasks/2026-06-09-task.md`. They are not
@@ -240,6 +261,9 @@ moves from prototype into stable product behavior.
 - Scheduled runs need an execution ledger: task file, schedule id, intended run time, actual start
   time, context packet, provider/profile, Folder grants, result, summary, changed files, follow-up
   task links, and external mirror updates.
+- Scheduled task runs now mirror into the task's `scheduledRuns` ledger with provider/model,
+  launched agent id, result summary, and a Project context packet path. The daemon writes the packet
+  when the scheduled run starts and updates it with the launched agent id when the run finishes.
 - Add trust controls before unattended execution. Implemented controls include run now, pause, and
   schedule execution policy (`auto`, `plan_only`, `approval_before_edit`). Implemented failure
   controls include bounded retry policy with per-run attempt tracking and missed-run catch-up policy.

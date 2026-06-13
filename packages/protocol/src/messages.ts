@@ -2314,6 +2314,10 @@ export const ServerInfoStatusPayloadSchema = z
         projectGroups: z.boolean().optional(),
         // COMPAT(tasks): added in v0.1.90, remove gate after 2026-12-15.
         tasks: z.boolean().optional(),
+        // COMPAT(projectAgentProfiles): added in v0.1.X, drop the gate when floor >= v0.1.X.
+        projectAgentProfiles: z.boolean().optional(),
+        // COMPAT(projectContextPacketCreate): added in v0.1.X, drop the gate when floor >= v0.1.X.
+        projectContextPacketCreate: z.boolean().optional(),
       })
       .optional(),
   })

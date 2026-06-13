@@ -98,7 +98,10 @@ import type {
   TaskScheduleCreateRequestSchema,
   TaskUpdateRequestSchema,
 } from "@getpaseo/protocol/task/messages";
-import type { ProjectContextPacket } from "@getpaseo/protocol/project-context/types";
+import type {
+  ProjectAgentProfile,
+  ProjectContextPacket,
+} from "@getpaseo/protocol/project-context/types";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import {
   asUint8Array,
@@ -125,6 +128,24 @@ export type TaskScheduleCreateInput = Omit<
   z.infer<typeof TaskScheduleCreateRequestSchema>,
   "type" | "requestId"
 >;
+export interface ProjectContextPacketCreateInput {
+  projectGroupId: string;
+  id?: string;
+  createdByAgentId?: string | null;
+  launchedAgentId?: string | null;
+  launchReason?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  profile?: string | null;
+  prompt?: string | null;
+  task?: string | null;
+  tools?: string[];
+  notes?: string[];
+  files?: string[];
+  bookmarks?: string[];
+  browser?: Array<{ url: string; title?: string | null }>;
+  folderGrants?: Array<{ projectId: string; path?: string; mode?: "read" | "read-write" }>;
+}
 import { DaemonClientRuntimeMetrics } from "./daemon-client-runtime-metrics.js";
 import { TerminalStreamRouter, type TerminalStreamEvent } from "./terminal-stream-router.js";
 
@@ -149,6 +170,11 @@ export interface TaskScheduleCreateResult {
 export interface ProjectContextPacketEntry {
   path: string;
   packet: ProjectContextPacket;
+}
+
+export interface ProjectAgentProfileEntry {
+  path: string;
+  profile: ProjectAgentProfile;
 }
 
 export interface Logger {
@@ -2075,6 +2101,66 @@ export class DaemonClient {
       message: { type: "project.context.packets.list.request", projectGroupId },
       timeout: 15000,
       selectPayload: (payload) => payload.packets,
+    });
+  }
+
+  async projectContextPacketCreate(
+    input: ProjectContextPacketCreateInput,
+    requestId?: string,
+  ): Promise<ProjectContextPacketEntry> {
+    return this.sendNamespacedCorrelatedSessionRequest<
+      "project.context.packets.create.response",
+      ProjectContextPacketEntry
+    >({
+      requestId,
+      message: { type: "project.context.packets.create.request", ...input },
+      timeout: 15000,
+      selectPayload: (payload) => ({ path: payload.path, packet: payload.packet }),
+    });
+  }
+
+  async projectAgentProfileList(
+    projectGroupId: string,
+    requestId?: string,
+  ): Promise<ProjectAgentProfileEntry[]> {
+    return this.sendNamespacedCorrelatedSessionRequest<
+      "project.agent.profiles.list.response",
+      ProjectAgentProfileEntry[]
+    >({
+      requestId,
+      message: { type: "project.agent.profiles.list.request", projectGroupId },
+      timeout: 15000,
+      selectPayload: (payload) => payload.profiles,
+    });
+  }
+
+  async projectAgentProfileUpsert(
+    input: { projectGroupId: string; path?: string; profile: ProjectAgentProfile },
+    requestId?: string,
+  ): Promise<ProjectAgentProfileEntry> {
+    return this.sendNamespacedCorrelatedSessionRequest<
+      "project.agent.profiles.upsert.response",
+      ProjectAgentProfileEntry
+    >({
+      requestId,
+      message: { type: "project.agent.profiles.upsert.request", ...input },
+      timeout: 15000,
+      selectPayload: (payload) => ({ path: payload.path, profile: payload.profile }),
+    });
+  }
+
+  async projectAgentProfileDelete(
+    input: { projectGroupId: string; path: string },
+    requestId?: string,
+  ): Promise<string> {
+    return this.sendNamespacedCorrelatedSessionRequest<
+      "project.agent.profiles.delete.response",
+      string
+    >({
+      requestId,
+      message: { type: "project.agent.profiles.delete.request", ...input },
+      timeout: 15000,
+      selectPayload: (payload) => payload.path,
     });
   }
 

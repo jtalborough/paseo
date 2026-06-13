@@ -22,9 +22,12 @@ export interface CreateProjectContextPacketInput {
   createdByAgentId?: string | null;
   launchedAgentId?: string | null;
   launchReason?: string | null;
+  provider?: string | null;
+  model?: string | null;
   profile?: string | null;
   prompt?: string | null;
   task?: string | null;
+  tools?: string[];
   notes?: string[];
   files?: string[];
   bookmarks?: string[];
@@ -67,9 +70,12 @@ export class ProjectContextPacketStore {
       createdByAgentId: input.createdByAgentId ?? null,
       launchedAgentId: input.launchedAgentId ?? null,
       launchReason: input.launchReason ?? null,
+      provider: input.provider ?? null,
+      model: input.model ?? null,
       profile: input.profile ?? null,
       prompt: input.prompt ?? null,
       task: input.task ?? null,
+      tools: input.tools ?? [],
       notes: input.notes ?? [],
       files: input.files ?? [],
       bookmarks: input.bookmarks ?? [],

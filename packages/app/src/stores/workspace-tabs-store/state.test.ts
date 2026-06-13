@@ -184,6 +184,42 @@ describe("workspace-tabs-store reducers", () => {
     ]);
   });
 
+  it("retargets an existing Project context tab when opening a selected packet", () => {
+    const projectScope = { kind: "project" as const, groupId: "grp_123" };
+    const projectKey = `${SERVER_ID}:project:grp_123`;
+    let state = applyOpenOrFocusTab(emptyState(), {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: { kind: "project-context", groupId: "grp_123" },
+      now: NOW,
+    }).state;
+
+    const focused = applyOpenOrFocusTab(state, {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: {
+        kind: "project-context",
+        groupId: "grp_123",
+        packetPath: "context/packets/scheduled-run.yaml",
+      },
+      now: NOW + 1,
+    });
+    state = focused.state;
+
+    expect(focused.tabId).toBe("project-context_grp_123");
+    expect(state.uiTabsByWorkspace[projectKey]).toEqual([
+      {
+        tabId: "project-context_grp_123",
+        target: {
+          kind: "project-context",
+          groupId: "grp_123",
+          packetPath: "context/packets/scheduled-run.yaml",
+        },
+        createdAt: NOW,
+      },
+    ]);
+  });
+
   it("ensureTab deduplicates by target when a retargeted tab already exists", () => {
     const draftTabId = "draft_x";
 

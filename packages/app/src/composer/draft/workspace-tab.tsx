@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Keyboard, ScrollView, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Keyboard, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import ReanimatedAnimated from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useKeyboardShiftStyle } from "@/hooks/use-keyboard-shift-style";
 import { useContainerWidthBelow } from "@/hooks/use-container-width";
 import invariant from "tiny-invariant";
@@ -10,6 +11,13 @@ import { Composer } from "@/composer";
 import { DraftAgentModeControl } from "@/composer/agent-controls/mode-control";
 import { ComposerImportPill } from "@/composer/draft/import-pill";
 import { FileDropZone } from "@/components/file-drop-zone";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AgentStreamView } from "@/agent-stream/view";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import type { ImageAttachment } from "@/composer/types";
@@ -21,16 +29,27 @@ import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-dr
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { usePanelStore } from "@/stores/panel-store";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
-import type { Agent } from "@/stores/session-store";
+import { useSessionStore, type Agent } from "@/stores/session-store";
 import { useWorkspaceExecutionAuthority } from "@/stores/session-store-hooks";
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
 import { encodeImages } from "@/utils/encode-images";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { shouldAutoFocusWorkspaceDraftComposer } from "@/screens/workspace/workspace-draft-pane-focus";
-import { validateDraftSubmission } from "@/composer/draft/workspace-tab-core";
-import type { AgentCapabilityFlags } from "@getpaseo/protocol/agent-types";
+import {
+  updateProfileFormField,
+  validateDraftSubmission,
+} from "@/composer/draft/workspace-tab-core";
+import type {
+  AgentCapabilityFlags,
+  AgentModelDefinition,
+  AgentProvider,
+} from "@getpaseo/protocol/agent-types";
 import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type {
+  DaemonClient,
+  ProjectAgentProfileEntry,
+} from "@getpaseo/client/internal/daemon-client";
+import type { ProjectAgentProfile } from "@getpaseo/protocol/project-context/types";
 import type { WorkspaceComposerAttachment } from "@/attachments/types";
 import {
   useWorkspaceAttachments,
@@ -40,9 +59,15 @@ import type { UserMessageImageAttachment } from "@/types/stream";
 import { COMPACT_FORM_FACTOR_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
 import type { WorkspaceDraftTabSetup } from "@/stores/workspace-tabs-store";
+import { useToast } from "@/contexts/toast-context";
+import { confirmDialog } from "@/utils/confirm-dialog";
+import { useProjectGroups } from "@/hooks/use-project-groups";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
 const EMPTY_ONLINE_SERVER_IDS: string[] = [];
+function profileSelectTriggerStyle({ pressed, hovered }: { pressed: boolean; hovered: boolean }) {
+  return [styles.profileSelectTrigger, (pressed || hovered) && styles.profileSelectTriggerActive];
+}
 const DRAFT_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: true,
   supportsSessionPersistence: false,
@@ -289,6 +314,13 @@ function resolveOnlineServerIds(input: { isConnected: boolean; serverId: string 
   return [input.serverId];
 }
 
+function resolveDraftProjectGroupId(
+  explicitProjectGroupId: string | null | undefined,
+  workspaceProjectGroupId: string | null,
+): string | null {
+  return explicitProjectGroupId ?? workspaceProjectGroupId;
+}
+
 interface WorkspaceDraftAgentTabProps {
   serverId: string;
   workspaceId: string;
@@ -330,10 +362,13 @@ export function WorkspaceDraftAgentTab({
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
   const workspaceAuthority = useWorkspaceExecutionAuthority(serverId, workspaceId);
+  const workspaceProjectGroupId = useSessionStore(
+    (state) => state.sessions[serverId]?.workspaces.get(workspaceId)?.projectGroupId ?? null,
+  );
   const workspaceExecutionAuthority = workspaceAuthority?.ok ? workspaceAuthority.authority : null;
   const workspaceDirectory = workspaceExecutionAuthority?.workspaceDirectory ?? null;
   const draftSetup = initialSetup ?? null;
-  const draftProjectGroupId = projectGroupId ?? null;
+  const draftProjectGroupId = resolveDraftProjectGroupId(projectGroupId, workspaceProjectGroupId);
   const draftWorkingDirectory = resolveDraftWorkingDirectory({
     workspaceDirectory,
     initialCwd: initialCwd ?? null,
@@ -372,6 +407,19 @@ export function WorkspaceDraftAgentTab({
   const clearDraftInput = draftInput.clear;
   const setDraftText = draftInput.setText;
   const setDraftAttachments = draftInput.setAttachments;
+  const appliedInitialPromptKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const initialPrompt = draftSetup?.initialPrompt;
+    if (!initialPrompt) {
+      return;
+    }
+    const promptKey = `${draftId}:${initialPrompt}`;
+    if (appliedInitialPromptKeyRef.current === promptKey) {
+      return;
+    }
+    appliedInitialPromptKeyRef.current = promptKey;
+    setDraftText(initialPrompt);
+  }, [draftId, draftSetup?.initialPrompt, setDraftText]);
   const pendingAutoSubmit = useWorkspaceDraftSubmissionStore((state) => {
     const pending = state.pendingByDraftId[draftId] ?? null;
     return pending?.serverId === serverId && pending.workspaceId === workspaceId ? pending : null;
@@ -664,6 +712,48 @@ export function WorkspaceDraftAgentTab({
       ) : undefined,
     [isCompactComposerLayout, composerAgentControls],
   );
+  const profileProviderOptions = useMemo(
+    () =>
+      composerState.providerDefinitions.map((provider) => ({
+        value: provider.id,
+        label: provider.label,
+      })),
+    [composerState.providerDefinitions],
+  );
+  const profileModelsByProvider = useMemo(
+    () => buildProfileModelOptionsByProvider(composerState.allProviderModels),
+    [composerState.allProviderModels],
+  );
+  const handleApplyProfile = useCallback(
+    async (profile: ProjectAgentProfile, promptText: string | null) => {
+      const provider = profile.provider?.trim();
+      if (provider) {
+        const model = profile.model?.trim();
+        if (model) {
+          composerState.setProviderAndModelFromUser(provider as AgentProvider, model);
+        } else {
+          composerState.setProviderFromUser(provider as AgentProvider);
+        }
+      }
+      if (promptText !== null && draftInput.text.trim() !== promptText.trim()) {
+        const hasExistingText = draftInput.text.trim().length > 0;
+        const shouldReplace =
+          !hasExistingText ||
+          (await confirmDialog({
+            title: "Replace draft prompt?",
+            message: `${profile.name} has a saved Markdown prompt. Replace the current draft text with it?`,
+            confirmLabel: "Replace",
+          }));
+        if (!shouldReplace) {
+          return false;
+        }
+        setDraftText(promptText);
+      }
+      focusInputRef.current?.();
+      return true;
+    },
+    [composerState, draftInput.text, setDraftText],
+  );
 
   return (
     <FileDropZone onFilesDropped={handleFilesDropped}>
@@ -687,6 +777,14 @@ export function WorkspaceDraftAgentTab({
               contentContainerStyle={styles.configScrollContent}
             >
               <View style={styles.configSection}>
+                <DraftAgentProfilesPanel
+                  serverId={serverId}
+                  projectGroupId={draftProjectGroupId}
+                  client={client}
+                  providerOptions={profileProviderOptions}
+                  modelOptionsByProvider={profileModelsByProvider}
+                  onApplyProfile={handleApplyProfile}
+                />
                 {formErrorMessage ? (
                   <View style={styles.errorContainer}>
                     <Text style={styles.errorText}>{formErrorMessage}</Text>
@@ -736,6 +834,609 @@ export function WorkspaceDraftAgentTab({
   );
 }
 
+const EMPTY_PROFILE_FORM = {
+  id: "",
+  name: "",
+  provider: "",
+  model: "",
+  prompt: "prompts/project-manager.md",
+  defaultTools: "",
+};
+type ProfileForm = typeof EMPTY_PROFILE_FORM;
+type ProfileFormKey = keyof ProfileForm;
+interface ProfileSelectOption {
+  value: string;
+  label: string;
+}
+const DEFAULT_TOOL_OPTIONS: ProfileSelectOption[] = [
+  { value: "project-files", label: "Project files" },
+  { value: "project-tasks", label: "Project tasks" },
+  { value: "project-notes", label: "Project notes" },
+  { value: "project-context-packets", label: "Context packets" },
+];
+
+function buildProfileModelOptionsByProvider(
+  modelsByProvider: Map<string, AgentModelDefinition[]>,
+): Map<string, ProfileSelectOption[]> {
+  return new Map(
+    [...modelsByProvider.entries()].map(([provider, models]) => [
+      provider,
+      models.map((model) => ({
+        value: model.id,
+        label: model.label,
+      })),
+    ]),
+  );
+}
+
+function DraftAgentProfilesPanel({
+  serverId,
+  projectGroupId,
+  client,
+  providerOptions,
+  modelOptionsByProvider,
+  onApplyProfile,
+}: {
+  serverId: string;
+  projectGroupId: string | null;
+  client: DaemonClient | null;
+  providerOptions: ProfileSelectOption[];
+  modelOptionsByProvider: Map<string, ProfileSelectOption[]>;
+  onApplyProfile: (profile: ProjectAgentProfile, promptText: string | null) => Promise<boolean>;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const { groups } = useProjectGroups(serverId);
+  const projectDirectory = useMemo(
+    () => groups.find((group) => group.groupId === projectGroupId)?.cwd ?? null,
+    [groups, projectGroupId],
+  );
+  const supported = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.projectAgentProfiles === true,
+  );
+  const canCreateContextPacket = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.projectContextPacketCreate === true,
+  );
+  const queryKey = useMemo(
+    () => ["project-agent-profiles", serverId, projectGroupId],
+    [projectGroupId, serverId],
+  );
+  const [editingPath, setEditingPath] = useState<string | null>(null);
+  const [form, setForm] = useState(EMPTY_PROFILE_FORM);
+  const hasDraftProfile = form.id.length > 0 || form.name.length > 0 || editingPath !== null;
+
+  const profilesQuery = useQuery({
+    queryKey,
+    enabled: Boolean(client && supported && projectGroupId),
+    queryFn: async () =>
+      client && projectGroupId ? client.projectAgentProfileList(projectGroupId) : [],
+    staleTime: 2_000,
+  });
+  const promptsQuery = useQuery({
+    queryKey: ["project-prompts", serverId, projectGroupId, projectDirectory],
+    enabled: Boolean(client && supported && projectDirectory),
+    queryFn: async () => {
+      if (!client || !projectDirectory) {
+        return [];
+      }
+      const directory = await client.listDirectory(projectDirectory, "prompts");
+      return directory.entries
+        .filter((entry) => entry.kind === "file" && entry.name.endsWith(".md"))
+        .map((entry) => ({ value: `prompts/${entry.name}`, label: entry.name }));
+    },
+    staleTime: 10_000,
+  });
+
+  const invalidateProfiles = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey });
+  }, [queryClient, queryKey]);
+
+  const upsertProfile = useMutation({
+    mutationFn: async (input: { path: string | null; profile: ProjectAgentProfile }) => {
+      if (!client || !projectGroupId) {
+        throw new Error("Project is not connected");
+      }
+      return client.projectAgentProfileUpsert({
+        projectGroupId,
+        ...(input.path ? { path: input.path } : {}),
+        profile: input.profile,
+      });
+    },
+    onSuccess: () => {
+      setEditingPath(null);
+      setForm(EMPTY_PROFILE_FORM);
+      void invalidateProfiles();
+      toast.show("Agent profile saved", { variant: "success" });
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Failed to save agent profile"),
+  });
+
+  const deleteProfile = useMutation({
+    mutationFn: async (path: string) => {
+      if (!client || !projectGroupId) {
+        throw new Error("Project is not connected");
+      }
+      return client.projectAgentProfileDelete({ projectGroupId, path });
+    },
+    onSuccess: () => {
+      setEditingPath(null);
+      setForm(EMPTY_PROFILE_FORM);
+      void invalidateProfiles();
+      toast.show("Agent profile deleted", { variant: "success" });
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Failed to delete agent profile"),
+  });
+
+  const handleNewProfile = useCallback(() => {
+    setEditingPath(null);
+    setForm({ ...EMPTY_PROFILE_FORM, id: "implementation-agent", name: "Implementation Agent" });
+  }, []);
+
+  const handleCancel = useCallback(() => {
+    setEditingPath(null);
+    setForm(EMPTY_PROFILE_FORM);
+  }, []);
+
+  const handleFieldChange = useCallback((field: ProfileFormKey, value: string) => {
+    setForm((current) => updateProfileFormField(current, field, value));
+  }, []);
+
+  const handleSave = useCallback(() => {
+    const profile = formToProfile(form);
+    if (!profile) {
+      toast.error("Profile needs an id and name");
+      return;
+    }
+    upsertProfile.mutate({ path: editingPath, profile });
+  }, [editingPath, form, toast, upsertProfile]);
+
+  const handleEditProfile = useCallback((entry: ProjectAgentProfileEntry) => {
+    setEditingPath(entry.path);
+    setForm(profileToForm(entry.profile));
+  }, []);
+
+  const handleUseProfile = useCallback(
+    async (entry: ProjectAgentProfileEntry) => {
+      let promptText: string | null = null;
+      if (!client || !projectGroupId || !canCreateContextPacket) {
+        toast.error("Update the host to use profile launch packets");
+        return;
+      }
+      if (entry.profile.prompt) {
+        if (!projectDirectory) {
+          toast.error("Project prompt file is not available");
+          return;
+        }
+        try {
+          const promptFile = await client.readFile(projectDirectory, entry.profile.prompt);
+          promptText = new TextDecoder().decode(promptFile.bytes);
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "Failed to load profile prompt");
+          return;
+        }
+      }
+      const didApply = await onApplyProfile(entry.profile, promptText);
+      if (didApply) {
+        try {
+          const packet = await client.projectContextPacketCreate({
+            projectGroupId,
+            launchReason: `Use profile: ${entry.profile.name}`,
+            provider: entry.profile.provider,
+            model: entry.profile.model,
+            profile: entry.path,
+            prompt: entry.profile.prompt,
+            tools: entry.profile.defaultTools,
+            folderGrants: entry.profile.folderGrants,
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["project-context-packets", serverId, projectGroupId],
+          });
+          toast.show(`Using ${entry.profile.name} · ${packet.path}`, { variant: "success" });
+        } catch (error) {
+          toast.error(
+            error instanceof Error ? error.message : "Profile applied, but launch packet failed",
+          );
+        }
+      }
+    },
+    [
+      canCreateContextPacket,
+      client,
+      onApplyProfile,
+      projectDirectory,
+      projectGroupId,
+      queryClient,
+      serverId,
+      toast,
+    ],
+  );
+
+  const handleDeleteProfile = useCallback(
+    async (entry: ProjectAgentProfileEntry) => {
+      const confirmed = await confirmDialog({
+        title: "Delete agent profile?",
+        message: `${entry.profile.name} will be removed from ${entry.path}. Existing agents are not changed.`,
+        confirmLabel: "Delete",
+        destructive: true,
+      });
+      if (confirmed) {
+        deleteProfile.mutate(entry.path);
+      }
+    },
+    [deleteProfile],
+  );
+
+  const profiles = profilesQuery.data ?? [];
+  const modelOptions = useMemo(() => {
+    const selectedProvider = form.provider.trim();
+    const options = selectedProvider ? (modelOptionsByProvider.get(selectedProvider) ?? []) : [];
+    if (!form.model.trim() || options.some((option) => option.value === form.model)) {
+      return options;
+    }
+    return [{ value: form.model, label: form.model }, ...options];
+  }, [form.model, form.provider, modelOptionsByProvider]);
+  const promptOptions = useMemo(() => {
+    const options = promptsQuery.data ?? [];
+    if (options.some((option) => option.value === form.prompt)) {
+      return options;
+    }
+    return [{ value: form.prompt, label: form.prompt || "No prompt" }, ...options].filter(
+      (option) => option.value,
+    );
+  }, [form.prompt, promptsQuery.data]);
+
+  if (!projectGroupId) {
+    return null;
+  }
+  let profilesContent;
+  if (!supported) {
+    profilesContent = (
+      <Text style={styles.profileMuted}>Update the host to manage agent profiles.</Text>
+    );
+  } else if (profilesQuery.isError) {
+    profilesContent = <Text style={styles.profileMuted}>Agent profiles could not be loaded.</Text>;
+  } else if (profiles.length > 0) {
+    profilesContent = (
+      <View style={styles.profileList}>
+        {profiles.map((entry) => (
+          <DraftAgentProfileRow
+            key={entry.path}
+            entry={entry}
+            onEdit={handleEditProfile}
+            onUse={handleUseProfile}
+            onDelete={handleDeleteProfile}
+          />
+        ))}
+      </View>
+    );
+  } else {
+    profilesContent = <Text style={styles.profileMuted}>No profiles yet.</Text>;
+  }
+
+  return (
+    <View style={styles.profilePanel} testID="draft-agent-profiles-panel">
+      <View style={styles.profileHeader}>
+        <View style={styles.profileHeaderText}>
+          <Text style={styles.profileTitle}>Agent profiles</Text>
+          <Text style={styles.profileHint}>Reusable Project roles for new agents.</Text>
+        </View>
+        {supported ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            onPress={handleNewProfile}
+            testID="draft-agent-profile-new"
+          >
+            New profile
+          </Button>
+        ) : null}
+      </View>
+
+      {profilesContent}
+
+      {hasDraftProfile ? (
+        <View style={styles.profileEditor}>
+          <View style={styles.profileEditorHeader}>
+            <Text style={styles.profileEditorTitle}>
+              {editingPath ? "Edit profile" : "New profile"}
+            </Text>
+            {editingPath ? <Text style={styles.profilePath}>{editingPath}</Text> : null}
+          </View>
+          <View style={styles.profileFormGrid}>
+            <ProfileInput
+              field="id"
+              label="Id"
+              value={form.id}
+              placeholder="implementation-agent"
+              onChangeField={handleFieldChange}
+            />
+            <ProfileInput
+              field="name"
+              label="Name"
+              value={form.name}
+              placeholder="Implementation Agent"
+              onChangeField={handleFieldChange}
+            />
+            <ProfileInput
+              field="provider"
+              label="Provider"
+              value={form.provider}
+              placeholder="codex"
+              onChangeField={handleFieldChange}
+              options={providerOptions}
+            />
+            <ProfileInput
+              field="model"
+              label="Model"
+              value={form.model}
+              placeholder="default"
+              onChangeField={handleFieldChange}
+              options={modelOptions}
+            />
+            <ProfileInput
+              field="prompt"
+              label="Prompt"
+              value={form.prompt}
+              placeholder="prompts/project-manager.md"
+              onChangeField={handleFieldChange}
+              options={promptOptions}
+            />
+            <ProfileInput
+              field="defaultTools"
+              label="Tools"
+              value={form.defaultTools}
+              placeholder="project-tasks, project-notes"
+              onChangeField={handleFieldChange}
+              options={DEFAULT_TOOL_OPTIONS}
+              multi
+            />
+          </View>
+          <View style={styles.profileActions}>
+            <Button variant="ghost" size="xs" onPress={handleCancel}>
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              size="xs"
+              onPress={handleSave}
+              loading={upsertProfile.isPending}
+            >
+              Save profile
+            </Button>
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function DraftAgentProfileRow({
+  entry,
+  onEdit,
+  onUse,
+  onDelete,
+}: {
+  entry: ProjectAgentProfileEntry;
+  onEdit: (entry: ProjectAgentProfileEntry) => void;
+  onUse: (entry: ProjectAgentProfileEntry) => Promise<void>;
+  onDelete: (entry: ProjectAgentProfileEntry) => void;
+}) {
+  const handleEdit = useCallback(() => onEdit(entry), [entry, onEdit]);
+  const handleUse = useCallback(() => {
+    void onUse(entry);
+  }, [entry, onUse]);
+  const handleDelete = useCallback(() => onDelete(entry), [entry, onDelete]);
+  const profile = entry.profile;
+  const summary = [
+    profile.provider ?? "default provider",
+    profile.model,
+    profile.prompt,
+    profile.defaultTools.length ? `${profile.defaultTools.length} tools` : null,
+  ].filter(Boolean);
+
+  return (
+    <View style={styles.profileRow}>
+      <Pressable
+        style={styles.profileRowMain}
+        onPress={handleEdit}
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${profile.name}`}
+        testID={`draft-agent-profile-${profile.id}`}
+      >
+        <Text style={styles.profileRowTitle} numberOfLines={1}>
+          {profile.name}
+        </Text>
+        <Text style={styles.profileRowHint} numberOfLines={1}>
+          {summary.join(" - ")}
+        </Text>
+      </Pressable>
+      <View style={styles.profileRowActions}>
+        <Button variant="ghost" size="xs" onPress={handleUse}>
+          Use
+        </Button>
+        <Button variant="ghost" size="xs" onPress={handleDelete}>
+          Delete
+        </Button>
+      </View>
+    </View>
+  );
+}
+
+function ProfileInput({
+  field,
+  label,
+  value,
+  placeholder,
+  onChangeField,
+  options,
+  multi,
+}: {
+  field: ProfileFormKey;
+  label: string;
+  value: string;
+  placeholder: string;
+  onChangeField: (field: ProfileFormKey, value: string) => void;
+  options?: ProfileSelectOption[];
+  multi?: boolean;
+}) {
+  const handleChangeText = useCallback(
+    (nextValue: string) => onChangeField(field, nextValue),
+    [field, onChangeField],
+  );
+  const handleClear = useCallback(() => onChangeField(field, ""), [field, onChangeField]);
+  const selectedValues = useMemo(
+    () =>
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    [value],
+  );
+  const handleSelectOption = useCallback(
+    (optionValue: string) => {
+      if (!multi) {
+        onChangeField(field, optionValue);
+        return;
+      }
+      const nextValues = selectedValues.includes(optionValue)
+        ? selectedValues.filter((item) => item !== optionValue)
+        : [...selectedValues, optionValue];
+      onChangeField(field, nextValues.join(", "));
+    },
+    [field, multi, onChangeField, selectedValues],
+  );
+  const displayValue = useMemo(() => {
+    if (!value.trim()) {
+      return placeholder;
+    }
+    if (!options?.length) {
+      return value;
+    }
+    if (multi) {
+      return selectedValues
+        .map((selected) => options.find((option) => option.value === selected)?.label ?? selected)
+        .join(", ");
+    }
+    return options.find((option) => option.value === value)?.label ?? value;
+  }, [multi, options, placeholder, selectedValues, value]);
+
+  if (options) {
+    return (
+      <View style={styles.profileField}>
+        <Text style={styles.profileFieldLabel}>{label}</Text>
+        <DropdownMenu>
+          <DropdownMenuTrigger style={profileSelectTriggerStyle}>
+            <Text
+              style={value.trim() ? styles.profileSelectText : styles.profileSelectPlaceholder}
+              numberOfLines={1}
+            >
+              {displayValue}
+            </Text>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" minWidth={220}>
+            {options.length > 0 ? (
+              options.map((option) => (
+                <ProfileOptionItem
+                  key={option.value}
+                  option={option}
+                  selected={multi ? selectedValues.includes(option.value) : option.value === value}
+                  closeOnSelect={!multi}
+                  onSelect={handleSelectOption}
+                />
+              ))
+            ) : (
+              <DropdownMenuItem disabled>{placeholder}</DropdownMenuItem>
+            )}
+            {value.trim() ? (
+              <DropdownMenuItem muted onSelect={handleClear}>
+                Clear
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.profileField}>
+      <Text style={styles.profileFieldLabel}>{label}</Text>
+      <TextInput
+        value={value}
+        placeholder={placeholder}
+        placeholderTextColor="#9ca3af"
+        onChangeText={handleChangeText}
+        style={styles.profileInput}
+        autoCapitalize="none"
+      />
+    </View>
+  );
+}
+
+function ProfileOptionItem({
+  option,
+  selected,
+  closeOnSelect,
+  onSelect,
+}: {
+  option: ProfileSelectOption;
+  selected: boolean;
+  closeOnSelect: boolean;
+  onSelect: (value: string) => void;
+}) {
+  const handleSelect = useCallback(() => onSelect(option.value), [onSelect, option.value]);
+  return (
+    <DropdownMenuItem
+      selected={selected}
+      showSelectedCheck
+      closeOnSelect={closeOnSelect}
+      onSelect={handleSelect}
+    >
+      {option.label}
+    </DropdownMenuItem>
+  );
+}
+
+function profileToForm(profile: ProjectAgentProfile): ProfileForm {
+  return {
+    id: profile.id,
+    name: profile.name,
+    provider: profile.provider ?? "",
+    model: profile.model ?? "",
+    prompt: profile.prompt ?? "",
+    defaultTools: profile.defaultTools.join(", "),
+  };
+}
+
+function formToProfile(form: ProfileForm): ProjectAgentProfile | null {
+  const id = form.id.trim();
+  const name = form.name.trim();
+  if (!id || !name) {
+    return null;
+  }
+  const prompt = form.prompt.trim();
+  return {
+    schemaVersion: 1,
+    id,
+    name,
+    provider: emptyToNull(form.provider),
+    model: emptyToNull(form.model),
+    prompt: prompt.length > 0 ? prompt : null,
+    defaultTools: form.defaultTools
+      .split(",")
+      .map((tool) => tool.trim())
+      .filter(Boolean),
+    folderGrants: [],
+  };
+}
+
+function emptyToNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 const styles = StyleSheet.create((theme) => ({
   container: {
     flex: 1,
@@ -758,6 +1459,146 @@ const styles = StyleSheet.create((theme) => ({
   },
   configSection: {
     gap: theme.spacing[3],
+  },
+  profilePanel: {
+    gap: theme.spacing[3],
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surface1,
+    padding: theme.spacing[4],
+  },
+  profileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[3],
+  },
+  profileHeaderText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  profileTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  profileHint: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  profileMuted: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  profileList: {
+    gap: theme.spacing[2],
+  },
+  profileRow: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface0,
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+  },
+  profileRowMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  profileRowTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  profileRowHint: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  profileRowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
+  profileEditor: {
+    gap: theme.spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    paddingTop: theme.spacing[3],
+  },
+  profileEditorHeader: {
+    gap: 2,
+  },
+  profileEditorTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  profilePath: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  profileFormGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[3],
+  },
+  profileField: {
+    minWidth: 180,
+    flexBasis: {
+      xs: "100%",
+      md: "31%",
+    },
+    flexGrow: 1,
+    gap: theme.spacing[1],
+  },
+  profileFieldLabel: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    textTransform: "uppercase",
+  },
+  profileInput: {
+    minHeight: 36,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface0,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+  },
+  profileSelectTrigger: {
+    minHeight: 36,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface0,
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+  },
+  profileSelectTriggerActive: {
+    backgroundColor: theme.colors.surface2,
+  },
+  profileSelectText: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+  },
+  profileSelectPlaceholder: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  profileActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: theme.spacing[2],
   },
   inputAreaWrapper: {
     width: "100%",

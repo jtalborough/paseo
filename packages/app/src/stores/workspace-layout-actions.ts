@@ -1641,6 +1641,10 @@ function isTerminalTab(
   return tab.target.kind === "terminal";
 }
 
+function canRecoverTerminalTab(tab: WorkspaceTab & { target: { kind: "terminal" } }): boolean {
+  return Boolean(tab.target.cwd?.trim());
+}
+
 function openEntityTabWithoutFocusing(
   layout: WorkspaceLayout,
   target: WorkspaceTabTarget,
@@ -1735,7 +1739,8 @@ function collapseStaleEntityTabs(input: {
     if (
       isTerminalTab(tab) &&
       snapshot.terminalsHydrated &&
-      !knownTerminalIds.has(tab.target.terminalId)
+      !knownTerminalIds.has(tab.target.terminalId) &&
+      !canRecoverTerminalTab(tab)
     ) {
       nextLayout =
         closeTabInLayout({

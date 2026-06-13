@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paseo Agent Stewardship"
+  short_description: "Create and manage Paseo agents well"
+  default_prompt: "Use $paseo-agent-stewardship to create, supervise, or clean up Paseo agents for this work."
