@@ -44,21 +44,21 @@ jobs:
 
       - name: Pack deploy packages
         run: |
-          mkdir -p .deploy/packages
-          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/highlight
-          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/relay
-          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/protocol
-          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/client
-          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/server
-          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/cli
-          cp scripts/deploy/install-linux-release.sh .deploy/
-          cp scripts/deploy/pull-linux-release.sh .deploy/
-          chmod +x .deploy/install-linux-release.sh .deploy/pull-linux-release.sh
+          mkdir -p deploy-bundle/packages
+          npm pack --pack-destination deploy-bundle/packages --workspace=@getpaseo/highlight
+          npm pack --pack-destination deploy-bundle/packages --workspace=@getpaseo/relay
+          npm pack --pack-destination deploy-bundle/packages --workspace=@getpaseo/protocol
+          npm pack --pack-destination deploy-bundle/packages --workspace=@getpaseo/client
+          npm pack --pack-destination deploy-bundle/packages --workspace=@getpaseo/server
+          npm pack --pack-destination deploy-bundle/packages --workspace=@getpaseo/cli
+          cp scripts/deploy/install-linux-release.sh deploy-bundle/
+          cp scripts/deploy/pull-linux-release.sh deploy-bundle/
+          chmod +x deploy-bundle/install-linux-release.sh deploy-bundle/pull-linux-release.sh
 
       - name: Upload deploy artifact
         uses: actions/upload-artifact@v4
         with:
           name: paseo-linux-${{ github.sha }}
-          path: .deploy
+          path: deploy-bundle
           if-no-files-found: error
           retention-days: 14
