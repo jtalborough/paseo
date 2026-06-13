@@ -24,9 +24,11 @@ import {
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ProjectSurfaceHeader } from "@/components/project-surface-header";
+import { ProjectFolderPickerModal } from "@/components/project-folder-picker-modal";
 import { updateProfileFormField } from "@/composer/draft/workspace-tab-core";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/contexts/toast-context";
+import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { useHostProjects, type HostProjectListItem } from "@/projects/host-projects";
 import { resolveProjectLaunchTarget } from "@/projects/project-launch-target";
@@ -78,7 +80,10 @@ export function ProjectHomeScreen({
   const selectGroup = useProjectSelectionStore((state) => state.selectGroup);
   const projects = useHostProjects(serverId);
   const hostAgents = useSessionStore((state) => state.sessions[serverId]?.agents ?? null);
-  const { groups, supported, canAddFromDisk, addFolderFromDisk } = useProjectGroups(serverId);
+  const { groups, supported, canAddFromDisk, addFolderFromDisk, addFolderPath } =
+    useProjectGroups(serverId);
+  const isLocalDaemon = useIsLocalDaemon(serverId);
+  const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
 
   useEffect(() => {
     if (serverId && groupId) {
@@ -103,8 +108,18 @@ export function ProjectHomeScreen({
   );
 
   const handleAddFolder = useCallback(() => {
-    void addFolderFromDisk(groupId);
-  }, [addFolderFromDisk, groupId]);
+    if (isLocalDaemon && canAddFromDisk) {
+      void addFolderFromDisk(groupId);
+      return;
+    }
+    setIsFolderPickerOpen(true);
+  }, [addFolderFromDisk, canAddFromDisk, groupId, isLocalDaemon]);
+  const handleCloseFolderPicker = useCallback(() => setIsFolderPickerOpen(false), []);
+  const handleSelectFolderPath = useCallback(
+    (path: string) => addFolderPath(path, groupId),
+    [addFolderPath, groupId],
+  );
+  const showAddFolderButton = !isLocalDaemon || canAddFromDisk;
   const handleBrowseFiles = useCallback(() => {
     if (onOpenTab) {
       onOpenTab({ kind: "project-files", groupId });
@@ -294,7 +309,7 @@ export function ProjectHomeScreen({
                   External code directories attached to this Project.
                 </Text>
               </View>
-              {canAddFromDisk ? (
+              {showAddFolderButton ? (
                 <Button
                   variant="ghost"
                   size="xs"
@@ -328,6 +343,13 @@ export function ProjectHomeScreen({
           </View>
         </View>
       </ScrollView>
+      <ProjectFolderPickerModal
+        visible={isFolderPickerOpen}
+        serverId={serverId}
+        title="Add folder to Project"
+        onClose={handleCloseFolderPicker}
+        onSelectPath={handleSelectFolderPath}
+      />
     </View>
   );
 }

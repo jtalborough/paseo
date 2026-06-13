@@ -12,12 +12,14 @@ import {
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { AdaptiveRenameModal } from "@/components/rename-modal";
+import { ProjectFolderPickerModal } from "@/components/project-folder-picker-modal";
 import type { Theme } from "@/styles/theme";
 import {
   groupSidebarProjects,
   type SidebarGroupEntry,
 } from "@/hooks/sidebar-workspaces-view-model";
 import { useProjectGroups } from "@/hooks/use-project-groups";
+import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { DraggableList, type DraggableRenderItemInfo } from "@/components/draggable-list";
 import { deriveProjectIconColor, PROJECT_ICON_COLORS } from "@/utils/project-icon-color";
 import {
@@ -72,7 +74,9 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
     deleteGroup,
     canAddFromDisk,
     addFolderFromDisk,
+    addFolderPath,
   } = useProjectGroups(props.serverId);
+  const isLocalDaemon = useIsLocalDaemon(props.serverId ?? "");
 
   const handleSetColor = useCallback(
     (groupId: string, color: string) => {
@@ -87,6 +91,7 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
   const [newGroupName, setNewGroupName] = useState("");
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
+  const [folderPickerGroupId, setFolderPickerGroupId] = useState<string | null>(null);
 
   const toggleGroupCollapsed = useCallback((groupId: string) => {
     setCollapsedGroupIds((current) => {
@@ -172,6 +177,21 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
     },
     [renamingGroup, updateGroup],
   );
+  const handleAddFolder = useCallback(
+    async (groupId: string | null) => {
+      if (isLocalDaemon && canAddFromDisk) {
+        await addFolderFromDisk(groupId);
+        return;
+      }
+      setFolderPickerGroupId(groupId);
+    },
+    [addFolderFromDisk, canAddFromDisk, isLocalDaemon],
+  );
+  const handleCloseFolderPicker = useCallback(() => setFolderPickerGroupId(null), []);
+  const handleSelectFolderPath = useCallback(
+    (path: string) => addFolderPath(path, folderPickerGroupId),
+    [addFolderPath, folderPickerGroupId],
+  );
   const validateRenameGroup = useCallback(
     (value: string): string | null => {
       const next = value.trim();
@@ -249,8 +269,8 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
         collapsed={collapsedGroupIds.has(group.groupId)}
         onToggle={toggleGroupCollapsed}
         listProps={props}
-        canAddFromDisk={canAddFromDisk}
-        onAddFromDisk={addFolderFromDisk}
+        canAddFromDisk={isLocalDaemon ? canAddFromDisk : true}
+        onAddFromDisk={handleAddFolder}
         onSetColor={handleSetColor}
         onRename={handleRenameGroup}
         onDelete={handleDeleteGroup}
@@ -262,13 +282,14 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
       />
     ),
     [
-      addFolderFromDisk,
       canAddFromDisk,
       collapsedGroupIds,
       deletingGroupId,
+      handleAddFolder,
       handleDeleteGroup,
       handleRenameGroup,
       handleSetColor,
+      isLocalDaemon,
       pathname,
       props,
       serverId,
@@ -318,6 +339,13 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
           onClose={handleCloseRenameGroup}
           onSubmit={handleSubmitRenameGroup}
           testID="sidebar-group-rename"
+        />
+        <ProjectFolderPickerModal
+          visible={folderPickerGroupId !== null}
+          serverId={serverId}
+          title="Add folder to Project"
+          onClose={handleCloseFolderPicker}
+          onSelectPath={handleSelectFolderPath}
         />
       </>
     </FolderGlyphIconContext.Provider>

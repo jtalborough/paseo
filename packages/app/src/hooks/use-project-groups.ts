@@ -36,6 +36,7 @@ export interface UseProjectGroupsResult {
   // exists; `canAddFromDisk` gates the affordance.
   canAddFromDisk: boolean;
   addFolderFromDisk: (groupId: string | null) => Promise<void>;
+  addFolderPath: (path: string, groupId: string | null) => Promise<void>;
 }
 
 export function useProjectGroups(serverId: string | null | undefined): UseProjectGroupsResult {
@@ -168,8 +169,8 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
 
   const canAddFromDisk = typeof getDesktopHost()?.dialog?.open === "function";
 
-  const addFolderFromDisk = useCallback(
-    async (groupId: string | null) => {
+  const addFolderPath = useCallback(
+    async (path: string, groupId: string | null) => {
       if (!normalizedServerId) {
         return;
       }
@@ -177,21 +178,18 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
       if (!client) {
         return;
       }
-      let path: string | null;
-      try {
-        path = await pickDirectory();
-      } catch (error) {
-        console.error("[project-groups] directory picker unavailable", { error });
-        return;
-      }
-      if (!path) {
+      const trimmedPath = path.trim();
+      if (!trimmedPath) {
         return;
       }
       // Register the folder (server classifies git vs non-git) and surface it.
-      const payload = await client.openProject(path);
+      const payload = await client.openProject(trimmedPath);
       if (payload.error || !payload.workspace) {
-        console.error("[project-groups] openProject failed", { path, error: payload.error });
-        return;
+        console.error("[project-groups] openProject failed", {
+          path: trimmedPath,
+          error: payload.error,
+        });
+        throw new Error(payload.error ?? "Failed to add folder");
       }
       const workspace = normalizeWorkspaceDescriptor(payload.workspace);
       const store = useSessionStore.getState();
@@ -205,6 +203,23 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
       await refresh();
     },
     [normalizedServerId, runtime, refresh],
+  );
+
+  const addFolderFromDisk = useCallback(
+    async (groupId: string | null) => {
+      let path: string | null;
+      try {
+        path = await pickDirectory();
+      } catch (error) {
+        console.error("[project-groups] directory picker unavailable", { error });
+        return;
+      }
+      if (!path) {
+        return;
+      }
+      await addFolderPath(path, groupId);
+    },
+    [addFolderPath],
   );
 
   useEffect(() => {
@@ -222,5 +237,6 @@ export function useProjectGroups(serverId: string | null | undefined): UseProjec
     setFolderGroup,
     canAddFromDisk,
     addFolderFromDisk,
+    addFolderPath,
   };
 }
