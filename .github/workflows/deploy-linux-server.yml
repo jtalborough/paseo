@@ -1,0 +1,64 @@
+name: Build Linux Server Bundle
+
+on:
+  push:
+    paths:
+      - "packages/highlight/**"
+      - "packages/relay/**"
+      - "packages/protocol/**"
+      - "packages/client/**"
+      - "packages/server/**"
+      - "packages/cli/**"
+      - "scripts/deploy/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/deploy-linux-server.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: build-linux-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build server stack
+        run: npm run build:server
+
+      - name: Typecheck server stack
+        run: npm run typecheck:server
+
+      - name: Pack deploy packages
+        run: |
+          mkdir -p .deploy/packages
+          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/highlight
+          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/relay
+          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/protocol
+          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/client
+          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/server
+          npm pack --pack-destination .deploy/packages --workspace=@getpaseo/cli
+          cp scripts/deploy/install-linux-release.sh .deploy/
+          cp scripts/deploy/pull-linux-release.sh .deploy/
+          chmod +x .deploy/install-linux-release.sh .deploy/pull-linux-release.sh
+
+      - name: Upload deploy artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: paseo-linux-${{ github.sha }}
+          path: .deploy
+          if-no-files-found: error
+          retention-days: 14

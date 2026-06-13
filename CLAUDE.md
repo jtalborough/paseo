@@ -48,6 +48,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | docs/mobile-testing.md        | Maestro and mobile test workflows                                                                                              |
 | docs/ad-hoc-daemon-testing.md | Isolated in-process daemon test harness                                                                                        |
 | docs/android.md               | App variants, local/cloud builds, EAS workflows                                                                                |
+| docs/deployment.md            | Pull-based Linux server deploy workflow, systemd example, rollback                                                             |
 | docs/release.md               | Release playbook, draft releases, completion checklist                                                                         |
 | [SECURITY.md](SECURITY.md)    | Relay threat model, E2E encryption, DNS rebinding, agent auth                                                                  |
 
