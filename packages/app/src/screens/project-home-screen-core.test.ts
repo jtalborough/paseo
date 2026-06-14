@@ -1,6 +1,64 @@
 import { describe, expect, test } from "vitest";
 import { normalizeWorkspaceTabTarget } from "@/workspace-tabs/identity";
-import { buildProjectAgentProfileDraftTarget } from "./project-home-screen-core";
+import {
+  buildProjectAgentProfileDraftTarget,
+  buildProjectOperatingPath,
+} from "./project-home-screen-core";
+
+describe("buildProjectOperatingPath", () => {
+  test("keeps the Project workflow path tied to durable surfaces", () => {
+    expect(
+      buildProjectOperatingPath({
+        hasProjectDirectory: true,
+        folderCount: 2,
+        activeAgentCount: 1,
+      }),
+    ).toEqual([
+      {
+        id: "tasks",
+        title: "Shape the work",
+        detail: "Create roadmap items, bugs, follow-ups, and acceptance criteria.",
+        actionLabel: "Open tasks",
+      },
+      {
+        id: "agents",
+        title: "Set the team",
+        detail: "1 active agent attached.",
+        actionLabel: "Open agents",
+      },
+      {
+        id: "notes",
+        title: "Keep decisions",
+        detail: "Store product direction, project notes, and durable operating context.",
+        actionLabel: "Open notes",
+      },
+      {
+        id: "context",
+        title: "Audit launches",
+        detail: "Review the prompt, profile, tools, folder grants, provider, and evidence.",
+        actionLabel: "Open context",
+      },
+      {
+        id: "files",
+        title: "Grant work surfaces",
+        detail: "2 external folders referenced by this Project.",
+        actionLabel: "Open files",
+      },
+    ]);
+  });
+
+  test("points new Projects toward folder setup before execution", () => {
+    const filesStep = buildProjectOperatingPath({
+      hasProjectDirectory: false,
+      folderCount: 0,
+      activeAgentCount: 0,
+    }).find((step) => step.id === "files");
+
+    expect(filesStep?.detail).toBe(
+      "Attach local or remote folders so agents can reach the right work.",
+    );
+  });
+});
 
 describe("buildProjectAgentProfileDraftTarget", () => {
   test("carries a loaded profile prompt into the draft tab setup", () => {

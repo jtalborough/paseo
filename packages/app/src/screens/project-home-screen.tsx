@@ -20,6 +20,7 @@ import {
   ListTodo,
   NotebookText,
   Plus,
+  ScrollText,
   Trash2,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -56,7 +57,11 @@ import {
 } from "@/utils/host-routes";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
-import { buildProjectAgentProfileDraftTarget } from "@/screens/project-home-screen-core";
+import {
+  buildProjectAgentProfileDraftTarget,
+  buildProjectOperatingPath,
+  type ProjectOperatingStep,
+} from "@/screens/project-home-screen-core";
 
 interface ProjectHomeScreenProps {
   serverId: string;
@@ -74,6 +79,7 @@ const ThemedGlobe = withUnistyles(Globe);
 const ThemedListTodo = withUnistyles(ListTodo);
 const ThemedNotebookText = withUnistyles(NotebookText);
 const ThemedPlus = withUnistyles(Plus);
+const ThemedScrollText = withUnistyles(ScrollText);
 const ThemedTrash2 = withUnistyles(Trash2);
 
 export function ProjectHomeScreen({
@@ -185,6 +191,43 @@ export function ProjectHomeScreen({
     const { browserId } = createWorkspaceBrowser();
     onOpenTab({ kind: "browser", browserId });
   }, [onOpenTab]);
+  const operatingPath = useMemo(
+    () =>
+      buildProjectOperatingPath({
+        hasProjectDirectory: Boolean(group?.cwd),
+        folderCount: folders.length,
+        activeAgentCount: agents.length,
+      }),
+    [agents.length, folders.length, group?.cwd],
+  );
+  const handleOpenOperatingStep = useCallback(
+    (stepId: ProjectOperatingStep["id"]) => {
+      switch (stepId) {
+        case "tasks":
+          handleBrowseTasks();
+          break;
+        case "agents":
+          handleBrowseAgents();
+          break;
+        case "notes":
+          handleBrowseNotes();
+          break;
+        case "context":
+          handleBrowseContext();
+          break;
+        case "files":
+          handleBrowseFiles();
+          break;
+      }
+    },
+    [
+      handleBrowseAgents,
+      handleBrowseContext,
+      handleBrowseFiles,
+      handleBrowseNotes,
+      handleBrowseTasks,
+    ],
+  );
 
   if (!supported) {
     return (
@@ -277,6 +320,8 @@ export function ProjectHomeScreen({
               ) : null}
             </View>
           </View>
+
+          <ProjectOperatingPathSection steps={operatingPath} onOpenStep={handleOpenOperatingStep} />
 
           {group.cwd ? (
             <View style={styles.section}>
@@ -434,6 +479,103 @@ export function ProjectAgentsScreen({
       </ScrollView>
     </View>
   );
+}
+
+function ProjectOperatingPathSection({
+  steps,
+  onOpenStep,
+}: {
+  steps: ProjectOperatingStep[];
+  onOpenStep: (stepId: ProjectOperatingStep["id"]) => void;
+}) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionHeaderText}>
+          <Text style={settingsStyles.sectionHeaderTitle}>Operating path</Text>
+          <Text style={styles.sectionHint}>Roadmap, team, decisions, launch audit, and files.</Text>
+        </View>
+      </View>
+      <View style={settingsStyles.card} testID="project-operating-path">
+        {steps.map((step, index) => (
+          <ProjectOperatingStepRow
+            key={step.id}
+            step={step}
+            isFirst={index === 0}
+            onOpenStep={onOpenStep}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function ProjectOperatingStepRow({
+  step,
+  isFirst,
+  onOpenStep,
+}: {
+  step: ProjectOperatingStep;
+  isFirst: boolean;
+  onOpenStep: (stepId: ProjectOperatingStep["id"]) => void;
+}) {
+  const handlePress = useCallback(() => onOpenStep(step.id), [onOpenStep, step.id]);
+  const rowStyle = useCallback(
+    ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
+      settingsStyles.row,
+      !isFirst && settingsStyles.rowBorder,
+      styles.operatingStepRow,
+      hovered && styles.rowHovered,
+      pressed && styles.rowPressed,
+    ],
+    [isFirst],
+  );
+  const Icon = getProjectOperatingStepIcon(step.id);
+
+  return (
+    <Pressable
+      style={rowStyle}
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={step.actionLabel}
+      testID={`project-operating-path-${step.id}`}
+    >
+      <View style={styles.folderMain}>
+        <View style={styles.operatingStepIcon}>
+          <Icon size={16} uniProps={iconColorMapping} />
+        </View>
+        <View style={styles.folderText}>
+          <Text style={settingsStyles.rowTitle} numberOfLines={1}>
+            {step.title}
+          </Text>
+          <Text style={settingsStyles.rowHint} numberOfLines={2}>
+            {step.detail}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.operatingStepAction}>
+        <Text style={styles.operatingStepActionText} numberOfLines={1}>
+          {step.actionLabel}
+        </Text>
+        <ThemedChevronRight size={16} uniProps={iconColorMapping} />
+      </View>
+    </Pressable>
+  );
+}
+
+function getProjectOperatingStepIcon(stepId: ProjectOperatingStep["id"]): typeof ThemedBot {
+  switch (stepId) {
+    case "tasks":
+      return ThemedListTodo;
+    case "agents":
+      return ThemedBot;
+    case "notes":
+      return ThemedNotebookText;
+    case "context":
+      return ThemedScrollText;
+    case "files":
+      return ThemedFileText;
+  }
 }
 
 function ProjectAgentsSection({
@@ -1356,6 +1498,27 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: theme.fontSize.sm * 1.4,
   },
   launchTargetHint: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  operatingStepRow: {
+    gap: theme.spacing[3],
+  },
+  operatingStepIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: theme.borderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.surface2,
+  },
+  operatingStepAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    maxWidth: 140,
+  },
+  operatingStepActionText: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
   },
