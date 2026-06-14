@@ -12,6 +12,7 @@ import { DraftAgentModeControl } from "@/composer/agent-controls/mode-control";
 import { ComposerImportPill } from "@/composer/draft/import-pill";
 import { FileDropZone } from "@/components/file-drop-zone";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,6 +63,8 @@ import type { WorkspaceDraftTabSetup } from "@/stores/workspace-tabs-store";
 import { useToast } from "@/contexts/toast-context";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { useProjectGroups } from "@/hooks/use-project-groups";
+import { buildProfileLaunchBriefing } from "@/projects/project-launch-briefing";
+import { buildProjectAgentProfileLaunchLabels } from "@/projects/project-agent-launch-labels";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
 const EMPTY_ONLINE_SERVER_IDS: string[] = [];
@@ -144,6 +147,7 @@ async function submitDraftCreateRequest(input: {
   workspaceExecutionAuthority: { workspaceId: string } | null;
   projectGroupId: string | null;
   autoSubmitConfig: AutoSubmitConfig | null;
+  launchLabels: Record<string, string> | null;
   composerState: {
     selectedProvider: string | null;
     selectedMode: string;
@@ -163,6 +167,7 @@ async function submitDraftCreateRequest(input: {
     workspaceExecutionAuthority,
     projectGroupId,
     autoSubmitConfig,
+    launchLabels,
     composerState,
   } = input;
 
@@ -196,11 +201,12 @@ async function submitDraftCreateRequest(input: {
   const result = await client.createAgent({
     config,
     workspaceId: workspaceExecutionAuthority.workspaceId,
-    ...(projectGroupId ? { projectGroupId } : {}),
-    ...(text ? { initialPrompt: text } : {}),
+    projectGroupId: projectGroupId ?? undefined,
+    initialPrompt: text || undefined,
     clientMessageId: attempt.clientMessageId,
-    ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
-    ...(attachmentsArray && attachmentsArray.length > 0 ? { attachments: attachmentsArray } : {}),
+    images: imagesData ?? undefined,
+    attachments: attachmentsArray,
+    labels: launchLabels ?? undefined,
   });
 
   return {
@@ -216,6 +222,7 @@ function buildDraftAgentSnapshot(input: {
   workspaceDirectory: string | null;
   projectGroupId: string | null;
   autoSubmitConfig: AutoSubmitConfig | null;
+  launchLabels: Record<string, string> | null;
   composerState: {
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
@@ -232,6 +239,7 @@ function buildDraftAgentSnapshot(input: {
     workspaceDirectory,
     projectGroupId,
     autoSubmitConfig,
+    launchLabels,
     composerState,
   } = input;
   invariant(workspaceDirectory, "Workspace directory is required");
@@ -270,7 +278,7 @@ function buildDraftAgentSnapshot(input: {
     features: composerState.agentControls.features,
     thinkingOptionId,
     parentAgentId: null,
-    labels: {},
+    labels: launchLabels ?? {},
   };
 }
 
@@ -321,6 +329,13 @@ function resolveDraftProjectGroupId(
   return explicitProjectGroupId ?? workspaceProjectGroupId;
 }
 
+function resolveDraftLaunchLabels(
+  profileLaunchLabels: Record<string, string> | null,
+  draftSetup: WorkspaceDraftTabSetup | null,
+): Record<string, string> | null {
+  return profileLaunchLabels ?? draftSetup?.labels ?? null;
+}
+
 interface WorkspaceDraftAgentTabProps {
   serverId: string;
   workspaceId: string;
@@ -368,6 +383,10 @@ export function WorkspaceDraftAgentTab({
   const workspaceExecutionAuthority = workspaceAuthority?.ok ? workspaceAuthority.authority : null;
   const workspaceDirectory = workspaceExecutionAuthority?.workspaceDirectory ?? null;
   const draftSetup = initialSetup ?? null;
+  const [profileLaunchLabels, setProfileLaunchLabels] = useState<Record<string, string> | null>(
+    null,
+  );
+  const launchLabels = resolveDraftLaunchLabels(profileLaunchLabels, draftSetup);
   const draftProjectGroupId = resolveDraftProjectGroupId(projectGroupId, workspaceProjectGroupId);
   const draftWorkingDirectory = resolveDraftWorkingDirectory({
     workspaceDirectory,
@@ -523,6 +542,7 @@ export function WorkspaceDraftAgentTab({
         workspaceDirectory: draftWorkingDirectory,
         projectGroupId: draftProjectGroupId,
         autoSubmitConfig,
+        launchLabels,
         composerState,
       }),
     createRequest: async ({ attempt, text, images, attachments }) =>
@@ -536,6 +556,7 @@ export function WorkspaceDraftAgentTab({
         workspaceExecutionAuthority,
         projectGroupId: draftProjectGroupId,
         autoSubmitConfig,
+        launchLabels,
         composerState,
       }),
     onCreateSuccess: ({ result }) => {
@@ -754,6 +775,21 @@ export function WorkspaceDraftAgentTab({
     },
     [composerState, draftInput.text, setDraftText],
   );
+  const handleProfilePacketCreated = useCallback(
+    (entry: ProjectAgentProfileEntry, contextPacketPath: string) => {
+      if (!draftProjectGroupId) {
+        return;
+      }
+      setProfileLaunchLabels(
+        buildProjectAgentProfileLaunchLabels({
+          projectGroupId: draftProjectGroupId,
+          profilePath: entry.path,
+          contextPacketPath,
+        }),
+      );
+    },
+    [draftProjectGroupId],
+  );
 
   return (
     <FileDropZone onFilesDropped={handleFilesDropped}>
@@ -784,6 +820,7 @@ export function WorkspaceDraftAgentTab({
                   providerOptions={profileProviderOptions}
                   modelOptionsByProvider={profileModelsByProvider}
                   onApplyProfile={handleApplyProfile}
+                  onProfilePacketCreated={handleProfilePacketCreated}
                 />
                 {formErrorMessage ? (
                   <View style={styles.errorContainer}>
@@ -876,6 +913,7 @@ function DraftAgentProfilesPanel({
   providerOptions,
   modelOptionsByProvider,
   onApplyProfile,
+  onProfilePacketCreated,
 }: {
   serverId: string;
   projectGroupId: string | null;
@@ -883,6 +921,7 @@ function DraftAgentProfilesPanel({
   providerOptions: ProfileSelectOption[];
   modelOptionsByProvider: Map<string, ProfileSelectOption[]>;
   onApplyProfile: (profile: ProjectAgentProfile, promptText: string | null) => Promise<boolean>;
+  onProfilePacketCreated: (entry: ProjectAgentProfileEntry, contextPacketPath: string) => void;
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -1033,6 +1072,7 @@ function DraftAgentProfilesPanel({
           void queryClient.invalidateQueries({
             queryKey: ["project-context-packets", serverId, projectGroupId],
           });
+          onProfilePacketCreated(entry, packet.path);
           toast.show(`Using ${entry.profile.name} · ${packet.path}`, { variant: "success" });
         } catch (error) {
           toast.error(
@@ -1045,6 +1085,7 @@ function DraftAgentProfilesPanel({
       canCreateContextPacket,
       client,
       onApplyProfile,
+      onProfilePacketCreated,
       projectDirectory,
       projectGroupId,
       queryClient,
@@ -1229,12 +1270,14 @@ function DraftAgentProfileRow({
   }, [entry, onUse]);
   const handleDelete = useCallback(() => onDelete(entry), [entry, onDelete]);
   const profile = entry.profile;
-  const summary = [
-    profile.provider ?? "default provider",
-    profile.model,
-    profile.prompt,
-    profile.defaultTools.length ? `${profile.defaultTools.length} tools` : null,
-  ].filter(Boolean);
+  const briefing = useMemo(
+    () => buildProfileLaunchBriefing({ profile, path: entry.path }),
+    [entry.path, profile],
+  );
+  const primaryDetails = briefing.items
+    .filter((item) => item.label !== "Packet")
+    .slice(0, 3)
+    .map((item) => item.value);
 
   return (
     <View style={styles.profileRow}>
@@ -1245,12 +1288,33 @@ function DraftAgentProfileRow({
         accessibilityLabel={`Edit ${profile.name}`}
         testID={`draft-agent-profile-${profile.id}`}
       >
-        <Text style={styles.profileRowTitle} numberOfLines={1}>
-          {profile.name}
-        </Text>
+        <View style={styles.profileRowTitleLine}>
+          <Text style={styles.profileRowTitle} numberOfLines={1}>
+            {profile.name}
+          </Text>
+          <StatusBadge label={briefing.readinessLabel} variant={briefing.badgeVariant} />
+        </View>
         <Text style={styles.profileRowHint} numberOfLines={1}>
-          {summary.join(" - ")}
+          {primaryDetails.join(" - ")}
         </Text>
+        {briefing.accessSummary.length ? (
+          <Text style={styles.profileRowHint} numberOfLines={1}>
+            Launch packet: {briefing.accessSummary.join(" - ")}
+          </Text>
+        ) : (
+          <Text style={styles.profileRowHint} numberOfLines={1}>
+            Launch packet: no tools or folder grants
+          </Text>
+        )}
+        {briefing.warnings.length ? (
+          <View style={styles.profileWarnings}>
+            {briefing.warnings.map((warning) => (
+              <Text key={warning} style={styles.profileWarningText} numberOfLines={1}>
+                {warning}
+              </Text>
+            ))}
+          </View>
+        ) : null}
       </Pressable>
       <View style={styles.profileRowActions}>
         <Button variant="ghost" size="xs" onPress={handleUse}>
@@ -1513,12 +1577,28 @@ const styles = StyleSheet.create((theme) => ({
     gap: 2,
   },
   profileRowTitle: {
+    flexShrink: 1,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
   },
+  profileRowTitleLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    minWidth: 0,
+  },
   profileRowHint: {
     color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  profileWarnings: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
+  },
+  profileWarningText: {
+    color: theme.colors.palette.amber[500],
     fontSize: theme.fontSize.xs,
   },
   profileRowActions: {
