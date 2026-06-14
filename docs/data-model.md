@@ -31,12 +31,14 @@ $PASEO_HOME/
 │   ├── {groupId}/                       # Portable Project directory and agent cwd
 │   │   ├── project.json                 # Contained Project manifest + Folder references
 │   │   ├── project.md                   # Plain-Markdown Project notes
+│   │   ├── roadmap.md                   # Durable direction and sequencing
 │   │   ├── agents/                      # Durable agent profile definitions, not runtime state
 │   │   ├── context/
 │   │   │   └── packets/                 # Explicit agent launch context bundles
-│   │   ├── notes/                       # Plain-Markdown notes
+│   │   ├── notes/                       # Plain-Markdown notes and decisions
 │   │   ├── prompts/                     # Reusable Project prompt Markdown
-│   │   └── tasks/                       # Structured Markdown Tasks with YAML frontmatter
+│   │   ├── tasks/                       # Structured Markdown Tasks with YAML frontmatter
+│   │   └── workflows/                   # Repeatable Project operating paths
 │   └── archived/                        # Archived Project directories
 └── push-tokens.json                     # Expo push notification tokens
 ```

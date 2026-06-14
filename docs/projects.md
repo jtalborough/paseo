@@ -53,6 +53,7 @@ Every Project has a Paseo-managed working directory:
 $PASEO_HOME/projects/{groupId}/
 ├── project.json
 ├── project.md
+├── roadmap.md
 ├── agents/
 │   ├── README.md
 │   ├── project-manager.yaml
@@ -62,13 +63,17 @@ $PASEO_HOME/projects/{groupId}/
 │   └── packets/
 │       └── README.md
 ├── notes/
+│   ├── decisions.md
 │   └── README.md
 ├── prompts/
 │   ├── README.md
 │   ├── project-manager.md
 │   └── qa-tester.md
-└── tasks/
-    └── README.md
+├── tasks/
+│   └── README.md
+└── workflows/
+    ├── README.md
+    └── intake.md
 ```
 
 This directory is the Project's portable unit and the `cwd` for Project-level agents. Files in it
@@ -102,6 +107,16 @@ plans, cleanup checklists, bug follow-ups, and agent-ready work items. Use docs 
 model, architecture, conventions, and decisions that should outlive a specific task. A planning
 conversation can update both, but the executable "what do we do next?" list should live in tasks so
 it is visible in the app and can later launch or brief agents directly.
+
+Project Roadmap, Decisions, and Workflows are durable planning files inside the Project directory:
+
+- `roadmap.md` captures outcomes, milestones, risks, and sequencing.
+- `notes/decisions.md` captures decisions and their consequences.
+- `workflows/*.md` captures repeatable operating paths such as intake, QA, release, field work,
+  finance review, content publishing, or infrastructure maintenance.
+
+These files are intentionally provider-neutral. Coding and non-coding Projects can define different
+teams, evidence, and operating paths without changing Paseo's data model.
 
 Project Tasks should identify the operating lane when that affects execution: solo slice,
 intake/shape, Product/UX review, architecture/implementation, QA/audit, or loop/epic. See

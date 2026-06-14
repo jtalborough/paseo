@@ -57,13 +57,25 @@ describe("Project directory", () => {
       "projectGroupId: grp_example",
     );
     expect(readFileSync(path.join(cwd, "notes", "README.md"), "utf8")).toBe("# Notes\n\n");
+    expect(readFileSync(path.join(cwd, "roadmap.md"), "utf8")).toContain("# Roadmap");
+    expect(readFileSync(path.join(cwd, "workflows", "README.md"), "utf8")).toContain(
+      "repeatable Project operating paths",
+    );
+    expect(readFileSync(path.join(cwd, "workflows", "intake.md"), "utf8")).toContain(
+      "Validate whether the report is real enough to act on",
+    );
+    expect(readFileSync(path.join(cwd, "notes", "decisions.md"), "utf8")).toContain("# Decisions");
     expect(JSON.parse(readFileSync(path.join(cwd, ".paseo-seeds.json"), "utf8"))).toMatchObject({
       schemaVersion: 1,
       seeded: expect.arrayContaining([
+        "decisions-note",
+        "intake-workflow",
+        "project-roadmap",
         "project-manager-agent",
         "project-manager-prompt",
         "qa-tester-agent",
         "qa-tester-prompt",
+        "workflows-readme",
       ]),
     });
     expect(readFileSync(path.join(cwd, "context", "README.md"), "utf8")).toContain(
@@ -120,6 +132,7 @@ describe("Project directory", () => {
     });
     const cwd = await syncProjectDirectory({ paseoHome, group, children: [] });
     writeFileSync(path.join(cwd, "project.md"), "# My notes\n");
+    writeFileSync(path.join(cwd, "roadmap.md"), "# My roadmap\n");
     writeFileSync(path.join(cwd, "prompts", "README.md"), "# My prompts\n");
     writeFileSync(path.join(cwd, "prompts", "project-manager.md"), "# My manager prompt\n");
     writeFileSync(path.join(cwd, "prompts", "qa-tester.md"), "# My QA prompt\n");
@@ -128,6 +141,9 @@ describe("Project directory", () => {
     writeFileSync(path.join(cwd, "agents", "qa-tester.yaml"), "id: custom-qa\n");
     writeFileSync(path.join(cwd, "context", "README.md"), "# My context\n");
     writeFileSync(path.join(cwd, "context", "packets", "README.md"), "# My packets\n");
+    writeFileSync(path.join(cwd, "workflows", "README.md"), "# My workflows\n");
+    writeFileSync(path.join(cwd, "workflows", "intake.md"), "# My intake workflow\n");
+    writeFileSync(path.join(cwd, "notes", "decisions.md"), "# My decisions\n");
 
     await syncProjectDirectory({
       paseoHome,
@@ -135,6 +151,7 @@ describe("Project directory", () => {
       children: [],
     });
     expect(readFileSync(path.join(cwd, "project.md"), "utf8")).toBe("# My notes\n");
+    expect(readFileSync(path.join(cwd, "roadmap.md"), "utf8")).toBe("# My roadmap\n");
     expect(readFileSync(path.join(cwd, "prompts", "README.md"), "utf8")).toBe("# My prompts\n");
     expect(readFileSync(path.join(cwd, "prompts", "project-manager.md"), "utf8")).toBe(
       "# My manager prompt\n",
@@ -153,6 +170,11 @@ describe("Project directory", () => {
     expect(readFileSync(path.join(cwd, "context", "packets", "README.md"), "utf8")).toBe(
       "# My packets\n",
     );
+    expect(readFileSync(path.join(cwd, "workflows", "README.md"), "utf8")).toBe("# My workflows\n");
+    expect(readFileSync(path.join(cwd, "workflows", "intake.md"), "utf8")).toBe(
+      "# My intake workflow\n",
+    );
+    expect(readFileSync(path.join(cwd, "notes", "decisions.md"), "utf8")).toBe("# My decisions\n");
 
     const archivedAt = "2026-06-07T12:00:00.000Z";
     await archiveProjectDirectory({ paseoHome, groupId: group.groupId, archivedAt });

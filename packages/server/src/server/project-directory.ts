@@ -9,6 +9,7 @@ import type { PersistedGroupRecord, PersistedProjectRecord } from "./workspace-r
 
 const PROJECT_MANIFEST_FILENAME = "project.json";
 const PROJECT_NOTES_FILENAME = "project.md";
+const PROJECT_ROADMAP_FILENAME = "roadmap.md";
 const PROJECT_SEED_STATE_FILENAME = ".paseo-seeds.json";
 const PROJECT_SEED_STATE_VERSION = 1;
 const AGENTS_README_CONTENT = `# Agent Profiles
@@ -84,6 +85,8 @@ the human and future agents.
 
 Responsibilities:
 - Keep active work in \`tasks/\` as Markdown-backed Project Tasks.
+- Keep product direction in \`roadmap.md\` and durable decisions in \`notes/decisions.md\`.
+- Use \`workflows/\` for repeatable operating paths such as intake, QA, release, or field work.
 - Keep durable context, decisions, and reference material in \`notes/\`.
 - Use \`context/packets/\` to explain what was handed to an agent run.
 - Treat \`prompts/\` and \`agents/\` as the Project's reusable instruction and team roster files.
@@ -95,6 +98,66 @@ Before launching or briefing an agent, identify the task, relevant notes/files, 
 available, explicit Folder grants, provider/model/mode, and any Paseo skill or tool workflow the
 agent should use. After an agent finishes, update the task and add or revise notes only when they
 preserve durable context.
+`;
+const ROADMAP_CONTENT = `# Roadmap
+
+Use this file for durable Project direction: outcomes, milestones, risks, and sequencing.
+
+Keep execution details in \`tasks/\`. Keep decisions in \`notes/decisions.md\`. Link tasks back here
+when they advance a roadmap item.
+
+## Now
+
+- Define the next concrete outcome.
+
+## Next
+
+- Capture the next useful improvement after the current outcome is stable.
+
+## Later
+
+- Park ideas that should not distract from active work.
+`;
+const WORKFLOWS_README_CONTENT = `# Workflows
+
+Workflows are repeatable Project operating paths. Use them when the Project needs a consistent way
+to move from request to decision, task, agent launch, verification, and follow-up.
+
+Good workflow files answer:
+
+- When should this workflow run?
+- Which Project Task, note, profile, prompt, context packet, and Folder grants does it need?
+- Which agent roles should participate?
+- What proves the workflow is done?
+
+Keep workflows provider-neutral. A coding Project, finance Project, infrastructure Project,
+document Project, or research Project should all be able to define its own roles and evidence.
+`;
+const INTAKE_WORKFLOW_CONTENT = `# Intake Workflow
+
+Use this workflow when the human reports a bug, feature, product concern, or operational friction.
+
+1. Validate whether the report is real enough to act on.
+2. Classify the work as bug, product decision, docs/process, implementation, QA, or task.
+3. Choose the smallest operating lane that preserves quality.
+4. Create or update a Project Task with acceptance criteria.
+5. Decide which profile or role should execute, review, or verify the work.
+6. Create a context packet when launching an agent.
+7. Record evidence and follow-up tasks when the work completes.
+`;
+const DECISIONS_NOTE_CONTENT = `# Decisions
+
+Record durable Project decisions here. Keep entries short and link to tasks, notes, context packets,
+commits, external docs, or agent runs when useful.
+
+## Template
+
+### YYYY-MM-DD Decision title
+
+- Decision:
+- Reason:
+- Consequences:
+- Follow-up:
 `;
 const PROJECT_MANAGER_AGENT_CONTENT = `schemaVersion: 1
 id: project-manager
@@ -178,6 +241,11 @@ const PROJECT_SEED_FILES: ProjectSeedFile[] = [
     contents: "",
   },
   {
+    id: "project-roadmap",
+    relativePath: PROJECT_ROADMAP_FILENAME,
+    contents: ROADMAP_CONTENT,
+  },
+  {
     id: "agents-readme",
     relativePath: "agents/README.md",
     contents: AGENTS_README_CONTENT,
@@ -223,9 +291,24 @@ const PROJECT_SEED_FILES: ProjectSeedFile[] = [
     contents: TASKS_README_CONTENT,
   },
   {
+    id: "workflows-readme",
+    relativePath: "workflows/README.md",
+    contents: WORKFLOWS_README_CONTENT,
+  },
+  {
+    id: "intake-workflow",
+    relativePath: "workflows/intake.md",
+    contents: INTAKE_WORKFLOW_CONTENT,
+  },
+  {
     id: "notes-readme",
     relativePath: "notes/README.md",
     contents: "# Notes\n\n",
+  },
+  {
+    id: "decisions-note",
+    relativePath: "notes/decisions.md",
+    contents: DECISIONS_NOTE_CONTENT,
   },
 ];
 
@@ -255,6 +338,7 @@ export async function syncProjectDirectory(input: {
   await fs.mkdir(path.join(cwd, "prompts"), { recursive: true });
   await fs.mkdir(path.join(cwd, "tasks"), { recursive: true });
   await fs.mkdir(path.join(cwd, "notes"), { recursive: true });
+  await fs.mkdir(path.join(cwd, "workflows"), { recursive: true });
   await syncSeedFiles(cwd, input.group.displayName);
   const manifest: ProjectDirectoryManifest = ProjectDirectoryManifestSchema.parse({
     schemaVersion: 1,
