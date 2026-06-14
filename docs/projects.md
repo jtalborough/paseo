@@ -328,6 +328,60 @@ The app exposes those same packets through the Project Context tab. Treat that t
 audit trail for an agent launch: it should answer which task, prompt, files, browser state, and
 Folder grants were handed to the run without requiring the user to inspect YAML manually.
 
+## Migrating an existing agent workspace into a Project
+
+Existing standalone agent folders should become Project Folders first, not be copied wholesale into
+the managed Project directory. The managed Project directory becomes the durable coordination layer;
+the old folder remains the live work surface until its content is intentionally promoted into
+Project files.
+
+Migration path:
+
+1. Create a Sidebar Project with the domain name, such as `Cass Health`.
+2. Add the existing folder, such as `/Users/jta/git-projects/agents/cass`, as an external Project
+   Folder.
+3. Create Project profiles in `agents/*.yaml` for the roles the Project actually needs.
+4. Create Project prompts in `prompts/*.md` that reference the old folder's current operating files
+   instead of duplicating them blindly.
+5. Move durable decisions into `notes/decisions.md`, durable goals into `roadmap.md`, repeatable
+   procedures into `workflows/*.md`, and executable work into `tasks/*.md`.
+6. Launch agents from the Project profile plus a context packet that names the task, selected notes,
+   prompt, Folder grants, provider/model/mode, and evidence expected from the run.
+7. After the run, update the task, decision note, workflow, or roadmap item only when the result
+   changes durable Project knowledge.
+
+For a health-coaching agent such as Cass, the Project should not behave like a code repository even
+if the folder contains scripts and tests. A good Project shape is:
+
+- `roadmap.md`: health coaching outcomes, current focus, and longer-term behavior changes.
+- `workflows/health-check.md`: on-demand health review procedure and safety boundaries.
+- `workflows/workout-logging.md`: trigger, logging command, duplicate guard, and verification.
+- `notes/decisions.md`: cadence decisions such as no noisy daily check-ins, use
+  `scripts/health-data.sh`, and route meal-planning handoffs only when useful.
+- `agents/cass.yaml`: the primary health coach profile, with explicit prompt and Folder grants.
+- `agents/qa-tester.yaml` or a domain-specific auditor profile: verifies scripts, logs, and data
+  access without turning into medical advice.
+- `tasks/*.md`: concrete follow-ups such as repair a data source, review a weekly pattern, update a
+  meal plan, or validate workout logging.
+- `context/packets/*.yaml`: one packet per meaningful interaction, showing which notes, references,
+  scripts, and health data were intentionally handed to the agent.
+
+The methodology for that interaction type is:
+
+```text
+User report or scheduled task
+-> intake workflow validates the request and safety boundary
+-> Project Task captures the concrete work
+-> Cass profile plus selected notes/files creates a context packet
+-> runtime agent acts through explicit Folder tools and approved scripts
+-> verification records evidence, such as command output or data source status
+-> durable changes land in tasks, workflows, decisions, roadmap, or notes
+```
+
+This keeps the agent useful for coaching-style work while preserving auditability. The Project owns
+intent, decisions, tasks, prompts, profiles, and evidence; the external Folder owns scripts,
+templates, reference data, and historical files until they are deliberately moved.
+
 ## Folder boundary
 
 Folders are external directories referenced by a Project. They are not copied or moved into the
