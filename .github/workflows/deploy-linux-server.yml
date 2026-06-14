@@ -53,6 +53,7 @@ jobs:
           npm pack --pack-destination deploy-bundle/packages --workspace=@getpaseo/cli
           cp scripts/deploy/install-linux-release.sh deploy-bundle/
           cp scripts/deploy/pull-linux-release.sh deploy-bundle/
+          node -e 'const fs = require("fs"); fs.writeFileSync("deploy-bundle/BUILD.json", JSON.stringify({ version: "2.0", packageVersion: require("./packages/server/package.json").version, sha: process.env.GITHUB_SHA, branch: process.env.GITHUB_REF_NAME, builtAt: new Date().toISOString() }, null, 2) + "\n");'
           chmod +x deploy-bundle/install-linux-release.sh deploy-bundle/pull-linux-release.sh
 
       - name: Upload deploy artifact

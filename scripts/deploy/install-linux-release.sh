@@ -48,6 +48,11 @@ JSON
 )
 
 printf '%s\n' "$revision" >"$release_dir/REVISION"
+if [ -f "$artifact_dir/BUILD.json" ]; then
+  cp "$artifact_dir/BUILD.json" "$release_dir/BUILD.json"
+else
+  PASEO_BUILD_SHA="$revision" node -e 'const fs = require("fs"); fs.writeFileSync(process.argv[1], JSON.stringify({ version: process.env.PASEO_BUILD_VERSION || "2.0", sha: process.env.PASEO_BUILD_SHA || null, branch: process.env.PASEO_BUILD_BRANCH || null, builtAt: process.env.PASEO_BUILD_TIME || null }, null, 2) + "\n");' "$release_dir/BUILD.json"
+fi
 
 mkdir -p "$deploy_path"
 ln -sfn "$release_dir" "$deploy_path/current.next"

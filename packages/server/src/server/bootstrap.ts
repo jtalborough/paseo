@@ -127,6 +127,7 @@ import { startRelayTransport, type RelayTransportController } from "./relay-tran
 import type { PushNotificationSender } from "./push/notifications.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
+import { resolvePaseoBuildInfo } from "./build-info.js";
 import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
 import type {
   AgentProviderRuntimeSettingsMap,
@@ -299,6 +300,7 @@ export async function createPaseoDaemon(
   const bootstrapStart = performance.now();
   const elapsed = () => `${(performance.now() - bootstrapStart).toFixed(0)}ms`;
   const daemonVersion = resolveDaemonVersion(import.meta.url);
+  const buildInfo = resolvePaseoBuildInfo({ packageVersion: daemonVersion });
   const daemonConfigStore = new DaemonConfigStore(
     config.paseoHome,
     {
@@ -444,6 +446,7 @@ export async function createPaseoDaemon(
       serverId,
       hostname: getHostname(),
       version: daemonVersion,
+      build: buildInfo,
       listen: formatListenTarget(boundListenTarget ?? listenTarget),
     });
   });

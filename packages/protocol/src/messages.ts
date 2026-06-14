@@ -2280,6 +2280,24 @@ const ServerInfoVersionSchema = z.unknown().transform((value): string | null => 
   return trimmed.length > 0 ? trimmed : null;
 });
 
+const ServerInfoBuildSchema = z
+  .object({
+    version: ServerInfoVersionSchema.optional(),
+    packageVersion: ServerInfoVersionSchema.optional(),
+    sha: ServerInfoVersionSchema.optional(),
+    branch: ServerInfoVersionSchema.optional(),
+    builtAt: ServerInfoVersionSchema.optional(),
+  })
+  .passthrough()
+  .transform((build) => ({
+    ...build,
+    version: build.version ?? null,
+    packageVersion: build.packageVersion ?? null,
+    sha: build.sha ?? null,
+    branch: build.branch ?? null,
+    builtAt: build.builtAt ?? null,
+  }));
+
 const ServerCapabilitiesFromUnknownSchema = z
   .unknown()
   .optional()
@@ -2300,6 +2318,7 @@ export const ServerInfoStatusPayloadSchema = z
     serverId: z.string().trim().min(1),
     hostname: ServerInfoHostnameSchema.optional(),
     version: ServerInfoVersionSchema.optional(),
+    build: ServerInfoBuildSchema.optional(),
     capabilities: ServerCapabilitiesFromUnknownSchema,
     // COMPAT(providersSnapshot): added in v0.1.48, remove gating when all clients use snapshot
     features: z

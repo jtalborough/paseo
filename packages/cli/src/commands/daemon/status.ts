@@ -31,6 +31,10 @@ interface DaemonStatus {
   cliNode: string;
   cliVersion: string;
   daemonVersion: string | null;
+  buildVersion: string | null;
+  buildSha: string | null;
+  buildBranch: string | null;
+  buildTime: string | null;
   desktopManaged: boolean;
   providers: ProviderBinaryStatus[];
   note?: string;
@@ -129,6 +133,10 @@ function toStatusRows(status: DaemonStatus): StatusRow[] {
     { key: "CLI Node", value: status.cliNode },
     { key: "CLI", value: status.cliVersion },
     { key: "Daemon Version", value: status.daemonVersion ?? "-" },
+    { key: "Build Version", value: status.buildVersion ?? "-" },
+    { key: "Build Branch", value: status.buildBranch ?? "-" },
+    { key: "Build SHA", value: status.buildSha ?? "-" },
+    { key: "Built At", value: status.buildTime ?? "-" },
   ];
 
   if (status.runningAgents !== null && status.idleAgents !== null) {
@@ -214,11 +222,33 @@ interface DaemonProbeResult {
   connectedDaemon: DaemonStatus["connectedDaemon"];
   localDaemonOverride?: DaemonStatus["localDaemon"];
   daemonVersion?: string | null;
+  buildVersion?: string | null;
+  buildSha?: string | null;
+  buildBranch?: string | null;
+  buildTime?: string | null;
   runningAgents?: number;
   idleAgents?: number;
   daemonNodeOverride?: string;
   daemonProviders?: ProviderBinaryStatus[];
   note?: string;
+}
+
+function extractVersionProbeFields(
+  serverInfo: ReturnType<
+    NonNullable<Awaited<ReturnType<typeof tryConnectToDaemon>>>["getLastServerInfoMessage"]
+  >,
+): Pick<
+  DaemonProbeResult,
+  "daemonVersion" | "buildVersion" | "buildSha" | "buildBranch" | "buildTime"
+> & { supportsDaemonStatusRpc: boolean } {
+  return {
+    daemonVersion: serverInfo?.version ?? null,
+    buildVersion: serverInfo?.build?.version ?? null,
+    buildSha: serverInfo?.build?.sha ?? null,
+    buildBranch: serverInfo?.build?.branch ?? null,
+    buildTime: serverInfo?.build?.builtAt ?? null,
+    supportsDaemonStatusRpc: serverInfo?.features?.daemonStatusRpc === true,
+  };
 }
 
 async function probeDaemonOverWebsocket(args: {
@@ -238,9 +268,8 @@ async function probeDaemonOverWebsocket(args: {
     return { connectedDaemon: "unreachable" };
   }
 
-  const daemonVersion = client.getLastServerInfoMessage()?.version ?? null;
-  const supportsDaemonStatusRpc =
-    client.getLastServerInfoMessage()?.features?.daemonStatusRpc === true;
+  const { daemonVersion, buildVersion, buildSha, buildBranch, buildTime, supportsDaemonStatusRpc } =
+    extractVersionProbeFields(client.getLastServerInfoMessage());
   try {
     const agentsPayload = await client.fetchAgents({ filter: { includeArchived: true } });
     const agents = agentsPayload.entries.map((entry) => entry.agent);
@@ -269,6 +298,10 @@ async function probeDaemonOverWebsocket(args: {
       return {
         connectedDaemon: "reachable",
         daemonVersion,
+        buildVersion,
+        buildSha,
+        buildBranch,
+        buildTime,
         runningAgents,
         idleAgents,
         daemonNodeOverride: "unknown (API reachable, PID unresolved)",
@@ -282,6 +315,10 @@ async function probeDaemonOverWebsocket(args: {
     return {
       connectedDaemon: "reachable",
       daemonVersion,
+      buildVersion,
+      buildSha,
+      buildBranch,
+      buildTime,
       runningAgents,
       idleAgents,
       daemonProviders,
@@ -290,6 +327,10 @@ async function probeDaemonOverWebsocket(args: {
     return {
       connectedDaemon: "reachable",
       daemonVersion,
+      buildVersion,
+      buildSha,
+      buildBranch,
+      buildTime,
       localDaemonOverride: state.running ? "unresponsive" : undefined,
       note: state.running
         ? `Local daemon PID is running but API requests to ${host} failed`
@@ -306,6 +347,10 @@ interface ProbeMergeState {
   localDaemon: DaemonStatus["localDaemon"];
   daemonNode: string;
   daemonVersion: string | null;
+  buildVersion: string | null;
+  buildSha: string | null;
+  buildBranch: string | null;
+  buildTime: string | null;
   runningAgents: number | null;
   idleAgents: number | null;
   daemonProviders: ProviderBinaryStatus[] | undefined;
@@ -319,6 +364,10 @@ function applyProbeToStatus(input: ProbeMergeState): Omit<ProbeMergeState, "prob
     localDaemon: probe.localDaemonOverride ?? input.localDaemon,
     daemonNode: probe.daemonNodeOverride ?? input.daemonNode,
     daemonVersion: probe.daemonVersion !== undefined ? probe.daemonVersion : input.daemonVersion,
+    buildVersion: probe.buildVersion !== undefined ? probe.buildVersion : input.buildVersion,
+    buildSha: probe.buildSha !== undefined ? probe.buildSha : input.buildSha,
+    buildBranch: probe.buildBranch !== undefined ? probe.buildBranch : input.buildBranch,
+    buildTime: probe.buildTime !== undefined ? probe.buildTime : input.buildTime,
     runningAgents: probe.runningAgents !== undefined ? probe.runningAgents : input.runningAgents,
     idleAgents: probe.idleAgents !== undefined ? probe.idleAgents : input.idleAgents,
     daemonProviders: probe.daemonProviders ?? input.daemonProviders,
@@ -370,6 +419,10 @@ export async function runStatusCommand(
   let runningAgents: number | null = null;
   let idleAgents: number | null = null;
   let daemonVersion: string | null = null;
+  let buildVersion: string | null = null;
+  let buildSha: string | null = null;
+  let buildBranch: string | null = null;
+  let buildTime: string | null = null;
   let daemonProviders: ProviderBinaryStatus[] | undefined;
   let note: string | undefined;
 
@@ -385,6 +438,10 @@ export async function runStatusCommand(
       localDaemon,
       daemonNode,
       daemonVersion,
+      buildVersion,
+      buildSha,
+      buildBranch,
+      buildTime,
       runningAgents,
       idleAgents,
       daemonProviders,
@@ -395,6 +452,10 @@ export async function runStatusCommand(
       localDaemon,
       daemonNode,
       daemonVersion,
+      buildVersion,
+      buildSha,
+      buildBranch,
+      buildTime,
       runningAgents,
       idleAgents,
       daemonProviders,
@@ -432,6 +493,10 @@ export async function runStatusCommand(
     cliNode,
     cliVersion,
     daemonVersion,
+    buildVersion,
+    buildSha,
+    buildBranch,
+    buildTime,
     desktopManaged: state.pidInfo?.desktopManaged === true,
     providers,
     note,

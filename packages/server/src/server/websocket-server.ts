@@ -55,6 +55,7 @@ import {
   WebSocketRuntimeMetricsWindow,
   type WebSocketRuntimeCounters,
 } from "./websocket/runtime-metrics.js";
+import { resolvePaseoBuildInfo, type PaseoBuildInfo } from "./build-info.js";
 
 const WS_CLOSE_DAEMON_AUTH_FAILED = 4401;
 
@@ -340,6 +341,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly externalSessionsByKey: Map<string, SessionConnection> = new Map();
   private readonly serverId: string;
   private readonly daemonVersion: string;
+  private readonly buildInfo: PaseoBuildInfo;
   private readonly daemonRuntimeConfig:
     | {
         listen: string | null;
@@ -454,6 +456,7 @@ export class VoiceAssistantWebSocketServer {
       throw new MissingDaemonVersionError();
     }
     this.daemonVersion = daemonVersion.trim();
+    this.buildInfo = resolvePaseoBuildInfo({ packageVersion: this.daemonVersion });
     this.daemonRuntimeConfig = daemonRuntimeConfig;
     this.agentManager = agentManager;
     this.agentStorage = agentStorage;
@@ -1065,6 +1068,7 @@ export class VoiceAssistantWebSocketServer {
       serverId: this.serverId,
       hostname: getHostname(),
       version: this.daemonVersion,
+      build: this.buildInfo,
       ...(this.serverCapabilities ? { capabilities: this.serverCapabilities } : {}),
       features: {
         // COMPAT(providersSnapshot): keep optional until all clients rely on snapshot flow.

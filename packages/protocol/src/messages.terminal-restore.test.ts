@@ -58,4 +58,26 @@ describe("terminal restore schemas", () => {
       }).features?.["terminal-restore-modes"],
     ).toBe(true);
   });
+
+  test("accepts optional build metadata on server info", () => {
+    expect(
+      ServerInfoStatusPayloadSchema.parse({
+        status: "server_info",
+        serverId: "server-1",
+        build: {
+          version: "2.0",
+          packageVersion: "0.1.90-beta.1",
+          sha: "abc123",
+          branch: "jta/dev",
+          builtAt: "2026-06-14T12:00:00.000Z",
+        },
+      }).build,
+    ).toEqual({
+      version: "2.0",
+      packageVersion: "0.1.90-beta.1",
+      sha: "abc123",
+      branch: "jta/dev",
+      builtAt: "2026-06-14T12:00:00.000Z",
+    });
+  });
 });

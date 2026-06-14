@@ -13,7 +13,8 @@ This keeps the server closed to inbound deploy traffic. GitHub never SSHs into t
 ## Linux Server Artifact Build
 
 `.github/workflows/deploy-linux-server.yml` builds the server-side workspace stack, typechecks it,
-packs the daemon/CLI npm workspaces, and uploads an artifact named `paseo-linux-<git-sha>`.
+packs the daemon/CLI npm workspaces, writes build metadata, and uploads an artifact named
+`paseo-linux-<git-sha>`.
 
 The artifact includes:
 
@@ -21,6 +22,7 @@ The artifact includes:
   `@getpaseo/client`, `@getpaseo/server`, and `@getpaseo/cli`
 - `install-linux-release.sh`
 - `pull-linux-release.sh`
+- `BUILD.json` with the Paseo build line, package version, branch, SHA, and build timestamp
 
 The workflow runs on any pushed branch when server-side packages, deploy scripts, lockfiles, or the
 workflow itself change. It can also be run manually from GitHub Actions.
@@ -80,8 +82,13 @@ PASEO_KEEP_RELEASES=5
     node_modules/
     packages/*.tgz
     REVISION
+    BUILD.json
   state/last-deployed
 ```
+
+The daemon exposes this metadata through WebSocket `server_info.build` and HTTP `/api/status`.
+The current beta build line starts at `2.0`; npm package semver remains separate as
+`server_info.version` / `build.packageVersion`.
 
 `current` is swapped atomically with `ln -sfn` + `mv -Tf`.
 
