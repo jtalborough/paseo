@@ -145,6 +145,32 @@ Use this workflow when the human reports a bug, feature, product concern, or ope
 6. Create a context packet when launching an agent.
 7. Record evidence and follow-up tasks when the work completes.
 `;
+const MIGRATE_AGENT_WORKSPACE_WORKFLOW_CONTENT = `# Migrate Agent Workspace
+
+Use this workflow when converting an existing standalone agent folder into a Paseo Project.
+
+1. Create or select the Project that names the domain, not the old folder path.
+2. Add the existing folder as an external Project Folder. Do not copy it wholesale into this
+   managed Project directory.
+3. Inventory the old folder's durable files: identity, workflow, tools, memory, reference data,
+   scripts, templates, tests, and historical notes.
+4. Promote only durable coordination content into Project files:
+   - goals and sequencing -> \`roadmap.md\`
+   - decisions and cadence rules -> \`notes/decisions.md\`
+   - repeatable procedures -> \`workflows/*.md\`
+   - executable follow-ups -> \`tasks/*.md\`
+   - reusable roles -> \`agents/*.yaml\`
+   - reusable instructions -> \`prompts/*.md\`
+5. Keep live scripts, templates, large reference data, and history in the external Folder until the
+   human intentionally moves them.
+6. Create a context packet for the first Project-run agent that names the task, profile, prompt,
+   promoted notes, external Folder grants, and expected evidence.
+7. Verify the migrated Project by launching or drafting one agent from the Project surface and
+   confirming it sees the Project files plus the granted external Folder.
+
+The goal is continuity, not cleanup theater. The old workspace remains useful while the Project
+becomes the durable control plane for future work.
+`;
 const DECISIONS_NOTE_CONTENT = `# Decisions
 
 Record durable Project decisions here. Keep entries short and link to tasks, notes, context packets,
@@ -299,6 +325,11 @@ const PROJECT_SEED_FILES: ProjectSeedFile[] = [
     id: "intake-workflow",
     relativePath: "workflows/intake.md",
     contents: INTAKE_WORKFLOW_CONTENT,
+  },
+  {
+    id: "migrate-agent-workspace-workflow",
+    relativePath: "workflows/migrate-agent-workspace.md",
+    contents: MIGRATE_AGENT_WORKSPACE_WORKFLOW_CONTENT,
   },
   {
     id: "notes-readme",

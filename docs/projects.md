@@ -73,7 +73,8 @@ $PASEO_HOME/projects/{groupId}/
 │   └── README.md
 └── workflows/
     ├── README.md
-    └── intake.md
+    ├── intake.md
+    └── migrate-agent-workspace.md
 ```
 
 This directory is the Project's portable unit and the `cwd` for Project-level agents. Files in it

@@ -64,12 +64,16 @@ describe("Project directory", () => {
     expect(readFileSync(path.join(cwd, "workflows", "intake.md"), "utf8")).toContain(
       "Validate whether the report is real enough to act on",
     );
+    expect(
+      readFileSync(path.join(cwd, "workflows", "migrate-agent-workspace.md"), "utf8"),
+    ).toContain("converting an existing standalone agent folder");
     expect(readFileSync(path.join(cwd, "notes", "decisions.md"), "utf8")).toContain("# Decisions");
     expect(JSON.parse(readFileSync(path.join(cwd, ".paseo-seeds.json"), "utf8"))).toMatchObject({
       schemaVersion: 1,
       seeded: expect.arrayContaining([
         "decisions-note",
         "intake-workflow",
+        "migrate-agent-workspace-workflow",
         "project-roadmap",
         "project-manager-agent",
         "project-manager-prompt",
