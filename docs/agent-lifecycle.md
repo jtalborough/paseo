@@ -96,6 +96,13 @@ A parent that spawns many subagents will see the track grow. There's no automati
 
 Closing a subagent's tab on one client doesn't affect other clients' layouts. This is the expected behavior of decoupled tabs and is consistent with how layouts have always worked. Archive remains the global gesture for cross-client cleanup.
 
+### Agent-to-agent messaging
+
+Agents can create other agents and can inspect their results through existing MCP and lifecycle
+surfaces, but there is not yet a first-class agent-to-agent message thread with durable, visible
+conversation history. That belongs to the product roadmap as a communication layer on top of this
+lifecycle model, not as a replacement for parent/child ownership or archive semantics.
+
 ## Storage
 
 ```
