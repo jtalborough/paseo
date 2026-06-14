@@ -48,6 +48,7 @@ import type {
   GitHubSearchResponse,
   GitHubSearchRequest,
   DirectorySuggestionsResponse,
+  DirectoryBrowseResponse,
   PaseoWorktreeListResponse,
   PaseoWorktreeArchiveResponse,
   ProjectIconResponse,
@@ -370,6 +371,7 @@ type ValidateBranchPayload = ValidateBranchResponse["payload"];
 type BranchSuggestionsPayload = BranchSuggestionsResponse["payload"];
 type GitHubSearchPayload = GitHubSearchResponse["payload"];
 type DirectorySuggestionsPayload = DirectorySuggestionsResponse["payload"];
+type DirectoryBrowsePayload = DirectoryBrowseResponse["payload"];
 type PaseoWorktreeListPayload = PaseoWorktreeListResponse["payload"];
 type PaseoWorktreeArchivePayload = PaseoWorktreeArchiveResponse["payload"];
 type CreatePaseoWorktreePayload = Extract<
@@ -3714,6 +3716,25 @@ export class DaemonClient {
         limit: options.limit,
       },
       responseType: "directory_suggestions_response",
+      timeout: 10000,
+    });
+  }
+
+  async browseDirectory(
+    options: {
+      root?: string;
+      path?: string;
+    },
+    requestId?: string,
+  ): Promise<DirectoryBrowsePayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "directory_browse_request",
+        root: options.root,
+        path: options.path,
+      },
+      responseType: "directory_browse_response",
       timeout: 10000,
     });
   }

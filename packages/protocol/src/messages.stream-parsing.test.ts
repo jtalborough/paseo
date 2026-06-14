@@ -348,6 +348,29 @@ describe("shared messages stream parsing", () => {
     expect(responseParsed.success).toBe(true);
   });
 
+  it("parses directory browse request and response payloads", () => {
+    const requestParsed = SessionInboundMessageSchema.safeParse({
+      type: "directory_browse_request",
+      root: "~",
+      path: "/Users/test/projects",
+      requestId: "req-browse-1",
+    });
+    expect(requestParsed.success).toBe(true);
+
+    const responseParsed = SessionOutboundMessageSchema.safeParse({
+      type: "directory_browse_response",
+      payload: {
+        root: "/Users/test",
+        path: "/Users/test/projects",
+        parentPath: "/Users/test",
+        entries: [{ name: "paseo", path: "/Users/test/projects/paseo" }],
+        error: null,
+        requestId: "req-browse-1",
+      },
+    });
+    expect(responseParsed.success).toBe(true);
+  });
+
   it("rejects websocket envelope for removed agent_stream_snapshot message type", () => {
     const fixture = {
       type: "agent_stream_snapshot",

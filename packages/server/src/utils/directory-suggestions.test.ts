@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isPlatform } from "../test-utils/platform.js";
-import { searchHomeDirectories, searchWorkspaceEntries } from "./directory-suggestions.js";
+import {
+  browseDirectories,
+  searchHomeDirectories,
+  searchWorkspaceEntries,
+} from "./directory-suggestions.js";
 
 const isWindows = isPlatform("win32");
 
@@ -385,5 +389,64 @@ describe("searchWorkspaceEntries", () => {
     for (const heavyDir of heavyDirs) {
       expect(results.some((entry) => entry.path.startsWith(`${heavyDir}/`))).toBe(false);
     }
+  });
+});
+
+describe("browseDirectories", () => {
+  let tempRoot: string;
+  let browseRoot: string;
+  let outsideDir: string;
+
+  beforeEach(() => {
+    tempRoot = realpathSync(mkdtempSync(path.join(tmpdir(), "directory-browse-")));
+    browseRoot = path.join(tempRoot, "root");
+    outsideDir = path.join(tempRoot, "outside");
+
+    mkdirSync(path.join(browseRoot, "projects", "paseo"), { recursive: true });
+    mkdirSync(path.join(browseRoot, "documents"), { recursive: true });
+    mkdirSync(outsideDir, { recursive: true });
+    writeFileSync(path.join(browseRoot, "README.md"), "not a directory\n");
+  });
+
+  afterEach(() => {
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it("lists child directories for the selected root", async () => {
+    const result = await browseDirectories({
+      root: browseRoot,
+      path: ".",
+    });
+
+    expect(result.root).toBe(realpathSync(browseRoot));
+    expect(result.path).toBe(realpathSync(browseRoot));
+    expect(result.parentPath).toBeNull();
+    expect(result.entries).toEqual([
+      { name: "documents", path: path.join(realpathSync(browseRoot), "documents") },
+      { name: "projects", path: path.join(realpathSync(browseRoot), "projects") },
+    ]);
+  });
+
+  it("supports browsing an absolute child path inside the root", async () => {
+    const childPath = path.join(browseRoot, "projects");
+    const result = await browseDirectories({
+      root: browseRoot,
+      path: childPath,
+    });
+
+    expect(result.path).toBe(realpathSync(childPath));
+    expect(result.parentPath).toBe(realpathSync(browseRoot));
+    expect(result.entries).toEqual([
+      { name: "paseo", path: path.join(realpathSync(childPath), "paseo") },
+    ]);
+  });
+
+  it("rejects paths outside the selected root", async () => {
+    await expect(
+      browseDirectories({
+        root: browseRoot,
+        path: outsideDir,
+      }),
+    ).rejects.toThrow("Browse path is outside the selected root");
   });
 });

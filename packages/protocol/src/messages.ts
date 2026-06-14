@@ -1674,6 +1674,13 @@ export const DirectorySuggestionsRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const DirectoryBrowseRequestSchema = z.object({
+  type: z.literal("directory_browse_request"),
+  root: z.string().optional(),
+  path: z.string().optional(),
+  requestId: z.string(),
+});
+
 export const PaseoWorktreeListRequestSchema = z.object({
   type: z.literal("paseo_worktree_list_request"),
   cwd: z.string().optional(),
@@ -2079,6 +2086,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   BranchSuggestionsRequestSchema,
   GitHubSearchRequestSchema,
   DirectorySuggestionsRequestSchema,
+  DirectoryBrowseRequestSchema,
   PaseoWorktreeListRequestSchema,
   PaseoWorktreeArchiveRequestSchema,
   CreatePaseoWorktreeRequestSchema,
@@ -2318,6 +2326,8 @@ export const ServerInfoStatusPayloadSchema = z
         projectAgentProfiles: z.boolean().optional(),
         // COMPAT(projectContextPacketCreate): added in v0.1.X, drop the gate when floor >= v0.1.X.
         projectContextPacketCreate: z.boolean().optional(),
+        // COMPAT(remoteDirectoryBrowse): added in v0.1.X, drop the gate when floor >= v0.1.X.
+        remoteDirectoryBrowse: z.boolean().optional(),
       })
       .optional(),
   })
@@ -3579,6 +3589,23 @@ export const DirectorySuggestionsResponseSchema = z.object({
   }),
 });
 
+export const DirectoryBrowseResponseSchema = z.object({
+  type: z.literal("directory_browse_response"),
+  payload: z.object({
+    root: z.string(),
+    path: z.string(),
+    parentPath: z.string().nullable(),
+    entries: z.array(
+      z.object({
+        name: z.string(),
+        path: z.string(),
+      }),
+    ),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
+});
+
 const PaseoWorktreeSchema = z.object({
   worktreePath: z.string(),
   createdAt: z.string(),
@@ -4000,6 +4027,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   BranchSuggestionsResponseSchema,
   GitHubSearchResponseSchema,
   DirectorySuggestionsResponseSchema,
+  DirectoryBrowseResponseSchema,
   PaseoWorktreeListResponseSchema,
   PaseoWorktreeArchiveResponseSchema,
   CreatePaseoWorktreeResponseSchema,
@@ -4307,6 +4335,8 @@ export type GitHubSearchResponse = z.infer<typeof GitHubSearchResponseSchema>;
 export type CreatePaseoWorktreeRequest = z.infer<typeof CreatePaseoWorktreeRequestSchema>;
 export type DirectorySuggestionsRequest = z.infer<typeof DirectorySuggestionsRequestSchema>;
 export type DirectorySuggestionsResponse = z.infer<typeof DirectorySuggestionsResponseSchema>;
+export type DirectoryBrowseRequest = z.infer<typeof DirectoryBrowseRequestSchema>;
+export type DirectoryBrowseResponse = z.infer<typeof DirectoryBrowseResponseSchema>;
 export type PaseoWorktreeListRequest = z.infer<typeof PaseoWorktreeListRequestSchema>;
 export type PaseoWorktreeListResponse = z.infer<typeof PaseoWorktreeListResponseSchema>;
 export type PaseoWorktreeArchiveRequest = z.infer<typeof PaseoWorktreeArchiveRequestSchema>;

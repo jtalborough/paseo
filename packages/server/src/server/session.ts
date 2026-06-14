@@ -23,6 +23,7 @@ import {
   type CloseItemsRequest,
   type SubscribeCheckoutDiffRequest,
   type UnsubscribeCheckoutDiffRequest,
+  type DirectoryBrowseRequest,
   type DirectorySuggestionsRequest,
   type ProjectPlacementPayload,
   type WorkspaceSetupSnapshot,
@@ -217,7 +218,11 @@ import {
 import { validateBranchSlug } from "@getpaseo/protocol/branch-slug";
 import { getProjectIcon } from "../utils/project-icon.js";
 import { expandTilde } from "../utils/path.js";
-import { searchHomeDirectories, searchWorkspaceEntries } from "../utils/directory-suggestions.js";
+import {
+  browseDirectories,
+  searchHomeDirectories,
+  searchWorkspaceEntries,
+} from "../utils/directory-suggestions.js";
 import { toCheckoutError } from "./checkout-git-utils.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import {
@@ -2163,6 +2168,8 @@ export class Session {
         return this.handleBranchSuggestionsRequest(msg);
       case "directory_suggestions_request":
         return this.handleDirectorySuggestionsRequest(msg);
+      case "directory_browse_request":
+        return this.handleDirectoryBrowseRequest(msg);
       case "subscribe_checkout_diff_request":
         return this.handleSubscribeCheckoutDiffRequest(msg);
       case "unsubscribe_checkout_diff_request":
@@ -5811,6 +5818,40 @@ export class Session {
         type: "directory_suggestions_response",
         payload: {
           directories: [],
+          entries: [],
+          error: error instanceof Error ? error.message : String(error),
+          requestId,
+        },
+      });
+    }
+  }
+
+  private async handleDirectoryBrowseRequest(msg: DirectoryBrowseRequest): Promise<void> {
+    const { requestId } = msg;
+    const root = expandTilde(msg.root?.trim() || (process.env.HOME ?? homedir()));
+    try {
+      const result = await browseDirectories({
+        root,
+        path: msg.path,
+      });
+      this.emit({
+        type: "directory_browse_response",
+        payload: {
+          root: result.root,
+          path: result.path,
+          parentPath: result.parentPath,
+          entries: result.entries,
+          error: null,
+          requestId,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "directory_browse_response",
+        payload: {
+          root,
+          path: msg.path?.trim() || ".",
+          parentPath: null,
           entries: [],
           error: error instanceof Error ? error.message : String(error),
           requestId,

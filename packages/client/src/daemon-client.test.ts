@@ -2028,6 +2028,65 @@ test("requests directory suggestions via RPC", async () => {
   });
 });
 
+test("requests directory browsing via RPC", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const promise = client.browseDirectory(
+    {
+      root: "~",
+      path: "/Users/test/projects",
+    },
+    "req-browse",
+  );
+
+  expect(mock.sent).toHaveLength(1);
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request.type).toBe("directory_browse_request");
+  expect(request.root).toBe("~");
+  expect(request.path).toBe("/Users/test/projects");
+  expect(request.requestId).toBe("req-browse");
+
+  mock.triggerMessage(
+    JSON.stringify({
+      type: "session",
+      message: {
+        type: "directory_browse_response",
+        payload: {
+          root: "/Users/test",
+          path: "/Users/test/projects",
+          parentPath: "/Users/test",
+          entries: [{ name: "paseo", path: "/Users/test/projects/paseo" }],
+          error: null,
+          requestId: "req-browse",
+        },
+      },
+    }),
+  );
+
+  await expect(promise).resolves.toEqual({
+    root: "/Users/test",
+    path: "/Users/test/projects",
+    parentPath: "/Users/test",
+    entries: [{ name: "paseo", path: "/Users/test/projects/paseo" }],
+    error: null,
+    requestId: "req-browse",
+  });
+});
+
 test("requests checkout merge from base via RPC", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

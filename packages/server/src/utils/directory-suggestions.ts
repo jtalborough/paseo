@@ -28,6 +28,23 @@ export interface SearchWorkspaceEntriesOptions {
   maxEntriesScanned?: number;
 }
 
+export interface BrowseDirectoryOptions {
+  root: string;
+  path?: string;
+}
+
+export interface BrowseDirectoryEntry {
+  name: string;
+  path: string;
+}
+
+export interface BrowseDirectoryResult {
+  root: string;
+  path: string;
+  parentPath: string | null;
+  entries: BrowseDirectoryEntry[];
+}
+
 export type WorkspaceMatchMode = "fuzzy" | "suffix";
 
 const DEFAULT_LIMIT = 30;
@@ -182,6 +199,44 @@ export async function searchWorkspaceEntries(
     maxDepth: options.maxDepth ?? DEFAULT_MAX_DEPTH,
     maxEntriesScanned: options.maxEntriesScanned ?? DEFAULT_MAX_DIRECTORIES_SCANNED,
   });
+}
+
+export async function browseDirectories(
+  options: BrowseDirectoryOptions,
+): Promise<BrowseDirectoryResult> {
+  const root = await resolveDirectory(options.root);
+  if (!root) {
+    throw new Error("Browse root is not a directory");
+  }
+  const requestedPath = normalizeBrowsePath(options.path);
+  const absolutePath = path.resolve(root, requestedPath);
+  const directory = await resolveDirectory(absolutePath);
+  if (!directory || !isPathInsideRoot(root, directory)) {
+    throw new Error("Browse path is outside the selected root");
+  }
+
+  const entries = await listChildDirectories({
+    directory,
+    homeRoot: root,
+  });
+  const normalizedEntries = entries
+    .map((entry) => ({
+      name: entry.name,
+      path: entry.absolutePath,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  return {
+    root,
+    path: directory,
+    parentPath: directory === root ? null : path.dirname(directory),
+    entries: normalizedEntries,
+  };
+}
+
+function normalizeBrowsePath(value: string | undefined): string {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : ".";
 }
 
 function normalizeLimit(limit: number | undefined): number {

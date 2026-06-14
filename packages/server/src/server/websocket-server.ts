@@ -1091,6 +1091,8 @@ export class VoiceAssistantWebSocketServer {
         projectAgentProfiles: true,
         // COMPAT(projectContextPacketCreate): added in v0.1.X, drop the gate when floor >= v0.1.X.
         projectContextPacketCreate: true,
+        // COMPAT(remoteDirectoryBrowse): added in v0.1.X, drop the gate when floor >= v0.1.X.
+        remoteDirectoryBrowse: true,
       },
     };
   }
