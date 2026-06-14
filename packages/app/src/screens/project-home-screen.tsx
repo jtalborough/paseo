@@ -203,20 +203,22 @@ export function ProjectHomeScreen({
   const handleOpenOperatingStep = useCallback(
     (stepId: ProjectOperatingStep["id"]) => {
       switch (stepId) {
+        case "roadmap":
+        case "workflows":
+        case "files":
+          handleBrowseFiles();
+          break;
         case "tasks":
           handleBrowseTasks();
           break;
         case "agents":
           handleBrowseAgents();
           break;
-        case "notes":
+        case "decisions":
           handleBrowseNotes();
           break;
         case "context":
           handleBrowseContext();
-          break;
-        case "files":
-          handleBrowseFiles();
           break;
       }
     },
@@ -569,12 +571,14 @@ function getProjectOperatingStepIcon(stepId: ProjectOperatingStep["id"]): typeof
       return ThemedListTodo;
     case "agents":
       return ThemedBot;
-    case "notes":
+    case "decisions":
       return ThemedNotebookText;
-    case "context":
-      return ThemedScrollText;
+    case "roadmap":
+    case "workflows":
     case "files":
       return ThemedFileText;
+    case "context":
+      return ThemedScrollText;
   }
 }
 

@@ -15,9 +15,15 @@ describe("buildProjectOperatingPath", () => {
       }),
     ).toEqual([
       {
+        id: "roadmap",
+        title: "Set direction",
+        detail: "Capture outcomes, sequencing, and risks in roadmap.md.",
+        actionLabel: "Open files",
+      },
+      {
         id: "tasks",
         title: "Shape the work",
-        detail: "Create roadmap items, bugs, follow-ups, and acceptance criteria.",
+        detail: "Create executable work, bugs, follow-ups, and acceptance criteria.",
         actionLabel: "Open tasks",
       },
       {
@@ -27,9 +33,15 @@ describe("buildProjectOperatingPath", () => {
         actionLabel: "Open agents",
       },
       {
-        id: "notes",
+        id: "workflows",
+        title: "Define workflows",
+        detail: "Keep repeatable intake, QA, release, or domain procedures in workflows/.",
+        actionLabel: "Open files",
+      },
+      {
+        id: "decisions",
         title: "Keep decisions",
-        detail: "Store product direction, project notes, and durable operating context.",
+        detail: "Record durable calls and consequences in notes/decisions.md.",
         actionLabel: "Open notes",
       },
       {

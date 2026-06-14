@@ -2,7 +2,14 @@ import type { ProjectAgentProfileEntry } from "@getpaseo/client/internal/daemon-
 import type { WorkspaceTabTarget } from "@/stores/workspace-tabs-store";
 import { buildProjectAgentProfileLaunchLabels } from "@/projects/project-agent-launch-labels";
 
-export type ProjectOperatingStepId = "tasks" | "agents" | "notes" | "context" | "files";
+export type ProjectOperatingStepId =
+  | "roadmap"
+  | "tasks"
+  | "agents"
+  | "workflows"
+  | "decisions"
+  | "context"
+  | "files";
 
 export interface ProjectOperatingStep {
   id: ProjectOperatingStepId;
@@ -18,9 +25,15 @@ export function buildProjectOperatingPath(input: {
 }): ProjectOperatingStep[] {
   return [
     {
+      id: "roadmap",
+      title: "Set direction",
+      detail: "Capture outcomes, sequencing, and risks in roadmap.md.",
+      actionLabel: "Open files",
+    },
+    {
       id: "tasks",
       title: "Shape the work",
-      detail: "Create roadmap items, bugs, follow-ups, and acceptance criteria.",
+      detail: "Create executable work, bugs, follow-ups, and acceptance criteria.",
       actionLabel: "Open tasks",
     },
     {
@@ -33,9 +46,15 @@ export function buildProjectOperatingPath(input: {
       actionLabel: "Open agents",
     },
     {
-      id: "notes",
+      id: "workflows",
+      title: "Define workflows",
+      detail: "Keep repeatable intake, QA, release, or domain procedures in workflows/.",
+      actionLabel: "Open files",
+    },
+    {
+      id: "decisions",
       title: "Keep decisions",
-      detail: "Store product direction, project notes, and durable operating context.",
+      detail: "Record durable calls and consequences in notes/decisions.md.",
       actionLabel: "Open notes",
     },
     {
