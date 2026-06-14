@@ -9,7 +9,10 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ProjectAgentProfileEntry } from "@getpaseo/client/internal/daemon-client";
+import type {
+  DaemonClient,
+  ProjectAgentProfileEntry,
+} from "@getpaseo/client/internal/daemon-client";
 import type { ProjectAgentProfile } from "@getpaseo/protocol/project-context/types";
 import {
   Bot,
@@ -942,6 +945,9 @@ function ProjectAgentProfilesSection({
             key={entry.path}
             entry={entry}
             isFirst={index === 0}
+            client={client}
+            launchCwd={launchCwd}
+            projectDirectory={projectDirectory}
             folders={folders}
             onEdit={startEdit}
             onUse={handleUseProfile}
@@ -1056,6 +1062,9 @@ function ProjectAgentProfilesSection({
 function ProjectAgentProfileRow({
   entry,
   isFirst,
+  client,
+  launchCwd,
+  projectDirectory,
   folders,
   onEdit,
   onUse,
@@ -1063,6 +1072,9 @@ function ProjectAgentProfileRow({
 }: {
   entry: ProjectAgentProfileEntry;
   isFirst: boolean;
+  client: DaemonClient | null;
+  launchCwd: string | null | undefined;
+  projectDirectory: string | null | undefined;
   folders: HostProjectListItem[];
   onEdit: (entry: ProjectAgentProfileEntry) => void;
   onUse: (entry: ProjectAgentProfileEntry) => void;
@@ -1082,9 +1094,36 @@ function ProjectAgentProfileRow({
   const handleEdit = useCallback(() => onEdit(entry), [entry, onEdit]);
   const handleUse = useCallback(() => onUse(entry), [entry, onUse]);
   const handleDelete = useCallback(() => onDelete(entry), [entry, onDelete]);
+  const instructionAuthorityQuery = useQuery({
+    queryKey: [
+      "project-profile-instruction-authority",
+      launchCwd ?? null,
+      projectDirectory ?? null,
+      entry.path,
+      JSON.stringify(profile.folderGrants),
+      JSON.stringify(folders.map((folder) => [folder.projectKey, folder.iconWorkingDir])),
+    ],
+    enabled: Boolean(client && launchCwd),
+    queryFn: async () =>
+      client
+        ? resolveProjectInstructionAuthority({
+            client,
+            launchCwd,
+            projectDirectory,
+            folderGrants: profile.folderGrants,
+            folders,
+          })
+        : null,
+    staleTime: 2_000,
+  });
   const briefing = useMemo(
-    () => buildProfileLaunchBriefing({ profile, path: entry.path }),
-    [entry.path, profile],
+    () =>
+      buildProfileLaunchBriefing({
+        profile,
+        path: entry.path,
+        instructionAuthority: instructionAuthorityQuery.data ?? null,
+      }),
+    [entry.path, instructionAuthorityQuery.data, profile],
   );
   const primaryDetails = briefing.items
     .filter((item) => item.label !== "Packet")

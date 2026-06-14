@@ -64,6 +64,49 @@ describe("project launch briefing", () => {
     expect(briefing.warnings).toEqual(["Prompt file is not set", "No default tools"]);
   });
 
+  test("surfaces instruction authority before profile launch", () => {
+    const briefing = buildProfileLaunchBriefing({
+      path: "agents/qa-tester.yaml",
+      profile: {
+        schemaVersion: 1,
+        id: "qa-tester",
+        name: "QA Tester",
+        provider: "codex",
+        model: "gpt-5.4",
+        prompt: "prompts/qa-tester.md",
+        defaultTools: ["project-files"],
+        folderGrants: [{ projectId: "app", path: ".", mode: "read" }],
+      },
+      instructionAuthority: {
+        launchCwd: "/tmp/project",
+        instructionSources: [
+          {
+            path: "/tmp/project/AGENTS.md",
+            sourceType: "agents",
+            scope: "project-directory",
+            projectId: null,
+            note: "Provider-neutral folder instructions",
+          },
+        ],
+        instructionWarnings: [
+          "Folder/provider instructions may constrain or override Project prompt behavior.",
+        ],
+      },
+    });
+
+    expect(briefing.readinessLabel).toBe("1 note");
+    expect(briefing.badgeVariant).toBe("warning");
+    expect(briefing.items).toContainEqual({ label: "Launch cwd", value: "/tmp/project" });
+    expect(briefing.items).toContainEqual({
+      label: "Instruction sources",
+      value: "1 instruction source",
+    });
+    expect(briefing.warnings).toEqual([
+      "Folder/provider instructions may constrain or override Project prompt behavior.",
+    ]);
+    expect(briefing.accessSummary).toEqual(["1 tool", "1 folder grant", "1 instruction source"]);
+  });
+
   test("summarizes packet audit coverage", () => {
     const briefing = buildPacketLaunchBriefing({
       path: "context/packets/qa-tester.yaml",

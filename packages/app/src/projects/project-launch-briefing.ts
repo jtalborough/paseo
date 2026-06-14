@@ -3,6 +3,7 @@ import type {
   ProjectContextPacket,
   ProjectContextFolderGrant,
 } from "@getpaseo/protocol/project-context/types";
+import type { ProjectInstructionAuthority } from "@/projects/project-instruction-authority";
 
 export interface LaunchBriefingItem {
   label: string;
@@ -34,11 +35,13 @@ export interface ProjectLaunchBriefing {
 export function buildProfileLaunchBriefing(input: {
   profile: ProjectAgentProfile;
   path: string;
+  instructionAuthority?: ProjectInstructionAuthority | null;
 }): ProjectLaunchBriefing {
-  const { profile, path } = input;
+  const { profile, path, instructionAuthority } = input;
   const warnings = compact([
     profile.prompt?.trim() ? null : "Prompt file is not set",
     profile.defaultTools.length ? null : "No default tools",
+    ...(instructionAuthority?.instructionWarnings ?? []),
   ]);
   const providerModel = formatProviderModel(profile.provider, profile.model) ?? "Default provider";
   const items = compactItems([
@@ -48,6 +51,15 @@ export function buildProfileLaunchBriefing(input: {
     profile.defaultTools.length ? { label: "Tools", value: profile.defaultTools.join(", ") } : null,
     profile.folderGrants.length
       ? { label: "Folder grants", value: formatFolderGrantCount(profile.folderGrants) }
+      : null,
+    instructionAuthority?.launchCwd
+      ? { label: "Launch cwd", value: instructionAuthority.launchCwd }
+      : null,
+    instructionAuthority?.instructionSources.length
+      ? {
+          label: "Instruction sources",
+          value: formatInstructionSourceCount(instructionAuthority.instructionSources.length),
+        }
       : null,
     { label: "Packet", value: "Created when launched" },
   ]);
@@ -64,6 +76,7 @@ export function buildProfileLaunchBriefing(input: {
     accessSummary: buildAccessSummary({
       tools: profile.defaultTools.length,
       folderGrants: profile.folderGrants.length,
+      instructionSources: instructionAuthority?.instructionSources.length,
     }),
   };
 }
@@ -87,7 +100,10 @@ export function buildPacketLaunchBriefing(input: {
     packet.task ? { label: "Task", value: packet.task } : null,
     packet.launchCwd ? { label: "Launch cwd", value: packet.launchCwd } : null,
     packet.instructionSources.length
-      ? { label: "Instruction sources", value: formatInstructionSourceCount(packet) }
+      ? {
+          label: "Instruction sources",
+          value: formatInstructionSourceCount(packet.instructionSources.length),
+        }
       : null,
     packet.createdByAgentId ? { label: "Created by", value: packet.createdByAgentId } : null,
     packet.launchedAgentId ? { label: "Agent", value: packet.launchedAgentId } : null,
@@ -169,8 +185,8 @@ function buildAccessSummary(input: {
   ]);
 }
 
-function formatInstructionSourceCount(packet: ProjectContextPacket): string {
-  const count = formatCount(packet.instructionSources.length, "instruction source");
+function formatInstructionSourceCount(sourceCount: number): string {
+  const count = formatCount(sourceCount, "instruction source");
   return count ?? "0 instruction sources";
 }
 

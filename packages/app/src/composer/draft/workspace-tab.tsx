@@ -63,7 +63,7 @@ import type { WorkspaceDraftTabSetup } from "@/stores/workspace-tabs-store";
 import { useToast } from "@/contexts/toast-context";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { useProjectGroups } from "@/hooks/use-project-groups";
-import { useHostProjects } from "@/projects/host-projects";
+import { useHostProjects, type HostProjectListItem } from "@/projects/host-projects";
 import { buildProfileLaunchBriefing } from "@/projects/project-launch-briefing";
 import { resolveProjectInstructionAuthority } from "@/projects/project-instruction-authority";
 import { buildProjectAgentProfileLaunchLabels } from "@/projects/project-agent-launch-labels";
@@ -1167,6 +1167,10 @@ function DraftAgentProfilesPanel({
           <DraftAgentProfileRow
             key={entry.path}
             entry={entry}
+            client={client}
+            launchCwd={launchCwd}
+            projectDirectory={projectDirectory}
+            folders={folders}
             onEdit={handleEditProfile}
             onUse={handleUseProfile}
             onDelete={handleDeleteProfile}
@@ -1277,11 +1281,19 @@ function DraftAgentProfilesPanel({
 
 function DraftAgentProfileRow({
   entry,
+  client,
+  launchCwd,
+  projectDirectory,
+  folders,
   onEdit,
   onUse,
   onDelete,
 }: {
   entry: ProjectAgentProfileEntry;
+  client: DaemonClient | null;
+  launchCwd: string | null;
+  projectDirectory: string | null;
+  folders: readonly HostProjectListItem[];
   onEdit: (entry: ProjectAgentProfileEntry) => void;
   onUse: (entry: ProjectAgentProfileEntry) => Promise<void>;
   onDelete: (entry: ProjectAgentProfileEntry) => void;
@@ -1292,9 +1304,36 @@ function DraftAgentProfileRow({
   }, [entry, onUse]);
   const handleDelete = useCallback(() => onDelete(entry), [entry, onDelete]);
   const profile = entry.profile;
+  const instructionAuthorityQuery = useQuery({
+    queryKey: [
+      "draft-profile-instruction-authority",
+      launchCwd,
+      projectDirectory,
+      entry.path,
+      JSON.stringify(profile.folderGrants),
+      JSON.stringify(folders.map((folder) => [folder.projectKey, folder.iconWorkingDir])),
+    ],
+    enabled: Boolean(client && launchCwd),
+    queryFn: async () =>
+      client
+        ? resolveProjectInstructionAuthority({
+            client,
+            launchCwd,
+            projectDirectory,
+            folderGrants: profile.folderGrants,
+            folders,
+          })
+        : null,
+    staleTime: 2_000,
+  });
   const briefing = useMemo(
-    () => buildProfileLaunchBriefing({ profile, path: entry.path }),
-    [entry.path, profile],
+    () =>
+      buildProfileLaunchBriefing({
+        profile,
+        path: entry.path,
+        instructionAuthority: instructionAuthorityQuery.data ?? null,
+      }),
+    [entry.path, instructionAuthorityQuery.data, profile],
   );
   const primaryDetails = briefing.items
     .filter((item) => item.label !== "Packet")

@@ -269,6 +269,19 @@ This is intentionally shallow. Initial detection covers known files such as `AGE
 the full effective prompt or provider precedence. The product contract is provenance first:
 show what was detected, record it in the packet, and make hidden authority visible enough for review.
 
+Instruction authority should appear before and after launch:
+
+- Before launch, profile rows and launch briefings should show detected instruction sources and the
+  warning that Folder/provider instructions may constrain or override Project prompt behavior.
+- At launch, the same detected sources and warnings should be written into the context packet.
+- After launch, Project Context should show the packet so the team can compare what the user saw,
+  what the agent received, and what evidence came back.
+
+That gives the beta self-improvement loop something concrete to inspect: when a run goes wrong, the
+team can ask whether the authority stack was visible, whether the packet matched the launch surface,
+and whether a follow-up task should change prompts, folder instructions, grants, or provider
+defaults.
+
 Skills are workflow affordances layered on top of this Project model:
 
 - Global/user skills are installed outside the Project and may appear differently by provider.
