@@ -15,8 +15,10 @@ import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-
 import { useSessionStore } from "@/stores/session-store";
 import { useRecommendedProjectPaths } from "@/stores/session-store-hooks";
 import {
+  buildRemoteFolderBreadcrumbSegments,
   buildRemoteFolderBrowseRoots,
   buildRemoteFolderBrowserRows,
+  type RemoteFolderBreadcrumbSegment,
   type RemoteFolderBrowserRow,
   type RemoteFolderBrowseRoot,
 } from "@/components/project-folder-browser-core";
@@ -191,11 +193,57 @@ function BrowseRowIcon({ kind, color }: { kind: RemoteFolderBrowserRow["kind"]; 
   return <Folder size={16} strokeWidth={2.2} color={color} />;
 }
 
+interface BreadcrumbSegmentButtonProps {
+  segment: RemoteFolderBreadcrumbSegment;
+  active: boolean;
+  onPress: (path: string) => void;
+}
+
+function BreadcrumbSegmentButton({ segment, active, onPress }: BreadcrumbSegmentButtonProps) {
+  const { theme } = useUnistyles();
+  const handlePress = useCallback(() => onPress(segment.path), [onPress, segment.path]);
+  const accessibilityState = useMemo(() => ({ selected: active }), [active]);
+  const buttonStyle = useMemo(
+    () => [
+      styles.breadcrumbButton,
+      {
+        backgroundColor: active ? theme.colors.surface1 : theme.colors.surface0,
+        borderColor: active ? theme.colors.primary : theme.colors.border,
+      },
+    ],
+    [
+      active,
+      theme.colors.border,
+      theme.colors.primary,
+      theme.colors.surface0,
+      theme.colors.surface1,
+    ],
+  );
+  const textStyle = useMemo(
+    () => [styles.breadcrumbButtonText, { color: theme.colors.foreground }],
+    [theme.colors.foreground],
+  );
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={accessibilityState}
+      onPress={handlePress}
+      style={buttonStyle}
+    >
+      <Text style={textStyle} numberOfLines={1}>
+        {segment.label}
+      </Text>
+    </Pressable>
+  );
+}
+
 type HostRuntimeClient = NonNullable<ReturnType<typeof useHostRuntimeClient>>;
 
 interface RemoteFolderBrowserState {
   browseRoots: RemoteFolderBrowseRoot[];
   selectedBrowseRoot: RemoteFolderBrowseRoot | null;
+  breadcrumbSegments: RemoteFolderBreadcrumbSegment[];
   browseRows: RemoteFolderBrowserRow[];
   browseErrorMessage: string | null;
   isFetching: boolean;
@@ -290,10 +338,20 @@ function useRemoteFolderBrowser(input: {
       directoryBrowseQuery.data?.path,
     ],
   );
+  const breadcrumbSegments = useMemo(
+    () =>
+      buildRemoteFolderBreadcrumbSegments({
+        rootLabel: selectedBrowseRoot?.label ?? "Root",
+        rootPath: directoryBrowseQuery.data?.root ?? null,
+        currentPath: directoryBrowseQuery.data?.path ?? null,
+      }),
+    [directoryBrowseQuery.data?.path, directoryBrowseQuery.data?.root, selectedBrowseRoot?.label],
+  );
 
   return {
     browseRoots,
     selectedBrowseRoot,
+    breadcrumbSegments,
     browseRows,
     browseErrorMessage: getBrowseErrorMessage(
       directoryBrowseQuery.error,
@@ -328,6 +386,7 @@ function RemoteFolderBrowseSection({
   isConnected,
   browseRoots,
   selectedBrowseRoot,
+  breadcrumbSegments,
   browseRows,
   browseErrorMessage,
   isFetching,
@@ -337,6 +396,12 @@ function RemoteFolderBrowseSection({
   handleBrowseDirectory,
   onSelectPath,
 }: RemoteFolderBrowseSectionProps) {
+  const { theme } = useUnistyles();
+  const breadcrumbSeparatorStyle = useMemo(
+    () => [styles.breadcrumbSeparator, { color: theme.colors.foregroundMuted }],
+    [theme.colors.foregroundMuted],
+  );
+
   if (!supported) {
     if (!isConnected) {
       return null;
@@ -363,6 +428,25 @@ function RemoteFolderBrowseSection({
           />
         ))}
       </ScrollView>
+      {breadcrumbSegments.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="always"
+          contentContainerStyle={styles.breadcrumbRow}
+        >
+          {breadcrumbSegments.map((segment, index) => (
+            <View key={segment.path} style={styles.breadcrumbSegment}>
+              {index > 0 ? <Text style={breadcrumbSeparatorStyle}>/</Text> : null}
+              <BreadcrumbSegmentButton
+                segment={segment}
+                active={index === breadcrumbSegments.length - 1}
+                onPress={handleBrowseDirectory}
+              />
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
       {browseErrorMessage ? <Text style={errorTextStyle}>{browseErrorMessage}</Text> : null}
       {isFetching && browseRows.length === 0 ? (
         <Text style={emptyTextStyle}>Loading remote directories...</Text>
@@ -767,6 +851,36 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
   },
   rootButtonText: {
+    minWidth: 0,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+  },
+  breadcrumbRow: {
+    paddingHorizontal: theme.spacing[4],
+    paddingBottom: theme.spacing[2],
+    gap: theme.spacing[1],
+    alignItems: "center",
+  },
+  breadcrumbSegment: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    maxWidth: 220,
+  },
+  breadcrumbSeparator: {
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+  },
+  breadcrumbButton: {
+    maxWidth: 200,
+    minHeight: 28,
+    paddingHorizontal: theme.spacing[2],
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  breadcrumbButtonText: {
     minWidth: 0,
     fontSize: theme.fontSize.sm,
     lineHeight: 18,

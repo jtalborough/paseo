@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRemoteFolderBreadcrumbSegments,
   buildRemoteFolderBrowseRoots,
   buildRemoteFolderBrowserRows,
 } from "./project-folder-browser-core";
@@ -29,6 +30,46 @@ describe("buildRemoteFolderBrowseRoots", () => {
         root: "/opt/workspaces/",
       },
     ]);
+  });
+});
+
+describe("buildRemoteFolderBreadcrumbSegments", () => {
+  it("builds segments relative to the selected root", () => {
+    expect(
+      buildRemoteFolderBreadcrumbSegments({
+        rootLabel: "Home",
+        rootPath: "/Users/jta",
+        currentPath: "/Users/jta/projects/paseo",
+      }),
+    ).toEqual([
+      { label: "Home", path: "/Users/jta" },
+      { label: "projects", path: "/Users/jta/projects" },
+      { label: "paseo", path: "/Users/jta/projects/paseo" },
+    ]);
+  });
+
+  it("uses filesystem root as the first segment", () => {
+    expect(
+      buildRemoteFolderBreadcrumbSegments({
+        rootLabel: "Filesystem",
+        rootPath: "/",
+        currentPath: "/opt/paseo",
+      }),
+    ).toEqual([
+      { label: "/", path: "/" },
+      { label: "opt", path: "/opt" },
+      { label: "paseo", path: "/opt/paseo" },
+    ]);
+  });
+
+  it("falls back to the current path when it is outside the selected root", () => {
+    expect(
+      buildRemoteFolderBreadcrumbSegments({
+        rootLabel: "Project",
+        rootPath: "/srv/project",
+        currentPath: "/tmp/outside",
+      }),
+    ).toEqual([{ label: "/tmp/outside", path: "/tmp/outside" }]);
   });
 });
 

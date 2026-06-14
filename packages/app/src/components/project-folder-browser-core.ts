@@ -9,6 +9,11 @@ export interface RemoteFolderBrowseEntry {
   path: string;
 }
 
+export interface RemoteFolderBreadcrumbSegment {
+  label: string;
+  path: string;
+}
+
 export type RemoteFolderBrowserRow =
   | {
       kind: "current";
@@ -79,9 +84,62 @@ export function buildRemoteFolderBrowserRows(input: {
   return rows;
 }
 
+export function buildRemoteFolderBreadcrumbSegments(input: {
+  rootLabel: string;
+  rootPath: string | null;
+  currentPath: string | null;
+}): RemoteFolderBreadcrumbSegment[] {
+  if (!input.rootPath || !input.currentPath) {
+    return [];
+  }
+
+  const rootPath = normalizePath(input.rootPath);
+  const currentPath = normalizePath(input.currentPath);
+  const rootLabel = rootPath === "/" ? "/" : input.rootLabel;
+
+  if (currentPath === rootPath) {
+    return [{ label: rootLabel, path: rootPath }];
+  }
+
+  const relativePath = getRelativePathWithinRoot(rootPath, currentPath);
+  if (relativePath === null) {
+    return [{ label: currentPath, path: currentPath }];
+  }
+
+  const segments: RemoteFolderBreadcrumbSegment[] = [{ label: rootLabel, path: rootPath }];
+  let segmentPath = rootPath === "/" ? "" : rootPath;
+  for (const part of relativePath.split("/")) {
+    if (!part) {
+      continue;
+    }
+    segmentPath = segmentPath ? `${segmentPath}/${part}` : `/${part}`;
+    segments.push({ label: part, path: segmentPath });
+  }
+  return segments;
+}
+
 function basename(path: string): string {
   const normalized = path.replace(/\/+$/, "");
   const lastSlash = normalized.lastIndexOf("/");
   const name = lastSlash === -1 ? normalized : normalized.slice(lastSlash + 1);
   return name || path;
+}
+
+function normalizePath(value: string): string {
+  if (value === "/") {
+    return value;
+  }
+  const normalized = value.replace(/\/+$/, "");
+  return normalized || "/";
+}
+
+function getRelativePathWithinRoot(rootPath: string, currentPath: string): string | null {
+  if (rootPath === "/") {
+    return currentPath.replace(/^\/+/, "");
+  }
+  const prefix = `${rootPath}/`;
+  if (!currentPath.startsWith(prefix)) {
+    return null;
+  }
+  return currentPath.slice(prefix.length);
 }
