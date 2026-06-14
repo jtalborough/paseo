@@ -204,7 +204,19 @@ export function ProjectHomeScreen({
     (stepId: ProjectOperatingStep["id"]) => {
       switch (stepId) {
         case "roadmap":
+          if (onOpenTab) {
+            onOpenTab({ kind: "project-files", groupId, selectedPath: "roadmap.md" });
+            break;
+          }
+          handleBrowseFiles();
+          break;
         case "workflows":
+          if (onOpenTab) {
+            onOpenTab({ kind: "project-files", groupId, selectedPath: "workflows/intake.md" });
+            break;
+          }
+          handleBrowseFiles();
+          break;
         case "files":
           handleBrowseFiles();
           break;
@@ -215,6 +227,10 @@ export function ProjectHomeScreen({
           handleBrowseAgents();
           break;
         case "decisions":
+          if (onOpenTab) {
+            onOpenTab({ kind: "notes", groupId, selectedPath: "decisions.md" });
+            break;
+          }
           handleBrowseNotes();
           break;
         case "context":
@@ -228,6 +244,8 @@ export function ProjectHomeScreen({
       handleBrowseFiles,
       handleBrowseNotes,
       handleBrowseTasks,
+      groupId,
+      onOpenTab,
     ],
   );
 

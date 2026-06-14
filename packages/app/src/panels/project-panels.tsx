@@ -134,6 +134,7 @@ function ProjectNotesPanel() {
       surfaceName="notes"
       emptySelectionLabel="Select a note file"
       emptySelectionDescription="Project notes are plain Markdown files. Pick one from the explorer, or create a Markdown file in the notes folder."
+      selectedPath={target.selectedPath ?? null}
       embedded
     />
   );
@@ -154,7 +155,14 @@ function ProjectFilesPanel() {
   if (!groupId) {
     return <View />;
   }
-  return <ProjectFilesScreen serverId={serverId} groupId={groupId} embedded />;
+  return (
+    <ProjectFilesScreen
+      serverId={serverId}
+      groupId={groupId}
+      selectedPath={target.kind === "project-files" ? (target.selectedPath ?? null) : null}
+      embedded
+    />
+  );
 }
 
 function ProjectContextPanel() {

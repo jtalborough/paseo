@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import { StyleSheet } from "react-native-unistyles";
@@ -16,6 +16,7 @@ interface ProjectFilesScreenProps {
   surfaceName?: string;
   emptySelectionLabel?: string;
   emptySelectionDescription?: string;
+  selectedPath?: string | null;
   embedded?: boolean;
 }
 
@@ -26,11 +27,13 @@ export function ProjectFilesScreen({
   surfaceName = "files",
   emptySelectionLabel = "Select a Project file",
   emptySelectionDescription = "Pick a file from the explorer to preview or edit it here.",
+  selectedPath: selectedPathProp = null,
   embedded = false,
 }: ProjectFilesScreenProps) {
   const isCompact = useIsCompactFormFactor();
   const { groups, supported } = useProjectGroups(serverId);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const normalizedSelectedPathProp = normalizeSelectedProjectPath(selectedPathProp);
+  const [selectedPath, setSelectedPath] = useState<string | null>(normalizedSelectedPathProp);
   const group = useMemo(
     () => groups.find((candidate) => candidate.groupId === groupId) ?? null,
     [groupId, groups],
@@ -39,6 +42,9 @@ export function ProjectFilesScreen({
     () => (selectedPath ? { path: selectedPath } : null),
     [selectedPath],
   );
+  useEffect(() => {
+    setSelectedPath(normalizedSelectedPathProp);
+  }, [normalizedSelectedPathProp]);
   const workspaceRoot = useMemo(() => {
     if (!group?.cwd) {
       return "";
@@ -89,6 +95,14 @@ export function ProjectFilesScreen({
       />
     </View>
   );
+}
+
+function normalizeSelectedProjectPath(pathValue: string | null | undefined): string | null {
+  if (typeof pathValue !== "string") {
+    return null;
+  }
+  const trimmed = pathValue.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function ProjectFilesUnavailable({

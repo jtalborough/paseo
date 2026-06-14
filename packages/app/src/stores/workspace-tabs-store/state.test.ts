@@ -220,6 +220,42 @@ describe("workspace-tabs-store reducers", () => {
     ]);
   });
 
+  it("retargets an existing Project files tab when opening a selected Project file", () => {
+    const projectScope = { kind: "project" as const, groupId: "grp_123" };
+    const projectKey = `${SERVER_ID}:project:grp_123`;
+    let state = applyOpenOrFocusTab(emptyState(), {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: { kind: "project-files", groupId: "grp_123" },
+      now: NOW,
+    }).state;
+
+    const focused = applyOpenOrFocusTab(state, {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: {
+        kind: "project-files",
+        groupId: "grp_123",
+        selectedPath: "roadmap.md",
+      },
+      now: NOW + 1,
+    });
+    state = focused.state;
+
+    expect(focused.tabId).toBe("project-files_grp_123");
+    expect(state.uiTabsByWorkspace[projectKey]).toEqual([
+      {
+        tabId: "project-files_grp_123",
+        target: {
+          kind: "project-files",
+          groupId: "grp_123",
+          selectedPath: "roadmap.md",
+        },
+        createdAt: NOW,
+      },
+    ]);
+  });
+
   it("ensureTab deduplicates by target when a retargeted tab already exists", () => {
     const draftTabId = "draft_x";
 

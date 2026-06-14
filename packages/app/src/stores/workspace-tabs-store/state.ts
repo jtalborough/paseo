@@ -38,12 +38,12 @@ export type WorkspaceTabTarget =
   | { kind: "setup"; workspaceId: string }
   | { kind: "project-overview"; groupId: string }
   | { kind: "tasks"; groupId: string }
-  | { kind: "notes"; groupId: string }
+  | { kind: "notes"; groupId: string; selectedPath?: string | null }
   | { kind: "project-tasks"; groupId: string }
-  | { kind: "project-notes"; groupId: string }
+  | { kind: "project-notes"; groupId: string; selectedPath?: string | null }
   | { kind: "project-agents"; groupId: string }
   | { kind: "project-context"; groupId: string; packetPath?: string | null }
-  | { kind: "project-files"; groupId: string };
+  | { kind: "project-files"; groupId: string; selectedPath?: string | null };
 
 const PROJECT_WORKSPACE_TAB_KINDS = new Set<string>([
   "project-overview",
@@ -579,6 +579,10 @@ function coerceProjectWorkspaceTabTarget(
     groupId: typeof raw.groupId === "string" ? raw.groupId : "",
     ...(kind === "project-context" && typeof raw.packetPath === "string"
       ? { packetPath: raw.packetPath }
+      : {}),
+    ...((kind === "project-files" || kind === "project-notes" || kind === "notes") &&
+    typeof raw.selectedPath === "string"
+      ? { selectedPath: raw.selectedPath }
       : {}),
   });
 }

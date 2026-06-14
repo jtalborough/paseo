@@ -51,6 +51,14 @@ function normalizeProjectWorkspaceTabTarget(
       ...(packetPath ? { packetPath } : {}),
     };
   }
+  if (value.kind === "project-files" || value.kind === "project-notes" || value.kind === "notes") {
+    const selectedPath = trimOptionalString(value.selectedPath);
+    return {
+      kind: value.kind,
+      groupId,
+      ...(selectedPath ? { selectedPath } : {}),
+    };
+  }
   return { kind: value.kind, groupId };
 }
 
@@ -187,6 +195,15 @@ function projectWorkspaceTargetsEqual(
   if (left.kind === "project-context" && right.kind === "project-context") {
     return (
       left.groupId === right.groupId && (left.packetPath ?? null) === (right.packetPath ?? null)
+    );
+  }
+  if (
+    (left.kind === "project-files" && right.kind === "project-files") ||
+    (left.kind === "project-notes" && right.kind === "project-notes") ||
+    (left.kind === "notes" && right.kind === "notes")
+  ) {
+    return (
+      left.groupId === right.groupId && (left.selectedPath ?? null) === (right.selectedPath ?? null)
     );
   }
   return left.groupId === right.groupId;

@@ -288,14 +288,11 @@ function getFallbackTabLabel(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "tasks") {
     return "Tasks";
   }
-  if (tab.target.kind === "notes") {
-    return "Notes";
+  if (tab.target.kind === "notes" || tab.target.kind === "project-notes") {
+    return tab.target.selectedPath?.split("/").findLast(Boolean) ?? "Notes";
   }
   if (tab.target.kind === "project-tasks") {
     return "Tasks";
-  }
-  if (tab.target.kind === "project-notes") {
-    return "Notes";
   }
   if (tab.target.kind === "project-agents") {
     return "Agents";
@@ -304,7 +301,7 @@ function getFallbackTabLabel(tab: WorkspaceTabDescriptor): string {
     return "Context";
   }
   if (tab.target.kind === "project-files") {
-    return "Files";
+    return tab.target.selectedPath?.split("/").findLast(Boolean) ?? "Files";
   }
   return "Agent";
 }
