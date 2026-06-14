@@ -242,6 +242,18 @@ Durable agent context is split into explicit files:
 - `context/packets/`: explicit launch bundles for a specific run. A packet records which prompt,
   task, notes, bookmarks, files, browser state, and Folder grants were selected.
 
+Provider-native folder instruction files are a separate layer. Files such as `AGENTS.md`,
+`CLAUDE.md`, `GEMINI.md`, provider command files, and provider-native skills may be loaded by the
+provider with higher effective priority than the Project prompt. Paseo should not silently merge
+them into `prompts/*.md` or pretend the Project prompt always wins. Instead:
+
+- Project prompts and profiles define durable role intent and why the run exists.
+- Folder instruction files define execution constraints inside that referenced Folder.
+- The launch/context packet should record which Folder grants and relevant instruction files shaped
+  the run when that changes authority, safety, or expected evidence.
+- Conflicts should be visible to the user or agent. Do not hide them by copying provider-local
+  instructions into Project files without an explicit migration decision.
+
 Skills are workflow affordances layered on top of this Project model:
 
 - Global/user skills are installed outside the Project and may appear differently by provider.

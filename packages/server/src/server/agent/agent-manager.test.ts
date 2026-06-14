@@ -587,6 +587,8 @@ test("createAgent injects Project task guidance at runtime only", async () => {
   expect(runtimePrompt).toContain("create_project_context_packet");
   expect(runtimePrompt).toContain("prompts/*.md");
   expect(runtimePrompt).toContain("agents/*.yaml");
+  expect(runtimePrompt).toContain("Provider-native folder instruction files");
+  expect(runtimePrompt).toContain("higher effective priority than a Project prompt");
   expect(runtimePrompt).toContain("Do not treat provider transcripts");
   expect(runtimePrompt).toContain("paseo-task");
   expect(runtimePrompt).toContain("paseo-agent-stewardship");

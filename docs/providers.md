@@ -31,6 +31,13 @@ must preserve the user's Project intent across the provider boundary:
   Project truth. The durable truth remains Project Tasks, prompts, profiles, context packets, and
   runtime records under Paseo's data model.
 
+Provider-native instruction files may outrank Paseo's Project prompt in the model's effective
+instruction stack. Examples include `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, provider command files,
+provider-native skills, and provider-specific config loaded from the launch `cwd`. Treat these as
+real execution constraints, not incidental docs. A provider adapter or launch briefing must not
+claim the Project prompt is authoritative without also surfacing the provider-native instruction
+sources that may supersede it.
+
 Provider adapters should document where those fields land in the native runtime. This is required
 because "system prompt", "developer instructions", "append system prompt", MCP config, permission
 requests, and native session metadata are named differently by each provider.
@@ -50,7 +57,8 @@ When adding or changing a provider, verify both views:
 1. Top-level Paseo view: the app/CLI/MCP can list models, launch the agent, inspect labels,
    permissions, Project id, native handle, and context packet provenance.
 2. Provider-native model view: the model receives the Project guidance, sees the Paseo MCP tools,
-   understands which Project/task/profile/packet it belongs to, and can report what it was handed.
+   understands which Project/task/profile/packet it belongs to, can identify provider-native
+   instruction files that affect the run, and can report what it was handed.
 3. Audit view: Project Context can answer what prompt, task, files, tools, browser state, and folder
    grants were handed over without reading the provider transcript.
 
