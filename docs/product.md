@@ -61,6 +61,8 @@ the authoritative current filesystem through explicit tools. Retrieval never rep
 live file before acting on it.
 
 See [projects.md](projects.md) for the Project directory and ownership model.
+See [operating-model.md](operating-model.md) for the lane model agents use to decide when work
+should be solo, team-reviewed, audited, or run as a loop.
 
 ### Inside a workspace
 
@@ -166,6 +168,11 @@ The beta program is a self-improvement loop:
 The product team should treat beta evidence as first-class product input. A confusing launch,
 missing label, bad provider handoff, orphaned agent, unclear task state, brittle terminal link, or
 manual workaround is not just user friction; it is a requirement discovery event.
+
+Paseo's internal team should use the operating lane model in [operating-model.md](operating-model.md)
+when acting on beta evidence. Small, deterministic fixes can be solo slices, but product-shaping,
+UX-facing, architecture-risky, user-facing, or regression-prone work should involve the relevant
+Project role or QA lane before it is called done.
 
 ## Roadmap
 

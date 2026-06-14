@@ -29,6 +29,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | Doc                           | What's in it                                                                                                                   |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | docs/product.md               | What Paseo is, who it's for, where it's going                                                                                  |
+| docs/operating-model.md       | Workflow lane model: when work is solo, shaped, team-reviewed, audited, or run as a loop                                       |
 | docs/architecture.md          | System design, package layering, WebSocket protocol, agent lifecycle, data flow                                                |
 | docs/agent-lifecycle.md       | Agent states, parent/child relationships, archive semantics, tabs vs archive, subagents track                                  |
 | docs/data-model.md            | File-based JSON persistence, Zod schemas, atomic writes, no migrations                                                         |

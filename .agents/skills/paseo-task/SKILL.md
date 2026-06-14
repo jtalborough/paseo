@@ -30,6 +30,12 @@ Use docs for durable product model, architecture, conventions, and decisions. Us
 5. Put acceptance criteria, links, and agent handoff notes in the Markdown body.
 6. Mark a task `done` only after the work is actually complete.
 
+For non-trivial work, include the operating lane in the task body or acceptance criteria when it
+affects execution: solo slice, intake/shape, Product/UX review, architecture/implementation,
+QA/audit, or loop/epic. Use `docs/operating-model.md` as the source of truth. A task should make it
+clear whether the next agent should execute directly, shape first, involve a role, or verify
+independently.
+
 ## RPC names
 
 When available, use Paseo MCP tools rather than editing files directly:

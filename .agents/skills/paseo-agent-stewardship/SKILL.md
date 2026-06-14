@@ -23,6 +23,19 @@ Do not create another agent just because Paseo can. Create one when it changes t
 
 Do the work yourself when it is small, serial, tightly coupled to your current edits, or when a second agent would mostly duplicate context-gathering.
 
+Before starting non-trivial work, choose and state the operating lane from `docs/operating-model.md`:
+
+- **Solo slice** — small, mechanical, serial work with obvious verification.
+- **Intake and shape** — validate a bug/feature/workflow concern before implementation.
+- **Product/UX review** — user understanding, trust, navigation, copy, roles, permissions, or workflow semantics.
+- **Architecture/implementation** — cross-package, protocol, persistence, provider, remote-host, or migration risk.
+- **QA/audit** — user-facing, regression-prone, remote/deploy, or completion-verification work.
+- **Loop/epic** — long-running, uncertain, or repeated fix/verify cycles.
+
+If you choose solo execution, say why briefly. If a lane calls for agents but the current tool
+surface, daemon, provider, permissions, or orchestration preferences block agent creation, say what
+is blocked and capture the gap as a task or doc note instead of silently falling back.
+
 ## Before Creating
 
 1. Read `~/.paseo/orchestration-preferences.json` unless the user explicitly named the provider/model.
@@ -36,6 +49,10 @@ Do the work yourself when it is small, serial, tightly coupled to your current e
    - Omit `detached` or pass `detached: false` for subagents helping you finish the current task.
    - Pass `detached: true` only for handoffs or independent agents the user may continue later.
 6. Leave `notifyOnFinish` enabled unless the agent is truly fire-and-forget.
+
+If `~/.paseo/orchestration-preferences.json` is missing, do not guess silently. Use sensible defaults
+only for the current run, tell the user once, and create or update a Project Task to make provider
+preferences a supported product setting.
 
 ## Creation Prompt Checklist
 

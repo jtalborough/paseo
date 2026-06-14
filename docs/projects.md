@@ -103,6 +103,11 @@ model, architecture, conventions, and decisions that should outlive a specific t
 conversation can update both, but the executable "what do we do next?" list should live in tasks so
 it is visible in the app and can later launch or brief agents directly.
 
+Project Tasks should identify the operating lane when that affects execution: solo slice,
+intake/shape, Product/UX review, architecture/implementation, QA/audit, or loop/epic. See
+[operating-model.md](operating-model.md). This keeps the user and future agents clear on whether a
+task needs one lead agent, a role review, independent QA, or a longer autonomous loop.
+
 ## Project beta feedback
 
 Every Sidebar Project is a beta test of Paseo's workstation model. The goal is not to create
@@ -286,6 +291,11 @@ Developer Lead, and QA Engineer. Infrastructure work may use Cloudflare Maintain
 or Security Reviewer. Finance work may use Researcher, Risk Reviewer, and Trade Reconciler. Content
 work may use Editor, Designer, Publisher, and QA. These roles are Project-authored files with
 explicit prompts and tool grants, not hardcoded personas.
+
+The roster is not a mandate to launch every role for every task. Agents choose the smallest
+operating lane that preserves quality. When a lead agent chooses not to involve the team, it should
+state why the work is a solo slice. When a task is product-shaping, UX-facing, architecture-risky,
+user-facing, regression-prone, or long-running, it should involve the matching role or QA lane.
 
 Agents can use `create_project_context_packet` to write that durable launch bundle and
 `list_project_context_packets` to audit prior bundles. A packet belongs under
