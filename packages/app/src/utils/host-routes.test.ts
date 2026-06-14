@@ -14,6 +14,8 @@ import {
   buildHostWorkspaceOpenRoute,
   buildHostWorkspaceRoute,
   buildHostTasksRoute,
+  buildWorkspaceOpenIntentForTarget,
+  withWorkspaceOpenIntentForTarget,
   buildProjectSettingsRoute,
   buildProjectsSettingsRoute,
   decodeFilePathFromPathSegment,
@@ -129,6 +131,57 @@ describe("workspace route parsing", () => {
     expect(buildHostWorkspaceOpenRoute("local", "164", "draft:new")).toBe(
       "/h/local/workspace/164?open=draft%3Anew",
     );
+  });
+
+  it("builds workspace open intents for tab targets", () => {
+    expect(buildWorkspaceOpenIntentForTarget({ kind: "agent", agentId: "agent-1" })).toBe(
+      "agent:agent-1",
+    );
+    expect(buildWorkspaceOpenIntentForTarget({ kind: "terminal", terminalId: "term-1" })).toBe(
+      "terminal:term-1",
+    );
+    expect(buildWorkspaceOpenIntentForTarget({ kind: "draft", draftId: "draft-1" })).toBe(
+      "draft:draft-1",
+    );
+    expect(buildWorkspaceOpenIntentForTarget({ kind: "file", path: "src/index.ts" })).toBe(
+      "file:c3JjL2luZGV4LnRz",
+    );
+    expect(buildWorkspaceOpenIntentForTarget({ kind: "setup", workspaceId: "/tmp/repo" })).toBe(
+      "setup:b64_L3RtcC9yZXBv",
+    );
+  });
+
+  it("does not build open intents for project tabs yet", () => {
+    expect(
+      buildWorkspaceOpenIntentForTarget({ kind: "project-overview", groupId: "grp_1" }),
+    ).toBeNull();
+  });
+
+  it("adds a tab open intent to an existing workspace route path", () => {
+    expect(
+      withWorkspaceOpenIntentForTarget({
+        routePath: "/h/local/workspace/164?view=wide#bottom",
+        target: { kind: "agent", agentId: "agent-1" },
+      }),
+    ).toBe("/h/local/workspace/164?view=wide&open=agent%3Aagent-1#bottom");
+  });
+
+  it("replaces stale open intents when building a tab-specific new-window route", () => {
+    expect(
+      withWorkspaceOpenIntentForTarget({
+        routePath: "/h/local/workspace/164?open=terminal%3Aold",
+        target: { kind: "terminal", terminalId: "term-1" },
+      }),
+    ).toBe("/h/local/workspace/164?open=terminal%3Aterm-1");
+  });
+
+  it("leaves the route unchanged for unsupported tab targets", () => {
+    expect(
+      withWorkspaceOpenIntentForTarget({
+        routePath: "/h/local/project/grp_1",
+        target: { kind: "project-overview", groupId: "grp_1" },
+      }),
+    ).toBe("/h/local/project/grp_1");
   });
 
   it("builds a global new workspace route without a source directory", () => {

@@ -1,5 +1,6 @@
 import { Buffer } from "buffer";
 import type { Href } from "expo-router";
+import type { WorkspaceTabTarget } from "@/stores/workspace-tabs-store";
 
 type NullableString = string | null | undefined;
 const BASE64_WORKSPACE_ID_PREFIX = "b64_";
@@ -107,6 +108,52 @@ export type WorkspaceOpenIntent =
   | { kind: "file"; path: string }
   | { kind: "draft"; draftId: string }
   | { kind: "setup"; workspaceId: string };
+
+export function buildWorkspaceOpenIntentForTarget(
+  target: WorkspaceTabTarget | null | undefined,
+): string | null {
+  if (!target) {
+    return null;
+  }
+
+  if (target.kind === "agent") {
+    return `agent:${target.agentId}`;
+  }
+  if (target.kind === "terminal") {
+    return `terminal:${target.terminalId}`;
+  }
+  if (target.kind === "draft") {
+    return `draft:${target.draftId}`;
+  }
+  if (target.kind === "setup") {
+    const workspaceId = encodeWorkspaceIdForPathSegment(target.workspaceId);
+    return workspaceId ? `setup:${workspaceId}` : null;
+  }
+  if (target.kind === "file") {
+    const path = encodeFilePathForPathSegment(target.path);
+    return path ? `file:${path}` : null;
+  }
+
+  return null;
+}
+
+export function withWorkspaceOpenIntentForTarget(input: {
+  routePath: string;
+  target: WorkspaceTabTarget | null | undefined;
+}): string {
+  const openIntent = buildWorkspaceOpenIntentForTarget(input.target);
+  if (!openIntent) {
+    return input.routePath;
+  }
+
+  try {
+    const url = new URL(input.routePath, "paseo://app");
+    url.searchParams.set("open", openIntent);
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return input.routePath;
+  }
+}
 
 export function parseWorkspaceOpenIntent(
   value: string | null | undefined,

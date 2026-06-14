@@ -1081,6 +1081,7 @@ function SplitPaneView({
             tabDropPreviewIndex={
               tabDropPreview?.paneId === pane.id ? tabDropPreview.indicatorIndex : null
             }
+            activeTab={activeTabDescriptor}
           />
         </View>
 

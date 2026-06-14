@@ -62,6 +62,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT } from "@/constants/layout";
 import { getDesktopHost } from "@/desktop/host";
+import { withWorkspaceOpenIntentForTarget } from "@/utils/host-routes";
 import { useWorkspaceTabLayout } from "@/screens/workspace/use-workspace-tab-layout";
 import {
   WorkspaceTabPresentationResolver,
@@ -224,6 +225,7 @@ interface WorkspaceDesktopTabsRowProps {
   activeDragTabId?: string | null;
   tabDropPreviewIndex?: number | null;
   showPaneSplitActions?: boolean;
+  activeTab?: WorkspaceTabDescriptor | null;
 }
 
 interface WorkspaceDesktopTabsRowActionsProps {
@@ -245,6 +247,7 @@ interface WorkspaceDesktopTabsRowActionsProps {
   isWaitingOnTerminalReadiness: boolean;
   collapseCreateActions: boolean;
   showPaneSplitActions: boolean;
+  activeTabTarget?: WorkspaceTabDescriptor["target"] | null;
   onSplitRight: () => void;
   onSplitDown: () => void;
 }
@@ -662,6 +665,7 @@ function WorkspaceDesktopTabsRowActions({
   isWaitingOnTerminalReadiness,
   collapseCreateActions,
   showPaneSplitActions,
+  activeTabTarget,
   onSplitRight,
   onSplitDown,
 }: WorkspaceDesktopTabsRowActionsProps) {
@@ -670,12 +674,15 @@ function WorkspaceDesktopTabsRowActions({
   const createWindow = getDesktopHost()?.window?.createWindow;
   const showNewWindowAction = typeof createWindow === "function";
   const handleCreateWindow = useCallback(() => {
-    const routePath =
-      typeof window === "undefined"
-        ? undefined
-        : `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    let routePath: string | undefined;
+    if (typeof window !== "undefined") {
+      routePath = withWorkspaceOpenIntentForTarget({
+        routePath: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        target: activeTabTarget,
+      });
+    }
     void createWindow?.({ routePath });
-  }, [createWindow]);
+  }, [activeTabTarget, createWindow]);
 
   return (
     <View style={styles.tabsActions} onLayout={onLayout}>
@@ -1080,6 +1087,7 @@ export function WorkspaceDesktopTabsRow({
   activeDragTabId = null,
   tabDropPreviewIndex = null,
   showPaneSplitActions = true,
+  activeTab = null,
 }: WorkspaceDesktopTabsRowProps) {
   const [tabsContainerWidth, setTabsContainerWidth] = useState<number>(0);
   const [tabsActionsWidth, setTabsActionsWidth] = useState<number>(0);
@@ -1267,6 +1275,7 @@ export function WorkspaceDesktopTabsRow({
         isWaitingOnTerminalReadiness={isWaitingOnTerminalReadiness}
         collapseCreateActions={collapseCreateActions}
         showPaneSplitActions={showPaneSplitActions}
+        activeTabTarget={activeTab ? activeTab.target : null}
         onSplitRight={onSplitRight}
         onSplitDown={onSplitDown}
       />

@@ -3628,6 +3628,7 @@ function WorkspaceScreenContent({
           onSplitRight={handleSplitFocusedPaneRight}
           onSplitDown={handleSplitFocusedPaneDown}
           showPaneSplitActions={canRenderDesktopPaneSplits}
+          activeTab={activeTabDescriptor}
         />
       ) : null}
 
