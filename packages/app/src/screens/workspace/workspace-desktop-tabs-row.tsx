@@ -670,7 +670,11 @@ function WorkspaceDesktopTabsRowActions({
   const createWindow = getDesktopHost()?.window?.createWindow;
   const showNewWindowAction = typeof createWindow === "function";
   const handleCreateWindow = useCallback(() => {
-    void createWindow?.();
+    const routePath =
+      typeof window === "undefined"
+        ? undefined
+        : `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    void createWindow?.({ routePath });
   }, [createWindow]);
 
   return (

@@ -32,8 +32,8 @@ describe("window-manager IPC", () => {
     const createWindow = vi.fn();
     registerWindowManager({ createWindow });
 
-    await getRegisteredHandler("paseo:window:create")({});
+    await getRegisteredHandler("paseo:window:create")({}, { routePath: "/h/local?tab=agent" });
 
-    expect(createWindow).toHaveBeenCalledTimes(1);
+    expect(createWindow).toHaveBeenCalledWith({ routePath: "/h/local?tab=agent" });
   });
 });

@@ -7,6 +7,8 @@ import {
   DEFAULT_WINDOW_WIDTH,
   getMainWindowChromeOptions,
   getTitleBarOverlayOptions,
+  normalizeWindowRoutePath,
+  readCreateWindowInput,
   readBadgeCount,
   readWindowControlsOverlayUpdate,
   readWindowTheme,
@@ -15,6 +17,27 @@ import {
 } from "./window-manager";
 
 describe("window-manager", () => {
+  describe("readCreateWindowInput", () => {
+    it("accepts safe relative app routes", () => {
+      expect(readCreateWindowInput({ routePath: "/h/server/workspace?tab=1#agent" })).toEqual({
+        routePath: "/h/server/workspace?tab=1#agent",
+      });
+    });
+
+    it("ignores invalid route payloads", () => {
+      expect(readCreateWindowInput(undefined)).toBeUndefined();
+      expect(readCreateWindowInput({ routePath: "https://example.com" })).toBeUndefined();
+      expect(readCreateWindowInput({ routePath: "//example.com" })).toBeUndefined();
+      expect(readCreateWindowInput({ routePath: "/bad\u0000route" })).toBeUndefined();
+    });
+  });
+
+  describe("normalizeWindowRoutePath", () => {
+    it("keeps query strings and hashes on relative routes", () => {
+      expect(normalizeWindowRoutePath(" /projects?x=1#notes ")).toBe("/projects?x=1#notes");
+    });
+  });
+
   describe("readBadgeCount", () => {
     it("returns valid non-negative integers", () => {
       expect(readBadgeCount(0)).toBe(0);

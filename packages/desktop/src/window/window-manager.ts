@@ -35,8 +35,49 @@ export interface WindowControlsOverlayState {
   foregroundColor?: string;
 }
 
+export interface CreateWindowInput {
+  routePath?: string;
+}
+
 export interface WindowManagerOptions {
-  createWindow?: () => void | Promise<void>;
+  createWindow?: (input?: CreateWindowInput) => void | Promise<void>;
+}
+
+export function readCreateWindowInput(input: unknown): CreateWindowInput | undefined {
+  if (!input || typeof input !== "object") {
+    return undefined;
+  }
+
+  const routePath = normalizeWindowRoutePath((input as Record<string, unknown>).routePath);
+  if (!routePath) {
+    return undefined;
+  }
+
+  return { routePath };
+}
+
+export function normalizeWindowRoutePath(input: unknown): string | null {
+  if (typeof input !== "string") {
+    return null;
+  }
+
+  const routePath = input.trim();
+  if (routePath.length === 0 || routePath.length > 2048) {
+    return null;
+  }
+
+  if (!routePath.startsWith("/") || routePath.startsWith("//")) {
+    return null;
+  }
+
+  for (let index = 0; index < routePath.length; index += 1) {
+    const codePoint = routePath.charCodeAt(index);
+    if (codePoint < 32 || codePoint === 127) {
+      return null;
+    }
+  }
+
+  return routePath;
 }
 
 export function readWindowTheme(input: unknown): WindowTheme | null {
@@ -180,8 +221,11 @@ export function applyWindowControlsOverlayUpdate(input: {
   return next;
 }
 
-function runWindowAction(action: () => void | Promise<void>): Promise<void> {
-  return Promise.resolve(action()).catch((error) => {
+function runWindowAction(
+  action: (input?: CreateWindowInput) => void | Promise<void>,
+  input?: CreateWindowInput,
+): Promise<void> {
+  return Promise.resolve(action(input)).catch((error) => {
     console.error("[window-manager] action failed", error);
     throw error;
   });
@@ -190,11 +234,11 @@ function runWindowAction(action: () => void | Promise<void>): Promise<void> {
 export function registerWindowManager(options: WindowManagerOptions = {}): void {
   const overlayStateByWindow = new WeakMap<BrowserWindow, WindowControlsOverlayState>();
 
-  ipcMain.handle("paseo:window:create", async () => {
+  ipcMain.handle("paseo:window:create", async (_event, input?: unknown) => {
     if (!options.createWindow) {
       return;
     }
-    await runWindowAction(options.createWindow);
+    await runWindowAction(options.createWindow, readCreateWindowInput(input));
   });
 
   ipcMain.handle("paseo:window:toggleMaximize", (event) => {

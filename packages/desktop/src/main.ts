@@ -26,6 +26,7 @@ import { parsePassthroughCliArgsFromArgv, runPassthroughCli } from "./daemon/cli
 import { closeAllTransportSessions } from "./daemon/local-transport.js";
 import {
   registerWindowManager,
+  type CreateWindowInput,
   getMainWindowChromeOptions,
   getWindowBackgroundColor,
   resolveSystemWindowTheme,
@@ -395,7 +396,18 @@ function getWorkAreasPrimaryFirst(): Electron.Rectangle[] {
   return [primary, ...others].map((display) => display.workArea);
 }
 
-async function createMainWindow(options: { restoreState?: boolean } = {}): Promise<BrowserWindow> {
+function resolveAppLoadUrl(routePath?: string): string {
+  const normalizedRoute = routePath ?? "/";
+  if (!app.isPackaged) {
+    return new URL(normalizedRoute, DEV_SERVER_URL).toString();
+  }
+
+  return `${APP_SCHEME}://app${normalizedRoute}`;
+}
+
+async function createMainWindow(
+  options: { restoreState?: boolean; routePath?: string } = {},
+): Promise<BrowserWindow> {
   const restoreState = options.restoreState ?? true;
   const iconPath = getWindowIconPath();
   const systemTheme = resolveSystemWindowTheme();
@@ -532,16 +544,16 @@ async function createMainWindow(options: { restoreState?: boolean } = {}): Promi
   if (!app.isPackaged) {
     const { loadReactDevTools } = await import("./features/react-devtools.js");
     await loadReactDevTools();
-    await mainWindow.loadURL(DEV_SERVER_URL);
+    await mainWindow.loadURL(resolveAppLoadUrl(options.routePath));
     return mainWindow;
   }
 
-  await mainWindow.loadURL(`${APP_SCHEME}://app/`);
+  await mainWindow.loadURL(resolveAppLoadUrl(options.routePath));
   return mainWindow;
 }
 
-async function createAdditionalWindow(): Promise<void> {
-  const win = await createMainWindow({ restoreState: false });
+async function createAdditionalWindow(input?: CreateWindowInput): Promise<void> {
+  const win = await createMainWindow({ restoreState: false, routePath: input?.routePath });
   win.focus();
 }
 

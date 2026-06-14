@@ -135,7 +135,7 @@ Electron wrapper for macOS, Linux, and Windows.
 - Can spawn the daemon as a managed subprocess
 - Native file access for workspace integration
 - Same WebSocket client as mobile app
-- Supports multiple desktop windows as independent clients of the same daemon. The desktop menu and in-app workspace tab row both call the same window bridge; creating a new window must not spawn a second daemon or duplicate agent ownership.
+- Supports multiple desktop windows as independent clients of the same daemon. The desktop menu and in-app workspace tab row both call the same window bridge; renderer-created windows may pass only a relative app route so the new window can open on the current work surface. Creating a new window must not spawn a second daemon or duplicate agent ownership.
 
 ### `packages/website` — Marketing site
 
