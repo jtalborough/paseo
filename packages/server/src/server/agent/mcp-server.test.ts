@@ -58,6 +58,12 @@ interface LooseStructuredContent {
 interface RegisteredMcpTool {
   inputSchema: LooseInputSchema;
   outputSchema?: unknown;
+  annotations?: {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
   callback?: (
     input: unknown,
     extra?: unknown,
@@ -215,6 +221,73 @@ function createTerminalManagerStub(overrides: Partial<TerminalManager> = {}): Te
     ...overrides,
   } as unknown as TerminalManager;
 }
+
+describe("MCP tool annotations", () => {
+  it("marks read-only tools as non-destructive and idempotent", async () => {
+    const { agentManager, agentStorage } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createProviderSnapshotManagerStub(),
+      paseoHome: "/tmp/paseo",
+      logger: createTestLogger(),
+    });
+
+    expect(registeredTool(server, "list_agents").annotations).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(registeredTool(server, "list_project_tasks").annotations).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+  });
+
+  it("marks additive orchestration tools as non-destructive", async () => {
+    const { agentManager, agentStorage } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createProviderSnapshotManagerStub(),
+      paseoHome: "/tmp/paseo",
+      logger: createTestLogger(),
+    });
+
+    expect(registeredTool(server, "create_agent").annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(registeredTool(server, "create_project_context_packet").annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+  });
+
+  it("marks lifecycle removal tools as destructive", async () => {
+    const { agentManager, agentStorage } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createProviderSnapshotManagerStub(),
+      logger: createTestLogger(),
+    });
+
+    expect(registeredTool(server, "archive_agent").annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+  });
+});
 
 type ProviderSnapshotManagerStub = ReturnType<typeof createProviderSnapshotManagerStub>;
 
@@ -639,6 +712,51 @@ describe("terminal MCP tools", () => {
           linkedAgentId: "agent-linked",
         },
       ],
+    });
+  });
+
+  it("links terminals created through an agent-scoped MCP server to the caller agent", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.getAgent.mockReturnValue({
+      id: "agent-caller",
+      cwd: process.cwd(),
+    });
+    const createTerminal = vi.fn().mockResolvedValue({
+      id: "term-created",
+      name: "Agent terminal",
+      cwd: process.cwd(),
+      getTitle: vi.fn().mockReturnValue(null),
+    });
+    const terminalManager = createTerminalManagerStub({
+      createTerminal,
+      getTerminalLinkedAgentId: vi
+        .fn()
+        .mockImplementation((terminalId: string) =>
+          terminalId === "term-created" ? "agent-caller" : undefined,
+        ),
+    });
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      terminalManager,
+      logger,
+      callerAgentId: "agent-caller",
+    });
+    const tool = registeredTool(server, "create_terminal");
+
+    const response = await tool.handler({ cwd: process.cwd(), name: "Agent terminal" });
+
+    expect(createTerminal).toHaveBeenCalledWith({
+      cwd: process.cwd(),
+      name: "Agent terminal",
+      linkedAgentId: "agent-caller",
+    });
+    expect(response.structuredContent).toEqual({
+      id: "term-created",
+      name: "Agent terminal",
+      cwd: process.cwd(),
+      linkedAgentId: "agent-caller",
     });
   });
 });

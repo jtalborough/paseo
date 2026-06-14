@@ -193,7 +193,13 @@ function TerminalPanel() {
     setIsRecoveringTerminal(true);
     void (async () => {
       try {
-        const payload = await client.createTerminal(workspaceDirectory);
+        const linkedAgentId = trimNonEmpty(target.sourceAgentId);
+        const payload = await client.createTerminal(
+          workspaceDirectory,
+          undefined,
+          undefined,
+          linkedAgentId ? { linkedAgentId } : undefined,
+        );
         const createdTerminal = payload.terminal;
         if (!createdTerminal) {
           throw new Error("Unable to create terminal");

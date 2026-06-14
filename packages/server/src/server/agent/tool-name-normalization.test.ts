@@ -23,6 +23,11 @@ describe("isPaseoToolName", () => {
     expect(isPaseoToolName("paseo.create_agent")).toBe(true);
   });
 
+  it("detects Codex MCP mixed namespace format", () => {
+    expect(isPaseoToolName("mcp__paseo.list_terminals")).toBe(true);
+    expect(isPaseoToolName("mcp__paseo.capture_terminal")).toBe(true);
+  });
+
   it("rejects non-paseo tools", () => {
     expect(isPaseoToolName("Bash")).toBe(false);
     expect(isPaseoToolName("Read")).toBe(false);
@@ -38,6 +43,11 @@ describe("getPaseoToolLeafName", () => {
   it("extracts leaf from Codex format", () => {
     expect(getPaseoToolLeafName("paseo.create_agent")).toBe("create_agent");
     expect(getPaseoToolLeafName("paseo.list_agents")).toBe("list_agents");
+  });
+
+  it("extracts leaf from Codex MCP mixed namespace format", () => {
+    expect(getPaseoToolLeafName("mcp__paseo.list_terminals")).toBe("list_terminals");
+    expect(getPaseoToolLeafName("mcp__paseo.capture_terminal")).toBe("capture_terminal");
   });
 
   it("returns null for non-paseo tools", () => {

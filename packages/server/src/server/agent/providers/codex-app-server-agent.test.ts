@@ -45,6 +45,7 @@ interface CollaborationModeRecord {
 
 interface CodexSessionTestAccess {
   ensureThreadLoaded(): Promise<void>;
+  buildCodexInnerConfig(): Record<string, unknown> | null;
   handleToolApprovalRequest(params: unknown): Promise<unknown>;
   handleNotification(method: string, params: unknown): void;
   loadPersistedHistory(): Promise<void>;
@@ -306,6 +307,49 @@ describe("Codex app-server provider", () => {
     );
   });
 
+  test("adds Paseo terminal MCP tool approval config when the Paseo MCP server is injected", () => {
+    const session = createSession({
+      mcpServers: {
+        paseo: {
+          type: "http",
+          url: "http://127.0.0.1:6767/mcp?callerAgentId=agent-1",
+        },
+      },
+    });
+
+    expect(asInternals(session).buildCodexInnerConfig()).toMatchObject({
+      mcp_servers: {
+        paseo: {
+          url: "http://127.0.0.1:6767/mcp?callerAgentId=agent-1",
+        },
+      },
+      apps: {
+        paseo: {
+          tools: {
+            list_terminals: { approval_mode: "auto" },
+            create_terminal: { approval_mode: "auto" },
+            capture_terminal: { approval_mode: "auto" },
+            send_terminal_keys: { approval_mode: "auto" },
+            "mcp__paseo.list_terminals": { approval_mode: "auto" },
+            "mcp__paseo.create_terminal": { approval_mode: "auto" },
+            mcp__paseo__list_terminals: { approval_mode: "auto" },
+            mcp__paseo__create_terminal: { approval_mode: "auto" },
+          },
+        },
+        mcp__paseo: {
+          tools: {
+            list_terminals: { approval_mode: "auto" },
+            create_terminal: { approval_mode: "auto" },
+            "mcp__paseo.list_terminals": { approval_mode: "auto" },
+            "mcp__paseo.create_terminal": { approval_mode: "auto" },
+            mcp__paseo__list_terminals: { approval_mode: "auto" },
+            mcp__paseo__create_terminal: { approval_mode: "auto" },
+          },
+        },
+      },
+    });
+  });
+
   test("setMode auto-review sends approvalsReviewer to thread/start", async () => {
     const requests: Array<{ method: string; params: unknown }> = [];
     const session = createSession(
@@ -529,6 +573,67 @@ describe("Codex app-server provider", () => {
 
     await expect(appServer.waitForCommandApprovalDecision("exec-approval-1")).resolves.toEqual({
       decision: "accept",
+    });
+    appServer.assertNoErrors();
+    await session.close();
+  });
+
+  test("round-trips server-initiated permission profile approvals through the real app-server transport", async () => {
+    const appServer = createFakeCodexAppServer({
+      initialize: () => ({}),
+      "collaborationMode/list": () => ({ data: [] }),
+      "skills/list": () => ({ data: [] }),
+    });
+    const session = new CodexAppServerAgentSession(
+      createConfig({ cwd: "/workspace/project" }),
+      null,
+      createTestLogger(),
+      async () => appServer.child,
+    );
+
+    await session.connect();
+    appServer.assertNoErrors();
+
+    const permissions = {
+      network: { enabled: true },
+      fileSystem: null,
+    };
+    const permissionRequested = waitForNextPermission(session);
+    appServer.requestPermissionsApproval({
+      itemId: "permissions-approval-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      cwd: "/workspace/project",
+      reason: "MCP tool needs host permissions",
+      permissions,
+    });
+
+    const permissionEvent = await permissionRequested;
+    expect(permissionEvent.request).toMatchObject({
+      id: "permission-permissions-approval-1",
+      provider: "codex",
+      name: "CodexPermissions",
+      kind: "tool",
+      title: "Allow network access",
+      description: "MCP tool needs host permissions",
+      input: {
+        cwd: "/workspace/project",
+        permissions,
+      },
+      metadata: {
+        itemId: "permissions-approval-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
+    });
+
+    await session.respondToPermission(permissionEvent.request.id, { behavior: "allow" });
+
+    await expect(
+      appServer.waitForPermissionsApprovalDecision("permissions-approval-1"),
+    ).resolves.toEqual({
+      permissions,
+      scope: "session",
     });
     appServer.assertNoErrors();
     await session.close();

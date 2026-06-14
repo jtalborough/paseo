@@ -489,6 +489,7 @@ describe("Suite B: Terminal Tools", () => {
             id: terminalId,
             name: "Parity terminal",
             cwd: parentAgentCwd,
+            linkedAgentId: parentAgentId,
           }),
         ]),
       );

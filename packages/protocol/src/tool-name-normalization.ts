@@ -46,6 +46,10 @@ export function isPaseoToolName(name: string): boolean {
   }
   if (normalized.includes("__")) {
     const segments = normalized.split("__").filter((s) => s.length > 0);
+    if (segments.length === 2 && segments[0] === "mcp") {
+      const [serverName] = segments[1].split(/[.:/]/);
+      return serverName === "paseo" || serverName?.startsWith("paseo_") === true;
+    }
     return (
       segments.length >= 3 &&
       segments[0] === "mcp" &&
@@ -63,6 +67,18 @@ export function getPaseoToolLeafName(name: string): string | null {
   const normalized = normalizeToolName(name);
   if (normalized.includes("__")) {
     const segments = normalized.split("__").filter((s) => s.length > 0);
+    if (segments.length === 2 && segments[0] === "mcp") {
+      const serverAndTool = segments[1];
+      const separatorIndex = serverAndTool.search(/[.:/]/);
+      if (separatorIndex <= 0) {
+        return null;
+      }
+      const serverName = serverAndTool.slice(0, separatorIndex);
+      if (serverName === "paseo" || serverName.startsWith("paseo_")) {
+        return serverAndTool.slice(separatorIndex + 1);
+      }
+      return null;
+    }
     if (
       segments.length >= 3 &&
       segments[0] === "mcp" &&

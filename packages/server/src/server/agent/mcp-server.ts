@@ -7,6 +7,7 @@ import type {
   CallToolResult,
   ServerNotification,
   ServerRequest,
+  ToolAnnotations,
 } from "@modelcontextprotocol/sdk/types.js";
 
 import type { AgentMode, AgentProvider } from "./agent-sdk-types.js";
@@ -218,6 +219,79 @@ function relaxMcpToolOutputSchema<TConfig extends { outputSchema?: unknown }>(
     ...config,
     outputSchema: relaxMcpOutputSchema(config.outputSchema),
   } as TConfig;
+}
+
+const READ_ONLY_MCP_TOOLS = new Set([
+  "wait_for_agent",
+  "get_agent_status",
+  "list_agents",
+  "list_schedules",
+  "get_schedule",
+  "list_project_tasks",
+  "list_project_context_packets",
+  "list_terminals",
+  "capture_terminal",
+  "list_chats",
+  "read_chat",
+  "list_providers",
+  "list_models",
+  "inspect_provider",
+  "list_worktrees",
+  "list_pending_permissions",
+]);
+
+const DESTRUCTIVE_MCP_TOOLS = new Set([
+  "archive_agent",
+  "kill_agent",
+  "kill_terminal",
+  "pause_schedule",
+  "resume_schedule",
+  "delete_schedule",
+  "archive_worktree",
+  "cancel_agent_run",
+  "close_agent",
+  "respond_to_permission",
+]);
+
+function annotatePaseoMcpTool<TConfig extends { annotations?: ToolAnnotations }>(
+  name: string,
+  config: TConfig,
+): TConfig {
+  const annotations = resolvePaseoMcpToolAnnotations(name, config.annotations);
+  return annotations === config.annotations ? config : { ...config, annotations };
+}
+
+function resolvePaseoMcpToolAnnotations(
+  name: string,
+  existing: ToolAnnotations | undefined,
+): ToolAnnotations {
+  if (READ_ONLY_MCP_TOOLS.has(name)) {
+    return {
+      ...existing,
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: existing?.openWorldHint ?? false,
+    };
+  }
+
+  if (DESTRUCTIVE_MCP_TOOLS.has(name)) {
+    return {
+      ...existing,
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: existing?.idempotentHint ?? false,
+      openWorldHint: existing?.openWorldHint ?? false,
+    };
+  }
+
+  return {
+    ...existing,
+    readOnlyHint: existing?.readOnlyHint ?? false,
+    destructiveHint: existing?.destructiveHint ?? false,
+    idempotentHint: existing?.idempotentHint ?? false,
+    openWorldHint: existing?.openWorldHint ?? false,
+  };
 }
 
 type McpToolContext = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -558,8 +632,10 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
   });
   const registerRawTool = server.registerTool.bind(server);
   const registerTool: McpServer["registerTool"] = (name, config, handler) =>
-    registerRawTool(name, relaxMcpToolOutputSchema(config), (async (args: never, extra: never) =>
-      addModelVisibleStructuredContent(await handler(args, extra))) as typeof handler);
+    registerRawTool(name, annotatePaseoMcpTool(name, relaxMcpToolOutputSchema(config)), (async (
+      args: never,
+      extra: never,
+    ) => addModelVisibleStructuredContent(await handler(args, extra))) as typeof handler);
 
   const buildCronScheduleCadence = (input: {
     cron: string | undefined;
@@ -1866,6 +1942,7 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
       const terminal = await terminalManager.createTerminal({
         cwd: resolveScopedCwd(cwd, { required: true }),
         ...(name?.trim() ? { name: name.trim() } : {}),
+        ...(callerAgentId ? { linkedAgentId: callerAgentId } : {}),
       });
 
       return {

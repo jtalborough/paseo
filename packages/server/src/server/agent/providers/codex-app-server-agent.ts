@@ -381,6 +381,20 @@ interface PersistedTimelineEntry {
   timestamp?: string;
 }
 
+const PASEO_MCP_APP_IDS = ["paseo", "mcp__paseo"] as const;
+const PASEO_TERMINAL_MCP_TOOL_LEAVES = [
+  "list_terminals",
+  "create_terminal",
+  "capture_terminal",
+  "send_terminal_keys",
+] as const;
+const PASEO_TERMINAL_MCP_TOOL_CONFIG_KEYS = PASEO_TERMINAL_MCP_TOOL_LEAVES.flatMap((toolName) => [
+  toolName,
+  `paseo.${toolName}`,
+  `mcp__paseo.${toolName}`,
+  `mcp__paseo__${toolName}`,
+]);
+
 function mergeCodexConfiguredDefaults(
   primary: CodexConfiguredDefaults,
   fallback: CodexConfiguredDefaults,
@@ -389,6 +403,47 @@ function mergeCodexConfiguredDefaults(
     model: primary.model ?? fallback.model,
     thinkingOptionId: primary.thinkingOptionId ?? fallback.thinkingOptionId,
   };
+}
+
+function buildPaseoMcpAppConfig(appsConfig: unknown): Record<string, unknown> {
+  const apps = isRecord(appsConfig) ? { ...appsConfig } : {};
+
+  for (const appId of PASEO_MCP_APP_IDS) {
+    const app = isRecord(apps[appId]) ? { ...apps[appId] } : {};
+    const tools = isRecord(app.tools) ? { ...app.tools } : {};
+
+    for (const toolName of PASEO_TERMINAL_MCP_TOOL_CONFIG_KEYS) {
+      const existingToolConfig = isRecord(tools[toolName]) ? tools[toolName] : {};
+      tools[toolName] = {
+        approval_mode: "auto",
+        ...existingToolConfig,
+      };
+    }
+
+    apps[appId] = {
+      ...app,
+      tools,
+    };
+  }
+
+  return apps;
+}
+
+function summarizeCodexPermissionProfile(permissions: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (isRecord(permissions.network) && permissions.network.enabled === true) {
+    parts.push("network access");
+  }
+  if (isRecord(permissions.fileSystem)) {
+    const fileSystem = permissions.fileSystem;
+    const entries = Array.isArray(fileSystem.entries) ? fileSystem.entries.length : 0;
+    const read = Array.isArray(fileSystem.read) ? fileSystem.read.length : 0;
+    const write = Array.isArray(fileSystem.write) ? fileSystem.write.length : 0;
+    if (entries > 0 || read > 0 || write > 0) {
+      parts.push("filesystem access");
+    }
+  }
+  return parts.length > 0 ? parts.join(" and ") : "additional permissions";
 }
 
 function codexMicrosoftStorePackageRoot(): string | null {
@@ -2903,7 +2958,8 @@ export class CodexAppServerAgentSession implements AgentSession {
     string,
     {
       resolve: (value: unknown) => void;
-      kind: "command" | "file" | "question" | "plan";
+      kind: "command" | "file" | "question" | "plan" | "permissions";
+      permissions?: Record<string, unknown>;
       questions?: CodexQuestionPrompt[];
       planText?: string;
     }
@@ -3240,6 +3296,9 @@ export class CodexAppServerAgentSession implements AgentSession {
     );
     this.client.setRequestHandler("item/fileChange/requestApproval", (params) =>
       this.handleFileChangeApprovalRequest(params),
+    );
+    this.client.setRequestHandler("item/permissions/requestApproval", (params) =>
+      this.handlePermissionsApprovalRequest(params),
     );
     this.client.setRequestHandler("item/tool/requestUserInput", (params) =>
       this.handleToolApprovalRequest(params),
@@ -3726,6 +3785,14 @@ export class CodexAppServerAgentSession implements AgentSession {
       return;
     }
 
+    if (pending.kind === "permissions") {
+      pending.resolve({
+        permissions: response.behavior === "allow" ? (pending.permissions ?? {}) : {},
+        scope: "session",
+      });
+      return;
+    }
+
     const questions = pending.questions ?? [];
     const itemId =
       typeof pendingRequest?.metadata?.itemId === "string"
@@ -3780,7 +3847,8 @@ export class CodexAppServerAgentSession implements AgentSession {
     response: AgentPermissionResponse;
     pending: {
       resolve: (value: unknown) => void;
-      kind: "command" | "file" | "question" | "plan";
+      kind: "command" | "file" | "question" | "plan" | "permissions";
+      permissions?: Record<string, unknown>;
       questions?: CodexQuestionPrompt[];
       planText?: string;
     };
@@ -4195,6 +4263,9 @@ export class CodexAppServerAgentSession implements AgentSession {
         mcpServers[name] = toCodexMcpConfig(serverConfig);
       }
       innerConfig.mcp_servers = mcpServers;
+      if (this.config.mcpServers.paseo) {
+        innerConfig.apps = buildPaseoMcpAppConfig(innerConfig.apps);
+      }
     }
     if (this.config.extra?.codex) {
       Object.assign(innerConfig, this.config.extra.codex);
@@ -5260,6 +5331,56 @@ export class CodexAppServerAgentSession implements AgentSession {
     this.emitEvent({ type: "permission_requested", provider: CODEX_PROVIDER, request });
     return new Promise((resolve) => {
       this.pendingPermissionHandlers.set(requestId, { resolve, kind: "file" });
+    });
+  }
+
+  private handlePermissionsApprovalRequest(params: unknown): Promise<unknown> {
+    const parsed = z
+      .object({
+        itemId: z.string(),
+        threadId: z.string(),
+        turnId: z.string(),
+        cwd: z.string().nullable().optional(),
+        reason: z.string().nullable().optional(),
+        permissions: z.record(z.unknown()),
+      })
+      .parse(params);
+    const requestId = `permission-${parsed.itemId}`;
+    const summary = summarizeCodexPermissionProfile(parsed.permissions);
+    const request: AgentPermissionRequest = {
+      id: requestId,
+      provider: CODEX_PROVIDER,
+      name: "CodexPermissions",
+      kind: "tool",
+      title: `Allow ${summary}`,
+      description: parsed.reason ?? undefined,
+      input: {
+        cwd: parsed.cwd ?? undefined,
+        permissions: parsed.permissions,
+      },
+      detail: {
+        type: "unknown",
+        input: {
+          cwd: parsed.cwd ?? null,
+          reason: parsed.reason ?? null,
+          permissions: parsed.permissions,
+        },
+        output: null,
+      },
+      metadata: {
+        itemId: parsed.itemId,
+        threadId: parsed.threadId,
+        turnId: parsed.turnId,
+      },
+    };
+    this.pendingPermissions.set(requestId, request);
+    this.emitEvent({ type: "permission_requested", provider: CODEX_PROVIDER, request });
+    return new Promise((resolve) => {
+      this.pendingPermissionHandlers.set(requestId, {
+        resolve,
+        kind: "permissions",
+        permissions: parsed.permissions,
+      });
     });
   }
 

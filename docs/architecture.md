@@ -112,6 +112,10 @@ Commander.js CLI with Docker-style commands. Common agent operations are also ex
 
 Communicates with the daemon via the same WebSocket protocol as the app.
 
+Agent-scoped MCP clients expose the same terminal lifecycle. A terminal created through
+`create_terminal` is linked to the calling agent when `callerAgentId` is present, so UI surfaces can
+show the agent/terminal relationship consistently.
+
 ### `packages/relay` — E2E encrypted relay
 
 Enables remote access when the daemon is behind a firewall.

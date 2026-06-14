@@ -1,5 +1,5 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SquarePen, Terminal } from "lucide-react-native";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
@@ -14,6 +14,7 @@ import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
 import { Composer } from "@/composer";
 import { AgentModeControl } from "@/composer/agent-controls/mode-control";
 import { FileDropZone } from "@/components/file-drop-zone";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { RewindComposerRestoreProvider } from "@/components/rewind/composer-restore";
 import type { ImageAttachment } from "@/composer/types";
 import { getProviderIcon } from "@/components/provider-icons";
@@ -228,13 +229,50 @@ function isTerminalWorkspaceTab(tab: WorkspaceTab): tab is WorkspaceTab & {
   return tab.target.kind === "terminal";
 }
 
+type LinkedTerminalRuntimeStatus = "live" | "needs-recovery";
+
+function resolveLinkedTerminalToolbarState(input: {
+  isCreatingLinkedTerminal: boolean;
+  needsRecovery: boolean;
+  hasLinkedTerminal: boolean;
+  primaryLinkedTerminalId: string | null;
+}): { buttonLabel: string; statusLabel: string } {
+  if (input.isCreatingLinkedTerminal) {
+    return {
+      buttonLabel: "Linking...",
+      statusLabel: "No linked terminal",
+    };
+  }
+  if (input.needsRecovery) {
+    return {
+      buttonLabel: "Recover terminal",
+      statusLabel: "Needs recovery",
+    };
+  }
+  if (input.hasLinkedTerminal) {
+    return {
+      buttonLabel: "Open terminal",
+      statusLabel: input.primaryLinkedTerminalId
+        ? `Linked ${input.primaryLinkedTerminalId.slice(0, 8)}`
+        : "Linked",
+    };
+  }
+  return {
+    buttonLabel: "Link terminal",
+    statusLabel: "No linked terminal",
+  };
+}
+
 function buildLinkedTerminalWireContext(input: {
   agentId: string;
   tabs: WorkspaceTab[];
+  terminalStatusById?: ReadonlyMap<string, LinkedTerminalRuntimeStatus>;
 }): string | null {
   const terminalLines = input.tabs.filter(isTerminalWorkspaceTab).map((tab) => {
     const cwd = tab.target.cwd ? ` cwd=${tab.target.cwd}` : "";
-    return `- terminalId=${tab.target.terminalId}${cwd}`;
+    const status = input.terminalStatusById?.get(tab.target.terminalId);
+    const statusText = status ? ` status=${status}` : "";
+    return `- terminalId=${tab.target.terminalId}${cwd}${statusText}`;
   });
   if (terminalLines.length === 0) {
     return null;
@@ -243,8 +281,10 @@ function buildLinkedTerminalWireContext(input: {
     "<paseo-linked-terminals>",
     "The current Paseo UI has terminal tabs linked to this agent.",
     `This agent id is ${input.agentId}.`,
-    "Use the Paseo MCP terminal tools to inspect and control linked terminals. In Claude Code these appear as mcp__paseo__list_terminals, mcp__paseo__capture_terminal, and mcp__paseo__send_terminal_keys.",
+    "Use the Paseo MCP terminal tools to inspect and control linked terminals. In Claude Code these appear as mcp__paseo__list_terminals, mcp__paseo__capture_terminal, and mcp__paseo__send_terminal_keys. In Codex they may appear as mcp__paseo.list_terminals, mcp__paseo.capture_terminal, and mcp__paseo.send_terminal_keys.",
+    "If the host asks for MCP tool authorization, list_terminals and capture_terminal are expected read-only terminal inspection calls. send_terminal_keys writes to the selected terminal and should match the user's requested action.",
     "First call list_terminals and prefer a terminal whose linkedAgentId matches this agent id. If linkedAgentId is unavailable, use one of the explicit terminalIds below.",
+    "Terminal status=live means the shell exists on the host. Terminal status=needs-recovery means the UI restored the tab but the shell process is gone; open that terminal tab and use its recovery action before expecting capture_terminal or send_terminal_keys to work.",
     "If the user asks whether you can see or use the terminal, call capture_terminal on the relevant terminalId before answering.",
     "To run a command in the linked terminal, call send_terminal_keys with the command text and Enter; then call capture_terminal for the result.",
     ...terminalLines,
@@ -1383,22 +1423,91 @@ function ActiveAgentComposer({
     { initialIsBelow: isCompactFormFactor },
   );
   const paneContext = usePaneContext();
-  const { scope, workspaceId, tabId, openTabInSplit, retargetCurrentTab } = paneContext;
+  const { scope, workspaceId, tabId, openTab, openTabInSplit, retargetCurrentTab } = paneContext;
   const client = useHostRuntimeClient(serverId);
   const queryClient = useQueryClient();
-  const linkedTerminalTabs = useWorkspaceTabsStore(
+  const workspaceTerminalTabs = useWorkspaceTabsStore(
     useShallow((state) => {
       const surfaceKey = buildWorkspaceTabsSurfacePersistenceKey({ serverId, scope });
       if (!surfaceKey) {
         return [];
       }
-      return (state.uiTabsByWorkspace[surfaceKey] ?? []).filter(
-        (tab) => tab.target.kind === "terminal" && tab.target.sourceAgentId === agentId,
-      );
+      return (state.uiTabsByWorkspace[surfaceKey] ?? []).filter(isTerminalWorkspaceTab);
     }),
   );
   const [isCreatingLinkedTerminal, setIsCreatingLinkedTerminal] = useState(false);
   const [linkedTerminalError, setLinkedTerminalError] = useState<string | null>(null);
+  const terminalsQueryKey = buildTerminalsQueryKey(serverId, cwd);
+  const linkedTerminalsQuery = useQuery({
+    queryKey: terminalsQueryKey,
+    enabled: Boolean(client && cwd),
+    queryFn: async (): Promise<ListTerminalsPayload> => {
+      if (!client) {
+        throw new Error("Host is not connected");
+      }
+      return client.listTerminals(cwd);
+    },
+    staleTime: 5_000,
+  });
+  const linkedTerminalIdsFromDaemon = useMemo(
+    () =>
+      linkedTerminalsQuery.data?.terminals
+        .filter((terminal) => terminal.linkedAgentId === agentId)
+        .map((terminal) => terminal.id) ?? [],
+    [agentId, linkedTerminalsQuery.data],
+  );
+  const linkedTerminalTabs = useMemo(() => {
+    const linkedTerminalIds = new Set(linkedTerminalIdsFromDaemon);
+    return workspaceTerminalTabs.filter(
+      (tab) =>
+        tab.target.kind === "terminal" &&
+        (tab.target.sourceAgentId === agentId || linkedTerminalIds.has(tab.target.terminalId)),
+    );
+  }, [agentId, linkedTerminalIdsFromDaemon, workspaceTerminalTabs]);
+  const existingLinkedTerminalTarget =
+    linkedTerminalTabs[0]?.target.kind === "terminal" ? linkedTerminalTabs[0].target : null;
+  const fallbackLinkedTerminal = useMemo(
+    () =>
+      linkedTerminalsQuery.data?.terminals.find((terminal) => terminal.linkedAgentId === agentId) ??
+      null,
+    [agentId, linkedTerminalsQuery.data],
+  );
+  const fallbackLinkedTerminalId = fallbackLinkedTerminal?.id ?? null;
+  const linkedTerminalIds = useMemo(() => {
+    const terminalIds = new Set(linkedTerminalIdsFromDaemon);
+    for (const tab of linkedTerminalTabs) {
+      terminalIds.add(tab.target.terminalId);
+    }
+    return Array.from(terminalIds);
+  }, [linkedTerminalIdsFromDaemon, linkedTerminalTabs]);
+  const linkedTerminalStatusById = useMemo(() => {
+    if (!linkedTerminalsQuery.isSuccess) {
+      return undefined;
+    }
+    const liveTerminalIds = new Set(
+      linkedTerminalsQuery.data.terminals.map((terminal) => terminal.id),
+    );
+    return new Map<string, LinkedTerminalRuntimeStatus>(
+      linkedTerminalIds.map((terminalId) => [
+        terminalId,
+        liveTerminalIds.has(terminalId) ? "live" : "needs-recovery",
+      ]),
+    );
+  }, [linkedTerminalIds, linkedTerminalsQuery.data, linkedTerminalsQuery.isSuccess]);
+  const hasLinkedTerminal =
+    existingLinkedTerminalTarget !== null || fallbackLinkedTerminalId !== null;
+  const primaryLinkedTerminalId =
+    existingLinkedTerminalTarget?.terminalId ?? fallbackLinkedTerminalId ?? null;
+  const linkedTerminalNeedsRecovery =
+    primaryLinkedTerminalId !== null &&
+    linkedTerminalStatusById?.get(primaryLinkedTerminalId) === "needs-recovery";
+  const { buttonLabel: linkedTerminalButtonLabel, statusLabel: linkedTerminalStatusLabel } =
+    resolveLinkedTerminalToolbarState({
+      isCreatingLinkedTerminal,
+      needsRecovery: linkedTerminalNeedsRecovery,
+      hasLinkedTerminal,
+      primaryLinkedTerminalId,
+    });
   const { archiveAgent } = useArchiveAgent();
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
   const hideWorkspaceAgent = useWorkspaceLayoutStore((state) => state.hideAgent);
@@ -1445,6 +1554,22 @@ function ActiveAgentComposer({
   );
 
   const openLinkedTerminal = useCallback(async () => {
+    if (existingLinkedTerminalTarget) {
+      setLinkedTerminalError(null);
+      openTab(existingLinkedTerminalTarget);
+      return;
+    }
+    if (fallbackLinkedTerminal) {
+      setLinkedTerminalError(null);
+      openTab({
+        kind: "terminal",
+        terminalId: fallbackLinkedTerminal.id,
+        cwd,
+        sourceAgentId: agentId,
+      });
+      return;
+    }
+
     const agent = resolveChatAgentFromSession(useSessionStore.getState(), serverId, agentId);
     if (!agent) {
       throw new Error("Agent not found");
@@ -1471,14 +1596,12 @@ function ActiveAgentComposer({
       // Seed the workspace terminals query before opening the tab. The workspace
       // tab reconciler closes terminal tabs whose id is not in the terminals
       // query yet, which would immediately collapse the split we open below.
-      queryClient.setQueryData<ListTerminalsPayload>(
-        buildTerminalsQueryKey(serverId, createdTerminal.cwd),
-        (current) =>
-          upsertCreatedTerminalPayload({
-            current,
-            terminal: createdTerminal,
-            workspaceDirectory: createdTerminal.cwd,
-          }),
+      queryClient.setQueryData<ListTerminalsPayload>(terminalsQueryKey, (current) =>
+        upsertCreatedTerminalPayload({
+          current,
+          terminal: createdTerminal,
+          workspaceDirectory: createdTerminal.cwd,
+        }),
       );
       openTabInSplit(
         {
@@ -1492,7 +1615,18 @@ function ActiveAgentComposer({
     } finally {
       setIsCreatingLinkedTerminal(false);
     }
-  }, [agentId, client, openTabInSplit, queryClient, serverId]);
+  }, [
+    agentId,
+    client,
+    cwd,
+    existingLinkedTerminalTarget,
+    fallbackLinkedTerminal,
+    terminalsQueryKey,
+    openTab,
+    openTabInSplit,
+    queryClient,
+    serverId,
+  ]);
 
   const handleOpenLinkedTerminalPress = useCallback(() => {
     openLinkedTerminal().catch((error) => {
@@ -1503,13 +1637,20 @@ function ActiveAgentComposer({
     ({ pressed }: { pressed: boolean }) => [
       styles.linkedTerminalButton,
       pressed ? styles.linkedTerminalButtonPressed : null,
-      isCreatingLinkedTerminal || !client ? styles.linkedTerminalButtonDisabled : null,
+      isCreatingLinkedTerminal || (!client && !hasLinkedTerminal)
+        ? styles.linkedTerminalButtonDisabled
+        : null,
     ],
-    [client, isCreatingLinkedTerminal],
+    [client, hasLinkedTerminal, isCreatingLinkedTerminal],
   );
   const buildWireMessageContext = useCallback(
-    () => buildLinkedTerminalWireContext({ agentId, tabs: linkedTerminalTabs }),
-    [agentId, linkedTerminalTabs],
+    () =>
+      buildLinkedTerminalWireContext({
+        agentId,
+        tabs: linkedTerminalTabs,
+        terminalStatusById: linkedTerminalStatusById,
+      }),
+    [agentId, linkedTerminalStatusById, linkedTerminalTabs],
   );
 
   const handleClientSlashCommand = useCallback(
@@ -1624,7 +1765,7 @@ function ActiveAgentComposer({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open linked terminal"
-          disabled={isCreatingLinkedTerminal || !client}
+          disabled={isCreatingLinkedTerminal || (!client && !hasLinkedTerminal)}
           onPress={handleOpenLinkedTerminalPress}
           style={linkedTerminalButtonStyle}
         >
@@ -1633,8 +1774,9 @@ function ActiveAgentComposer({
           ) : (
             <Terminal size={14} color={styles.linkedTerminalIcon.color} />
           )}
-          <Text style={styles.linkedTerminalButtonText}>Linked terminal</Text>
+          <Text style={styles.linkedTerminalButtonText}>{linkedTerminalButtonLabel}</Text>
         </Pressable>
+        <StatusBadge label={linkedTerminalStatusLabel} variant="muted" />
         {linkedTerminalError ? (
           <Text numberOfLines={1} style={styles.linkedTerminalError}>
             {linkedTerminalError}
@@ -1763,6 +1905,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   agentToolbar: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: theme.spacing[2],
     paddingHorizontal: theme.spacing[3],
@@ -1791,11 +1934,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   linkedTerminalButtonText: {
     fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.normal,
     color: theme.colors.foreground,
   },
   linkedTerminalError: {
     flex: 1,
+    minWidth: 0,
     fontSize: theme.fontSize.xs,
     color: theme.colors.destructive,
   },

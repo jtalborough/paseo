@@ -28,6 +28,15 @@ export interface FakeCodexAppServer {
     reason: string;
   }): void;
   waitForCommandApprovalDecision(itemId: string): Promise<unknown>;
+  requestPermissionsApproval(params: {
+    itemId: string;
+    threadId: string;
+    turnId: string;
+    cwd: string;
+    reason: string;
+    permissions: JsonObject;
+  }): void;
+  waitForPermissionsApprovalDecision(itemId: string): Promise<unknown>;
 }
 
 export function createCodexAppServerChildProcess(): CodexAppServerChildProcess {
@@ -236,6 +245,19 @@ export function createFakeCodexAppServer(
         })}\n`,
       );
     },
+    requestPermissionsApproval(params) {
+      const requestId = nextServerRequestId;
+      nextServerRequestId += 1;
+      approvalRequestIds.set(params.itemId, requestId);
+      child.stdout.write(
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: requestId,
+          method: "item/permissions/requestApproval",
+          params,
+        })}\n`,
+      );
+    },
     async waitForCommandApprovalDecision(itemId) {
       const requestId = approvalRequestIds.get(itemId);
       if (requestId === undefined) {
@@ -245,6 +267,18 @@ export function createFakeCodexAppServer(
         (candidate) =>
           candidate.id === requestId && !("method" in candidate) && "result" in candidate,
         "command approval response",
+      );
+      return message.result;
+    },
+    async waitForPermissionsApprovalDecision(itemId) {
+      const requestId = approvalRequestIds.get(itemId);
+      if (requestId === undefined) {
+        throw new Error(`No pending fake Codex app-server approval for ${itemId}`);
+      }
+      const message = await waitForMessage(
+        (candidate) =>
+          candidate.id === requestId && !("method" in candidate) && "result" in candidate,
+        "permissions approval response",
       );
       return message.result;
     },

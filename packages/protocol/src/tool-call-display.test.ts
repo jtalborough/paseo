@@ -155,6 +155,16 @@ describe("shared tool-call display mapping", () => {
     expect(display.displayName).toBe("Create Agent");
   });
 
+  it("humanizes Paseo MCP tool names (Codex mixed namespace format)", () => {
+    const display = buildToolCallDisplayModel({
+      name: "mcp__paseo.list_terminals",
+      status: "running",
+      error: null,
+      detail: { type: "unknown", input: null, output: null },
+    });
+    expect(display.displayName).toBe("List Terminals");
+  });
+
   it("humanizes list_agents Paseo tool", () => {
     const display = buildToolCallDisplayModel({
       name: "mcp__paseo__list_agents",
