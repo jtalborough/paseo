@@ -395,15 +395,17 @@ function getWorkAreasPrimaryFirst(): Electron.Rectangle[] {
   return [primary, ...others].map((display) => display.workArea);
 }
 
-async function createMainWindow(): Promise<void> {
+async function createMainWindow(options: { restoreState?: boolean } = {}): Promise<BrowserWindow> {
+  const restoreState = options.restoreState ?? true;
   const iconPath = getWindowIconPath();
   const systemTheme = resolveSystemWindowTheme();
 
   const windowStateStore = createWindowStateStore({ userDataPath: app.getPath("userData") });
-  const savedWindowState = await windowStateStore.load();
-  const restoredWindowState = savedWindowState
-    ? clampWindowStateToWorkAreas(savedWindowState, getWorkAreasPrimaryFirst())
-    : null;
+  const savedWindowState = restoreState ? await windowStateStore.load() : null;
+  const restoredWindowState =
+    restoreState && savedWindowState
+      ? clampWindowStateToWorkAreas(savedWindowState, getWorkAreasPrimaryFirst())
+      : null;
 
   const title = devWorktreeName ? `${APP_NAME} (${devWorktreeName})` : APP_NAME;
   const mainWindow = new BrowserWindow({
@@ -531,10 +533,16 @@ async function createMainWindow(): Promise<void> {
     const { loadReactDevTools } = await import("./features/react-devtools.js");
     await loadReactDevTools();
     await mainWindow.loadURL(DEV_SERVER_URL);
-    return;
+    return mainWindow;
   }
 
   await mainWindow.loadURL(`${APP_SCHEME}://app/`);
+  return mainWindow;
+}
+
+async function createAdditionalWindow(): Promise<void> {
+  const win = await createMainWindow({ restoreState: false });
+  win.focus();
 }
 
 function sendOpenProjectEvent(win: BrowserWindow, projectPath: string): void {
@@ -575,7 +583,7 @@ function setupSingleInstanceLock(): boolean {
       isDefaultApp: false,
     });
     log.info("[open-project] second-instance openProjectPath:", openProjectPath);
-    const win = BrowserWindow.getAllWindows()[0];
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     if (win) {
       win.show();
       if (win.isMinimized()) win.restore();
@@ -689,7 +697,7 @@ async function bootstrap(): Promise<void> {
   });
 
   applyAppIcon();
-  setupApplicationMenu();
+  setupApplicationMenu({ createWindow: createAdditionalWindow });
   ensureNotificationCenterRegistration();
   if (await runDesktopSmokeIfRequested()) {
     return;
@@ -706,7 +714,9 @@ async function bootstrap(): Promise<void> {
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       await createMainWindow();
+      return;
     }
+    BrowserWindow.getAllWindows()[0]?.show();
   });
 }
 

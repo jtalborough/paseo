@@ -6,6 +6,10 @@ interface ShowContextMenuInput {
   hasSelection?: boolean;
 }
 
+export interface ApplicationMenuOptions {
+  createWindow?: () => void | Promise<void>;
+}
+
 function withBrowserWindow(
   callback: (win: BrowserWindow) => void,
 ): (_item: Electron.MenuItem, baseWin: Electron.BaseWindow | undefined) => void {
@@ -41,10 +45,18 @@ function reloadFocusedContentsOrWindow(win: BrowserWindow, options?: { ignoreCac
   win.webContents.reload();
 }
 
-export function setupApplicationMenu(): void {
+function runMenuAction(action: () => void | Promise<void>): void {
+  Promise.resolve(action()).catch((error) => {
+    console.error("[menu] action failed", error);
+  });
+}
+
+export function buildApplicationMenuTemplate(
+  options: ApplicationMenuOptions = {},
+): Electron.MenuItemConstructorOptions[] {
   const isMac = process.platform === "darwin";
 
-  const template: Electron.MenuItemConstructorOptions[] = [
+  return [
     ...(isMac
       ? [
           {
@@ -63,6 +75,22 @@ export function setupApplicationMenu(): void {
           },
         ]
       : []),
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "New Window",
+          accelerator: "CmdOrCtrl+Shift+N",
+          enabled: Boolean(options.createWindow),
+          click: () => {
+            if (options.createWindow) {
+              runMenuAction(options.createWindow);
+            }
+          },
+        },
+        ...(isMac ? [{ type: "separator" as const }, { role: "close" as const }] : []),
+      ],
+    },
     {
       label: "Edit",
       submenu: [
@@ -130,6 +158,10 @@ export function setupApplicationMenu(): void {
       ],
     },
   ];
+}
+
+export function setupApplicationMenu(options: ApplicationMenuOptions = {}): void {
+  const template = buildApplicationMenuTemplate(options);
 
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);

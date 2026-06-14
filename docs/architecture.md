@@ -135,6 +135,7 @@ Electron wrapper for macOS, Linux, and Windows.
 - Can spawn the daemon as a managed subprocess
 - Native file access for workspace integration
 - Same WebSocket client as mobile app
+- Supports multiple desktop windows as independent clients of the same daemon; creating a new window must not spawn a second daemon or duplicate agent ownership
 
 ### `packages/website` — Marketing site
 
