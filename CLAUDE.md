@@ -90,6 +90,13 @@ See docs/development.md for full setup, build sync requirements, and debugging.
 
 - **Run** `npm run format` **before committing.** This repo uses Biome for formatting. Do not manually fix formatting — let the formatter handle it.
 
+- **Use conventional commits, one logical slice per commit.** Commit subjects must use
+  `type(scope): summary` such as `feat(projects): show project launch targets`,
+  `fix(terminals): preserve linked terminal status`, or `docs(projects): define agent team model`.
+  Keep unrelated product, UI, server, docs, and test changes in separate commits even when they were
+  developed in the same working session. Prefer tying each commit to a Project Task or explicit user
+  request.
+
 - **Always use npm scripts for linting and formatting.** Do not run tools directly with `npx eslint`, `npx oxfmt`, `npx oxlint`, or package-local binaries. For targeted checks, pass file paths through the npm script:
   - `npm run lint -- packages/app/src/components/message.tsx`
   - `npm run format:files -- CLAUDE.md packages/app/src/components/message.tsx`
