@@ -146,7 +146,9 @@ export class TaskStore {
       }
       throw error;
     }
-    const tasks = await Promise.all(entries.map((name) => this.readFile(path.join(dir, name))));
+    const tasks = (
+      await Promise.all(entries.map((name) => this.readListFile(path.join(dir, name))))
+    ).filter((task): task is StoredTask => task !== null);
     return tasks.sort((left, right) =>
       left.metadata.createdAt.localeCompare(right.metadata.createdAt),
     );
@@ -419,6 +421,18 @@ export class TaskStore {
       return { metadata, body };
     } catch (error) {
       throw new TaskParseError(filePath, error);
+    }
+  }
+
+  private async readListFile(filePath: string): Promise<StoredTask | null> {
+    try {
+      return await this.readFile(filePath);
+    } catch (error) {
+      if (error instanceof TaskParseError) {
+        console.warn(`Skipping invalid task file during list: ${error.filePath}`);
+        return null;
+      }
+      throw error;
     }
   }
 

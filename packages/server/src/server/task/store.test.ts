@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { TaskStore } from "./store.js";
+import { TaskParseError, TaskStore } from "./store.js";
 
 describe("TaskStore", () => {
   let paseoHome: string;
@@ -177,6 +177,57 @@ describe("TaskStore", () => {
 
     const projectTwo = await store.list("grp_two");
     expect(projectTwo.map((t) => t.metadata.title)).toEqual(["Gamma"]);
+  });
+
+  it("skips invalid task files when listing but still throws on direct read", async () => {
+    const valid = await store.create({ projectGroupId: "grp_one", title: "Valid task" });
+    const taskDir = path.join(paseoHome, "projects", "grp_one", "tasks");
+    await mkdir(taskDir, { recursive: true });
+    await writeFile(
+      path.join(taskDir, "2026-06-14-invalid.md"),
+      [
+        "---",
+        "id: 2026-06-14-invalid",
+        "projectGroupId: grp_one",
+        "title: Invalid task",
+        "run: self",
+        "priority: medium",
+        "type: feature",
+        "people: []",
+        "context: null",
+        "attention: medium",
+        "doDate: null",
+        "recurrence: null",
+        "remind: []",
+        "scheduleIds: []",
+        "scheduledRuns: []",
+        "timerStartedAt: null",
+        "trackedSeconds: 0",
+        "timeEntries: []",
+        "provider: null",
+        "links: []",
+        "github: null",
+        "sources: []",
+        "createdAt: 2026-06-14T00:00:00.000Z",
+        "updatedAt: 2026-06-14T00:00:00.000Z",
+        "agentId: null",
+        "worktree: null",
+        "contextPacket: null",
+        "lastRunAt: null",
+        "result: free-form text is invalid",
+        "lastCompletedAt: null",
+        "completions: []",
+        "actionState: done",
+        "---",
+        "",
+        "Bad metadata should not break the project task list.",
+        "",
+      ].join("\n"),
+    );
+
+    const listed = await store.list("grp_one");
+    expect(listed.map((task) => task.metadata.id)).toEqual([valid.metadata.id]);
+    await expect(store.get("grp_one", "2026-06-14-invalid")).rejects.toBeInstanceOf(TaskParseError);
   });
 
   it("queryAll gathers tasks across every Project directory", async () => {

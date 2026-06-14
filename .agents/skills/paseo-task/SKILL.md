@@ -96,7 +96,10 @@ actionState: todo
 ---
 ```
 
-Use `actionState: done`, `lastCompletedAt`, and `completions` only when complete. Do not duplicate YAML keys.
+Use `actionState: done`, `lastCompletedAt`, and `completions` only when complete. `result`
+must be `success`, `failed`, or `null`; do not put a prose summary in `result`. `completions`
+is a list of ISO timestamp strings, not objects. Put evidence, commit hashes, and summaries in
+the Markdown body. Do not duplicate YAML keys.
 
 ## Task quality
 
