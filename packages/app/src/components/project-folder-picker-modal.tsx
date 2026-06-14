@@ -8,7 +8,7 @@ import {
   View,
   type PressableStateCallbackType,
 } from "react-native";
-import { Folder } from "lucide-react-native";
+import { ChevronRight, Folder } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -28,12 +28,14 @@ interface ProjectFolderPickerModalProps {
 interface PathRowProps {
   path: string;
   active: boolean;
+  onBrowse: (path: string) => void;
   onSelect: (path: string) => void;
 }
 
-function PathRow({ path, active, onSelect }: PathRowProps) {
+function PathRow({ path, active, onBrowse, onSelect }: PathRowProps) {
   const { theme } = useUnistyles();
   const handlePress = useCallback(() => onSelect(path), [onSelect, path]);
+  const handleBrowse = useCallback(() => onBrowse(path), [onBrowse, path]);
   const pressableStyle = useCallback(
     ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.row,
@@ -57,9 +59,49 @@ function PathRow({ path, active, onSelect }: PathRowProps) {
         <Text style={rowTextStyle} numberOfLines={1}>
           {shortenPath(path)}
         </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Browse ${path}`}
+          hitSlop={8}
+          onPress={handleBrowse}
+          style={styles.browseButton}
+        >
+          <ChevronRight size={16} strokeWidth={2.2} color={theme.colors.foregroundMuted} />
+        </Pressable>
       </View>
     </Pressable>
   );
+}
+
+function resolveEmptyMessage(input: {
+  errorMessage: string | null;
+  isSubmitting: boolean;
+  optionsLength: number;
+  query: string;
+  isFetching: boolean;
+  isConnected: boolean;
+}): string | null {
+  if (input.errorMessage) {
+    return null;
+  }
+  if (input.isSubmitting) {
+    return "Adding folder...";
+  }
+  if (input.optionsLength > 0) {
+    return null;
+  }
+  if (!input.query.trim()) {
+    if (input.isFetching) {
+      return "Loading remote directories...";
+    }
+    return input.isConnected
+      ? "No remote directories found. Type a path to add one manually."
+      : "Host is offline";
+  }
+  if (!input.isFetching) {
+    return "No matching remote directories";
+  }
+  return null;
 }
 
 export function ProjectFolderPickerModal({
@@ -78,13 +120,18 @@ export function ProjectFolderPickerModal({
   const [activeIndex, setActiveIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const directorySuggestionsQueryText = query.trim() || "~";
 
   const directorySuggestionsQuery = useQuery({
-    queryKey: ["project-folder-picker-directory-suggestions", serverId, query],
+    queryKey: [
+      "project-folder-picker-directory-suggestions",
+      serverId,
+      directorySuggestionsQueryText,
+    ],
     queryFn: async () => {
       if (!client) return [];
       const result = await client.getDirectorySuggestions({
-        query,
+        query: directorySuggestionsQueryText,
         includeDirectories: true,
         includeFiles: false,
         limit: 30,
@@ -102,14 +149,14 @@ export function ProjectFolderPickerModal({
     const suggestedPaths = buildWorkingDirectorySuggestions({
       recommendedPaths,
       serverPaths: directorySuggestionsQuery.data ?? [],
-      query,
+      query: query.trim() ? query : directorySuggestionsQueryText,
     });
     const trimmedQuery = query.trim();
     if (!trimmedQuery || suggestedPaths.includes(trimmedQuery)) {
       return suggestedPaths;
     }
     return [trimmedQuery, ...suggestedPaths];
-  }, [directorySuggestionsQuery.data, query, recommendedPaths]);
+  }, [directorySuggestionsQuery.data, directorySuggestionsQueryText, query, recommendedPaths]);
 
   const handleSelectPath = useCallback(
     async (path: string) => {
@@ -137,6 +184,12 @@ export function ProjectFolderPickerModal({
 
   const handleChangeQuery = useCallback((text: string) => {
     setQuery(text);
+    setActiveIndex(0);
+    setErrorMessage(null);
+  }, []);
+
+  const handleBrowsePath = useCallback((path: string) => {
+    setQuery(path.endsWith("/") ? path : `${path}/`);
     setActiveIndex(0);
     setErrorMessage(null);
   }, []);
@@ -222,6 +275,14 @@ export function ProjectFolderPickerModal({
     () => [styles.emptyText, { color: theme.colors.destructive }],
     [theme.colors.destructive],
   );
+  const emptyMessage = resolveEmptyMessage({
+    errorMessage,
+    isSubmitting,
+    optionsLength: options.length,
+    query,
+    isFetching: directorySuggestionsQuery.isFetching,
+    isConnected,
+  });
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -234,7 +295,7 @@ export function ProjectFolderPickerModal({
               ref={inputRef}
               value={query}
               onChangeText={handleChangeQuery}
-              placeholder="Type a remote directory path..."
+              placeholder="Search or browse remote directories..."
               placeholderTextColor={theme.colors.foregroundMuted}
               style={inputStyle}
               autoCapitalize="none"
@@ -253,12 +314,7 @@ export function ProjectFolderPickerModal({
             showsVerticalScrollIndicator={false}
           >
             {errorMessage ? <Text style={errorTextStyle}>{errorMessage}</Text> : null}
-            {!errorMessage && isSubmitting ? (
-              <Text style={emptyTextStyle}>Adding folder...</Text>
-            ) : null}
-            {!errorMessage && !isSubmitting && options.length === 0 && !query.trim() ? (
-              <Text style={emptyTextStyle}>Start typing a remote path</Text>
-            ) : null}
+            {emptyMessage ? <Text style={emptyTextStyle}>{emptyMessage}</Text> : null}
             {!isSubmitting && !(options.length === 0 && !query.trim()) ? (
               <>
                 {options.map((path, index) => (
@@ -266,6 +322,7 @@ export function ProjectFolderPickerModal({
                     key={path}
                     path={path}
                     active={index === activeIndex}
+                    onBrowse={handleBrowsePath}
                     onSelect={handleSelectPath}
                   />
                 ))}
@@ -335,10 +392,18 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   rowText: {
+    flex: 1,
     fontSize: theme.fontSize.base,
     fontWeight: "400",
     lineHeight: 20,
-    flexShrink: 1,
+    minWidth: 0,
+  },
+  browseButton: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.md,
   },
   emptyText: {
     paddingHorizontal: theme.spacing[4],
