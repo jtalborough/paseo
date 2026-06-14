@@ -27,10 +27,15 @@ import { ProjectSurfaceHeader } from "@/components/project-surface-header";
 import { ProjectFolderPickerModal } from "@/components/project-folder-picker-modal";
 import { updateProfileFormField } from "@/composer/draft/workspace-tab-core";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/contexts/toast-context";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { useHostProjects, type HostProjectListItem } from "@/projects/host-projects";
+import {
+  buildProfileLaunchBriefing,
+  formatFolderGrantDisplay,
+} from "@/projects/project-launch-briefing";
 import { resolveProjectLaunchTarget } from "@/projects/project-launch-target";
 import { createWorkspaceBrowser } from "@/stores/browser-store";
 import { generateDraftId } from "@/stores/draft-keys";
@@ -155,10 +160,12 @@ export function ProjectHomeScreen({
     }
     router.navigate(buildHostProjectContextRoute(serverId, groupId));
   }, [groupId, onOpenTab, serverId]);
-  const launchCwd = useMemo(
-    () => (group ? resolveProjectLaunchTarget({ group, folders }).cwd : undefined),
+  const launchTarget = useMemo(
+    () => (group ? resolveProjectLaunchTarget({ group, folders }) : null),
     [group, folders],
   );
+  const launchCwd = launchTarget?.cwd;
+  const launchTargetLabel = launchTarget?.label;
   const handleNewAgent = useCallback(() => {
     if (onOpenTab) {
       onOpenTab({
@@ -217,7 +224,9 @@ export function ProjectHomeScreen({
             <View style={styles.launchpadGrid}>
               <LaunchpadAction
                 label="New agent"
-                description="Start delegated work"
+                description={
+                  launchTargetLabel ? `Start in ${launchTargetLabel}` : "Start delegated work"
+                }
                 Icon={ThemedBot}
                 onPress={handleNewAgent}
                 testID="project-home-action-new-agent"
@@ -296,7 +305,9 @@ export function ProjectHomeScreen({
             serverId={serverId}
             groupId={groupId}
             launchCwd={launchCwd}
+            launchTargetLabel={launchTargetLabel}
             projectDirectory={group.cwd}
+            folders={folders}
             agents={agents}
             onOpenTab={onOpenTab}
           />
@@ -372,10 +383,12 @@ export function ProjectAgentsScreen({
     () => projects.filter((project) => project.projectGroupId === groupId),
     [projects, groupId],
   );
-  const launchCwd = useMemo(
-    () => (group ? resolveProjectLaunchTarget({ group, folders }).cwd : undefined),
+  const launchTarget = useMemo(
+    () => (group ? resolveProjectLaunchTarget({ group, folders }) : null),
     [group, folders],
   );
+  const launchCwd = launchTarget?.cwd;
+  const launchTargetLabel = launchTarget?.label;
   const agents = useMemo(
     () =>
       Array.from(hostAgents?.values() ?? [])
@@ -411,7 +424,9 @@ export function ProjectAgentsScreen({
             serverId={serverId}
             groupId={groupId}
             launchCwd={launchCwd}
+            launchTargetLabel={launchTargetLabel}
             projectDirectory={group.cwd}
+            folders={folders}
             agents={agents}
             onOpenTab={onOpenTab}
           />
@@ -426,13 +441,17 @@ function ProjectAgentsSection({
   groupId,
   agents,
   launchCwd,
+  launchTargetLabel,
   projectDirectory,
+  folders,
   onOpenTab,
 }: {
   serverId: string;
   groupId: string;
   launchCwd: string | null | undefined;
+  launchTargetLabel: string | null | undefined;
   projectDirectory: string | null | undefined;
+  folders: HostProjectListItem[];
   agents: Agent[];
   onOpenTab?: (target: WorkspaceTabTarget) => void;
 }) {
@@ -456,6 +475,7 @@ function ProjectAgentsSection({
         groupId={groupId}
         launchCwd={launchCwd}
         projectDirectory={projectDirectory}
+        folders={folders}
         onOpenTab={onOpenTab}
       />
       <View style={styles.sectionHeader}>
@@ -464,6 +484,11 @@ function ProjectAgentsSection({
           <Text style={styles.sectionHint}>
             Agents and delegated work attached to this Project.
           </Text>
+          {launchTargetLabel ? (
+            <Text style={styles.launchTargetHint} numberOfLines={1}>
+              New agents start in {launchTargetLabel}.
+            </Text>
+          ) : null}
         </View>
         <Button
           variant="ghost"
@@ -515,12 +540,14 @@ function ProjectAgentProfilesSection({
   groupId,
   launchCwd,
   projectDirectory,
+  folders,
   onOpenTab,
 }: {
   serverId: string;
   groupId: string;
   launchCwd: string | null | undefined;
   projectDirectory: string | null | undefined;
+  folders: HostProjectListItem[];
   onOpenTab?: (target: WorkspaceTabTarget) => void;
 }) {
   const toast = useToast();
@@ -664,8 +691,9 @@ function ProjectAgentProfilesSection({
           return;
         }
       }
+      let contextPacketPath: string | null = null;
       try {
-        await client.projectContextPacketCreate({
+        const packet = await client.projectContextPacketCreate({
           projectGroupId: groupId,
           launchReason: `Use profile: ${entry.profile.name}`,
           provider: entry.profile.provider,
@@ -675,6 +703,7 @@ function ProjectAgentProfilesSection({
           tools: entry.profile.defaultTools,
           folderGrants: entry.profile.folderGrants,
         });
+        contextPacketPath = packet.path;
         void queryClient.invalidateQueries({
           queryKey: ["project-context-packets", serverId, groupId],
         });
@@ -689,6 +718,7 @@ function ProjectAgentProfilesSection({
           groupId,
           launchCwd,
           initialPrompt,
+          contextPacketPath,
         }),
       });
     },
@@ -728,6 +758,7 @@ function ProjectAgentProfilesSection({
             key={entry.path}
             entry={entry}
             isFirst={index === 0}
+            folders={folders}
             onEdit={startEdit}
             onUse={handleUseProfile}
             onDelete={handleDelete}
@@ -841,12 +872,14 @@ function ProjectAgentProfilesSection({
 function ProjectAgentProfileRow({
   entry,
   isFirst,
+  folders,
   onEdit,
   onUse,
   onDelete,
 }: {
   entry: ProjectAgentProfileEntry;
   isFirst: boolean;
+  folders: HostProjectListItem[];
   onEdit: (entry: ProjectAgentProfileEntry) => void;
   onUse: (entry: ProjectAgentProfileEntry) => void;
   onDelete: (entry: ProjectAgentProfileEntry) => void;
@@ -865,12 +898,25 @@ function ProjectAgentProfileRow({
   const handleEdit = useCallback(() => onEdit(entry), [entry, onEdit]);
   const handleUse = useCallback(() => onUse(entry), [entry, onUse]);
   const handleDelete = useCallback(() => onDelete(entry), [entry, onDelete]);
-  const summary = [
-    profile.provider ?? "default provider",
-    profile.model,
-    profile.prompt,
-    profile.defaultTools.length ? `${profile.defaultTools.length} tools` : null,
-  ].filter(Boolean);
+  const briefing = useMemo(
+    () => buildProfileLaunchBriefing({ profile, path: entry.path }),
+    [entry.path, profile],
+  );
+  const primaryDetails = briefing.items
+    .filter((item) => item.label !== "Packet")
+    .slice(0, 3)
+    .map((item) => item.value);
+  const folderGrantDisplays = useMemo(
+    () =>
+      profile.folderGrants.map((grant) =>
+        formatFolderGrantDisplay({
+          grant,
+          folders,
+        }),
+      ),
+    [folders, profile.folderGrants],
+  );
+  const titleStyle = useMemo(() => [settingsStyles.rowTitle, styles.profileTitle], []);
 
   return (
     <Pressable
@@ -883,12 +929,46 @@ function ProjectAgentProfileRow({
       <View style={styles.folderMain}>
         <ThemedBot size={16} uniProps={iconColorMapping} />
         <View style={styles.folderText}>
-          <Text style={settingsStyles.rowTitle} numberOfLines={1}>
-            {profile.name}
-          </Text>
+          <View style={styles.profileTitleRow}>
+            <Text style={titleStyle} numberOfLines={1}>
+              {profile.name}
+            </Text>
+            <StatusBadge label={briefing.readinessLabel} variant={briefing.badgeVariant} />
+          </View>
           <Text style={settingsStyles.rowHint} numberOfLines={1}>
-            {summary.join(" - ")}
+            {primaryDetails.join(" - ")}
           </Text>
+          {briefing.accessSummary.length ? (
+            <Text style={styles.profileLaunchSummary} numberOfLines={1}>
+              Launch packet: {briefing.accessSummary.join(" - ")}
+            </Text>
+          ) : (
+            <Text style={styles.profileLaunchSummary} numberOfLines={1}>
+              Launch packet: no tools or folder grants
+            </Text>
+          )}
+          {briefing.warnings.length ? (
+            <View style={styles.profileWarnings}>
+              {briefing.warnings.map((warning) => (
+                <Text key={warning} style={styles.profileWarningText} numberOfLines={1}>
+                  {warning}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+          {folderGrantDisplays.length ? (
+            <View style={styles.profileGrantList}>
+              {folderGrantDisplays.map((grantDisplay) => (
+                <Text
+                  key={`${grantDisplay.title}:${grantDisplay.detail}`}
+                  style={styles.profileGrantText}
+                  numberOfLines={1}
+                >
+                  {grantDisplay.title} - {grantDisplay.detail}
+                </Text>
+              ))}
+            </View>
+          ) : null}
         </View>
       </View>
       <View style={styles.profileRowActions}>
@@ -1275,6 +1355,10 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     lineHeight: theme.fontSize.sm * 1.4,
   },
+  launchTargetHint: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
   folderCount: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
@@ -1293,6 +1377,36 @@ const styles = StyleSheet.create((theme) => ({
   folderText: {
     flex: 1,
     minWidth: 0,
+    gap: theme.spacing[1],
+  },
+  profileTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    minWidth: 0,
+  },
+  profileTitle: {
+    flexShrink: 1,
+  },
+  profileLaunchSummary: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  profileWarnings: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
+  },
+  profileWarningText: {
+    color: theme.colors.palette.amber[500],
+    fontSize: theme.fontSize.xs,
+  },
+  profileGrantList: {
+    gap: 2,
+  },
+  profileGrantText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
   },
   rowHovered: {
     backgroundColor: theme.colors.surface2,

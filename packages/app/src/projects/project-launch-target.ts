@@ -1,10 +1,10 @@
 import type { HostProjectListItem } from "@/projects/host-project-model";
 
-// Resolving "launch an agent at this Project" to a concrete cwd. A selected
-// Project is UI context, not a directory — committee guidance (Plan 00, Phase
-// 1c#4). Precedence: designated primary folder → sole member folder → (multiple,
-// no primary → ambiguous, caller prompts) → the Project's own domain directory
-// when it has no folders at all.
+// Resolving "launch an agent at this Project" to a concrete cwd.
+// Project-level launches use the managed Project directory when the daemon
+// exposes one. Folder/Workspace launches are separate, explicit user choices.
+// Older daemons that do not expose a Project directory fall back to the legacy
+// folder-first behavior.
 
 export interface ProjectLaunchTarget {
   /** Concrete directory the agent launches in. */
@@ -37,6 +37,10 @@ export function resolveProjectLaunchTarget(input: {
     label: `${group.displayName} (Project home)`,
     ambiguous: false,
   };
+
+  if (domainCwd) {
+    return domainTarget;
+  }
 
   const asTarget = (folder: HostProjectListItem): ProjectLaunchTarget => ({
     cwd: folder.iconWorkingDir,

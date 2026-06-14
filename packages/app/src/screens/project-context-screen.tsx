@@ -4,7 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import type { ProjectContextPacketEntry } from "@getpaseo/client/internal/daemon-client";
 import { StyleSheet } from "react-native-unistyles";
 import { ProjectSurfaceHeader } from "@/components/project-surface-header";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { useProjectGroups } from "@/hooks/use-project-groups";
+import { useHostProjects, type HostProjectListItem } from "@/projects/host-projects";
+import {
+  buildPacketLaunchBriefing,
+  formatFolderGrantDisplay,
+} from "@/projects/project-launch-briefing";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
 
@@ -23,6 +29,7 @@ export function ProjectContextScreen({
 }: ProjectContextScreenProps) {
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const { groups, supported } = useProjectGroups(serverId);
+  const folders = useHostProjects(serverId);
   const group = useMemo(
     () => groups.find((candidate) => candidate.groupId === groupId) ?? null,
     [groupId, groups],
@@ -96,6 +103,7 @@ export function ProjectContextScreen({
                 <ContextPacketCard
                   key={entry.path}
                   entry={entry}
+                  folders={folders}
                   selected={entry.path === selectedPacketPath}
                 />
               ))}
@@ -109,79 +117,76 @@ export function ProjectContextScreen({
 
 function ContextPacketCard({
   entry,
+  folders,
   selected,
 }: {
   entry: ProjectContextPacketEntry;
+  folders: HostProjectListItem[];
   selected: boolean;
 }) {
   const packet = entry.packet;
+  const briefing = useMemo(
+    () => buildPacketLaunchBriefing({ packet, path: entry.path }),
+    [entry.path, packet],
+  );
   const packetCardStyle = useMemo(
     () => [styles.packetCard, selected ? styles.packetCardSelected : null],
     [selected],
   );
-  const counts = [
-    packet.files.length
-      ? `${packet.files.length} file${packet.files.length === 1 ? "" : "s"}`
-      : null,
-    packet.notes.length
-      ? `${packet.notes.length} note${packet.notes.length === 1 ? "" : "s"}`
-      : null,
-    packet.folderGrants.length
-      ? `${packet.folderGrants.length} folder grant${packet.folderGrants.length === 1 ? "" : "s"}`
-      : null,
-    packet.browser.length
-      ? `${packet.browser.length} browser state${packet.browser.length === 1 ? "" : "s"}`
-      : null,
-    packet.tools.length
-      ? `${packet.tools.length} tool${packet.tools.length === 1 ? "" : "s"}`
-      : null,
-  ].filter(Boolean);
 
   return (
     <View style={packetCardStyle}>
       <View style={styles.packetHeader}>
         <View style={styles.packetTitleBlock}>
-          <Text style={styles.packetTitle}>{packet.launchReason ?? packet.id}</Text>
+          <View style={styles.packetTitleRow}>
+            <Text style={styles.packetTitle} numberOfLines={1}>
+              {briefing.title}
+            </Text>
+            <StatusBadge label={briefing.readinessLabel} variant={briefing.badgeVariant} />
+          </View>
           <Text style={styles.packetPath}>{entry.path}</Text>
         </View>
         <Text style={styles.packetDate}>{formatDate(packet.createdAt)}</Text>
       </View>
-      <View style={styles.metaGrid}>
-        <Meta label="Profile" value={packet.profile} />
-        <Meta label="Task" value={packet.task} />
-        <Meta label="Prompt" value={packet.prompt} />
-        <Meta label="Provider" value={formatProviderModel(packet.provider, packet.model)} />
-        <Meta label="Created by" value={packet.createdByAgentId} />
-        <Meta label="Agent" value={packet.launchedAgentId} />
-      </View>
-      {packet.tools.length ? (
-        <Text style={styles.summary}>Tools: {packet.tools.join(", ")}</Text>
-      ) : null}
-      {counts.length ? <Text style={styles.summary}>{counts.join(" · ")}</Text> : null}
-      {packet.folderGrants.length ? (
-        <View style={styles.grants}>
-          {packet.folderGrants.map((grant) => (
-            <Text key={`${grant.projectId}:${grant.path}:${grant.mode}`} style={styles.grant}>
-              {grant.mode} {grant.projectId}:{grant.path}
+      {briefing.warnings.length ? (
+        <View style={styles.packetWarnings}>
+          {briefing.warnings.map((warning) => (
+            <Text key={warning} style={styles.packetWarningText}>
+              {warning}
             </Text>
           ))}
         </View>
       ) : null}
+      <View style={styles.metaGrid}>
+        {briefing.items.map((item) => (
+          <Meta key={item.label} label={item.label} value={item.value} />
+        ))}
+      </View>
+      {packet.tools.length ? (
+        <Text style={styles.summary}>Tools: {packet.tools.join(", ")}</Text>
+      ) : null}
+      {briefing.accessSummary.length ? (
+        <Text style={styles.summary}>{briefing.accessSummary.join(" - ")}</Text>
+      ) : null}
+      {packet.folderGrants.length ? (
+        <View style={styles.grants}>
+          {packet.folderGrants.map((grant) => {
+            const display = formatFolderGrantDisplay({ grant, folders });
+            return (
+              <View key={`${grant.projectId}:${grant.path}:${grant.mode}`} style={styles.grantRow}>
+                <Text style={styles.grantTitle} numberOfLines={1}>
+                  {display.title}
+                </Text>
+                <Text style={styles.grantDetail} numberOfLines={1}>
+                  {display.detail}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
-}
-
-function formatProviderModel(provider?: string | null, model?: string | null): string | null {
-  if (!provider && !model) {
-    return null;
-  }
-  if (!model) {
-    return provider ?? null;
-  }
-  if (!provider) {
-    return model;
-  }
-  return `${provider} / ${model}`;
 }
 
 function Meta({ label, value }: { label: string; value?: string | null }) {
@@ -298,7 +303,14 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
     gap: 2,
   },
+  packetTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    minWidth: 0,
+  },
   packetTitle: {
+    flexShrink: 1,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontWeight: "600",
@@ -309,6 +321,15 @@ const styles = StyleSheet.create((theme) => ({
   },
   packetDate: {
     color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  packetWarnings: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
+  },
+  packetWarningText: {
+    color: theme.colors.palette.amber[500],
     fontSize: theme.fontSize.xs,
   },
   metaGrid: {
@@ -337,7 +358,14 @@ const styles = StyleSheet.create((theme) => ({
   grants: {
     gap: theme.spacing[1],
   },
-  grant: {
+  grantRow: {
+    gap: 2,
+  },
+  grantTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.xs,
+  },
+  grantDetail: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
   },

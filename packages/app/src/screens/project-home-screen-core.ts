@@ -1,5 +1,6 @@
 import type { ProjectAgentProfileEntry } from "@getpaseo/client/internal/daemon-client";
 import type { WorkspaceTabTarget } from "@/stores/workspace-tabs-store";
+import { buildProjectAgentProfileLaunchLabels } from "@/projects/project-agent-launch-labels";
 
 export function buildProjectAgentProfileDraftTarget(input: {
   entry: ProjectAgentProfileEntry;
@@ -7,6 +8,7 @@ export function buildProjectAgentProfileDraftTarget(input: {
   groupId: string;
   launchCwd: string;
   initialPrompt: string | null;
+  contextPacketPath: string | null;
 }): WorkspaceTabTarget {
   const provider = input.entry.profile.provider?.trim();
   if (!provider) {
@@ -24,6 +26,15 @@ export function buildProjectAgentProfileDraftTarget(input: {
       model: input.entry.profile.model,
       thinkingOptionId: null,
       featureValues: {},
+      ...(input.contextPacketPath
+        ? {
+            labels: buildProjectAgentProfileLaunchLabels({
+              projectGroupId: input.groupId,
+              profilePath: input.entry.path,
+              contextPacketPath: input.contextPacketPath,
+            }),
+          }
+        : {}),
       ...(input.initialPrompt ? { initialPrompt: input.initialPrompt } : {}),
     },
   };

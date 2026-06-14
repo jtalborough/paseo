@@ -11,6 +11,7 @@ import { BackHeader } from "@/components/headers/back-header";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { useHostProjects } from "@/projects/host-projects";
+import { buildProjectAgentProfileLaunchLabels } from "@/projects/project-agent-launch-labels";
 import { resolveProjectLaunchTarget } from "@/projects/project-launch-target";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
@@ -37,6 +38,9 @@ export function NewProjectAgentScreen({
   const projects = useHostProjects(serverId);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profileLaunchLabels, setProfileLaunchLabels] = useState<Record<string, string> | null>(
+    null,
+  );
   const queryClient = useQueryClient();
   const group = useMemo(
     () => groups.find((candidate) => candidate.groupId === groupId) ?? null,
@@ -46,10 +50,11 @@ export function NewProjectAgentScreen({
     () => projects.filter((project) => project.projectGroupId === groupId),
     [projects, groupId],
   );
-  const cwd = useMemo(
-    () => (group ? resolveProjectLaunchTarget({ group, folders }).cwd : ""),
+  const launchTarget = useMemo(
+    () => (group ? resolveProjectLaunchTarget({ group, folders }) : null),
     [group, folders],
   );
+  const cwd = launchTarget?.cwd ?? "";
   const projectDirectory = group?.cwd ?? null;
   const draft = useAgentInputDraft({
     draftKey: `new-project-agent:${serverId}:${groupId}`,
@@ -80,7 +85,7 @@ export function NewProjectAgentScreen({
     let cancelled = false;
     const applyProfile = async () => {
       try {
-        await applyProjectAgentProfileToDraft({
+        const packet = await applyProjectAgentProfileToDraft({
           client,
           composerState,
           projectGroupId: groupId,
@@ -93,6 +98,13 @@ export function NewProjectAgentScreen({
           },
         });
         if (!cancelled) {
+          setProfileLaunchLabels(
+            buildProjectAgentProfileLaunchLabels({
+              projectGroupId: groupId,
+              profilePath,
+              contextPacketPath: packet.path,
+            }),
+          );
           void queryClient.invalidateQueries({
             queryKey: ["project-context-packets", serverId, groupId],
           });
@@ -144,6 +156,9 @@ export function NewProjectAgentScreen({
             ? { thinkingOptionId: composerState.effectiveThinkingOptionId }
             : {}),
           ...(composerState.featureValues ? { featureValues: composerState.featureValues } : {}),
+          ...(profileLaunchLabels && Object.keys(profileLaunchLabels).length > 0
+            ? { labels: profileLaunchLabels }
+            : {}),
           ...(images && images.length > 0 ? { images } : {}),
           ...(wirePayload.attachments.length > 0 ? { attachments: wirePayload.attachments } : {}),
         });
@@ -160,7 +175,7 @@ export function NewProjectAgentScreen({
         setIsSubmitting(false);
       }
     },
-    [client, composerState, cwd, draft, group, isConnected, serverId],
+    [client, composerState, cwd, draft, group, isConnected, profileLaunchLabels, serverId],
   );
 
   const handleClear = useCallback(() => {
@@ -184,6 +199,11 @@ export function NewProjectAgentScreen({
     <View style={styles.container}>
       <BackHeader title={`New agent - ${group.displayName}`} onBack={handleBack} />
       <View style={styles.centered}>
+        {launchTarget ? (
+          <Text style={styles.launchTargetText} numberOfLines={1}>
+            Launching in {launchTarget.label}
+          </Text>
+        ) : null}
         <Composer
           agentId={`new-project-agent:${groupId}`}
           serverId={serverId}
@@ -225,6 +245,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   errorText: {
     color: theme.colors.destructive,
+    fontSize: theme.fontSize.sm,
+  },
+  launchTargetText: {
+    color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
 }));

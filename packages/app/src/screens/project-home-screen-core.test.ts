@@ -9,6 +9,7 @@ describe("buildProjectAgentProfileDraftTarget", () => {
       groupId: "grp_work",
       launchCwd: "/tmp/work",
       initialPrompt: "# QA Tester\n",
+      contextPacketPath: "context/packets/profile-launch.yaml",
       entry: {
         path: "agents/qa-tester.yaml",
         profile: {
@@ -36,6 +37,12 @@ describe("buildProjectAgentProfileDraftTarget", () => {
         model: "gpt-5.4",
         thinkingOptionId: null,
         featureValues: {},
+        labels: {
+          launchSource: "project-agent-profile",
+          projectGroupId: "grp_work",
+          profilePath: "agents/qa-tester.yaml",
+          contextPacket: "context/packets/profile-launch.yaml",
+        },
         initialPrompt: "# QA Tester\n",
       },
     });
@@ -48,6 +55,7 @@ describe("buildProjectAgentProfileDraftTarget", () => {
         groupId: "grp_work",
         launchCwd: "/tmp/work",
         initialPrompt: null,
+        contextPacketPath: null,
         entry: {
           path: "agents/qa-tester.yaml",
           profile: {

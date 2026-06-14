@@ -19,6 +19,7 @@ export interface WorkspaceDraftTabSetup {
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown>;
+  labels?: Record<string, string>;
   initialPrompt?: string;
 }
 

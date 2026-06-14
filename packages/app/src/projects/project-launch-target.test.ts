@@ -18,13 +18,13 @@ function folder(input: Partial<HostProjectListItem> & { projectKey: string }): H
 const group = { displayName: "Tune Paseo", cwd: "/home/projects/grp_1" };
 
 describe("resolveProjectLaunchTarget", () => {
-  it("launches in the sole member folder, not the domain dir", () => {
+  it("launches in Project home when the daemon exposes a Project directory", () => {
     const target = resolveProjectLaunchTarget({
       group,
       folders: [folder({ projectKey: "paseo" })],
     });
-    expect(target.cwd).toBe("/repo/paseo");
-    expect(target.folderProjectKey).toBe("paseo");
+    expect(target.cwd).toBe("/home/projects/grp_1");
+    expect(target.folderProjectKey).toBeNull();
     expect(target.ambiguous).toBe(false);
   });
 
@@ -35,9 +35,19 @@ describe("resolveProjectLaunchTarget", () => {
     expect(target.ambiguous).toBe(false);
   });
 
-  it("prefers the designated primary folder over others", () => {
+  it("does not let a primary folder override an available Project home", () => {
     const target = resolveProjectLaunchTarget({
       group: { ...group, primaryProjectId: "api" },
+      folders: [folder({ projectKey: "web" }), folder({ projectKey: "api" })],
+    });
+    expect(target.cwd).toBe("/home/projects/grp_1");
+    expect(target.folderProjectKey).toBeNull();
+    expect(target.ambiguous).toBe(false);
+  });
+
+  it("falls back to the designated primary folder for older hosts without Project home", () => {
+    const target = resolveProjectLaunchTarget({
+      group: { displayName: "Legacy", primaryProjectId: "api" },
       folders: [folder({ projectKey: "web" }), folder({ projectKey: "api" })],
     });
     expect(target.cwd).toBe("/repo/api");
@@ -45,19 +55,19 @@ describe("resolveProjectLaunchTarget", () => {
     expect(target.ambiguous).toBe(false);
   });
 
-  it("flags ambiguity for multiple folders with no primary", () => {
+  it("flags ambiguity for older hosts with multiple folders and no Project home", () => {
     const target = resolveProjectLaunchTarget({
-      group,
+      group: { displayName: "Legacy" },
       folders: [folder({ projectKey: "web" }), folder({ projectKey: "api" })],
     });
-    expect(target.cwd).toBe("/home/projects/grp_1");
+    expect(target.cwd).toBe("");
     expect(target.folderProjectKey).toBeNull();
     expect(target.ambiguous).toBe(true);
   });
 
-  it("ignores a primary that no longer exists and falls through precedence", () => {
+  it("ignores a missing legacy primary and falls through precedence", () => {
     const target = resolveProjectLaunchTarget({
-      group: { ...group, primaryProjectId: "deleted" },
+      group: { displayName: "Legacy", primaryProjectId: "deleted" },
       folders: [folder({ projectKey: "only" })],
     });
     expect(target.cwd).toBe("/repo/only");

@@ -142,6 +142,7 @@ export function normalizeWorkspaceDraftTabSetup(
       typeof record.thinkingOptionId === "string" ? record.thinkingOptionId : null,
     ),
     featureValues: isPlainRecord(record.featureValues) ? { ...record.featureValues } : {},
+    ...(isPlainRecord(record.labels) ? { labels: normalizeStringRecord(record.labels) } : {}),
     ...(typeof record.initialPrompt === "string" && record.initialPrompt.length > 0
       ? { initialPrompt: record.initialPrompt }
       : {}),
@@ -217,8 +218,19 @@ function workspaceDraftTabSetupsEqual(
     left.model === right.model &&
     left.thinkingOptionId === right.thinkingOptionId &&
     (left.initialPrompt ?? null) === (right.initialPrompt ?? null) &&
-    recordsShallowEqual(left.featureValues, right.featureValues)
+    recordsShallowEqual(left.featureValues, right.featureValues) &&
+    recordsShallowEqual(left.labels ?? {}, right.labels ?? {})
   );
+}
+
+function normalizeStringRecord(record: Record<string, unknown>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (typeof value === "string") {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 function recordsShallowEqual(
