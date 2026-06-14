@@ -703,7 +703,7 @@ async function bootstrap(): Promise<void> {
     return;
   }
   registerDaemonManager();
-  registerWindowManager();
+  registerWindowManager({ createWindow: createAdditionalWindow });
   registerDialogHandlers();
   registerNotificationHandlers();
   registerOpenerHandlers();

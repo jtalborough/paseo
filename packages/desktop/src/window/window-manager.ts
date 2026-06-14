@@ -35,6 +35,10 @@ export interface WindowControlsOverlayState {
   foregroundColor?: string;
 }
 
+export interface WindowManagerOptions {
+  createWindow?: () => void | Promise<void>;
+}
+
 export function readWindowTheme(input: unknown): WindowTheme | null {
   if (input === "light" || input === "dark") {
     return input;
@@ -176,8 +180,22 @@ export function applyWindowControlsOverlayUpdate(input: {
   return next;
 }
 
-export function registerWindowManager(): void {
+function runWindowAction(action: () => void | Promise<void>): Promise<void> {
+  return Promise.resolve(action()).catch((error) => {
+    console.error("[window-manager] action failed", error);
+    throw error;
+  });
+}
+
+export function registerWindowManager(options: WindowManagerOptions = {}): void {
   const overlayStateByWindow = new WeakMap<BrowserWindow, WindowControlsOverlayState>();
+
+  ipcMain.handle("paseo:window:create", async () => {
+    if (!options.createWindow) {
+      return;
+    }
+    await runWindowAction(options.createWindow);
+  });
 
   ipcMain.handle("paseo:window:toggleMaximize", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);

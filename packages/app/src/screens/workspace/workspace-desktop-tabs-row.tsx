@@ -18,6 +18,7 @@ import {
   type PressableStateCallbackType,
 } from "react-native";
 import {
+  AppWindow,
   CopyX,
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -60,6 +61,7 @@ import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT } from "@/constants/layout";
+import { getDesktopHost } from "@/desktop/host";
 import { useWorkspaceTabLayout } from "@/screens/workspace/use-workspace-tab-layout";
 import {
   WorkspaceTabPresentationResolver,
@@ -97,6 +99,7 @@ const ThemedNotebookText = withUnistyles(NotebookText);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
 const ThemedRows2 = withUnistyles(Rows2);
+const ThemedAppWindow = withUnistyles(AppWindow);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -664,9 +667,32 @@ function WorkspaceDesktopTabsRowActions({
 }: WorkspaceDesktopTabsRowActionsProps) {
   const splitRightKeys = useShortcutKeys("workspace-pane-split-right");
   const splitDownKeys = useShortcutKeys("workspace-pane-split-down");
+  const createWindow = getDesktopHost()?.window?.createWindow;
+  const showNewWindowAction = typeof createWindow === "function";
+  const handleCreateWindow = useCallback(() => {
+    void createWindow?.();
+  }, [createWindow]);
 
   return (
     <View style={styles.tabsActions} onLayout={onLayout}>
+      {showNewWindowAction ? (
+        <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+          <TooltipTrigger
+            testID="workspace-new-window"
+            onPress={handleCreateWindow}
+            accessibilityRole="button"
+            accessibilityLabel="New window"
+            style={newTabActionButtonStyle}
+          >
+            <ThemedAppWindow size={14} uniProps={mutedColorMapping} />
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="center" offset={8}>
+            <View style={styles.newTabTooltipRow}>
+              <Text style={styles.newTabTooltipText}>New window</Text>
+            </View>
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
       {collapseCreateActions ? (
         <NewTabDropdown
           paneId={paneId}

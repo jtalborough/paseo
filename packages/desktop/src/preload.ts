@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
     },
   },
   window: {
+    createWindow: () => ipcRenderer.invoke("paseo:window:create"),
     getCurrentWindow: () => ({
       toggleMaximize: () => ipcRenderer.invoke("paseo:window:toggleMaximize"),
       isFullscreen: () => ipcRenderer.invoke("paseo:window:isFullscreen"),

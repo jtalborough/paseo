@@ -98,6 +98,7 @@ export interface DesktopWindowBridge {
 }
 
 export interface DesktopWindowModuleBridge {
+  createWindow?: () => Promise<void>;
   getCurrentWindow?: () => DesktopWindowBridge;
 }
 
