@@ -22,8 +22,12 @@ The artifact includes:
 - `install-linux-release.sh`
 - `pull-linux-release.sh`
 
-The workflow runs on `main` when server-side packages, deploy scripts, or lockfiles change. It can
-also be run manually from GitHub Actions.
+The workflow runs on any pushed branch when server-side packages, deploy scripts, lockfiles, or the
+workflow itself change. It can also be run manually from GitHub Actions.
+
+`jta/dev` is the beta integration branch for local and server beta validation. A beta host should
+set `PASEO_DEPLOY_BRANCH=jta/dev` so the puller installs the latest successful `jta/dev` artifact.
+Production/stable hosts should keep tracking `main` unless explicitly moved.
 
 ## Linux Server Puller
 
@@ -56,7 +60,7 @@ Optional environment:
 
 ```bash
 PASEO_DEPLOY_WORKFLOW=deploy-linux-server.yml
-PASEO_DEPLOY_BRANCH=main
+PASEO_DEPLOY_BRANCH=main # use jta/dev for beta hosts
 PASEO_DEPLOY_PATH=/opt/paseo
 PASEO_DEPLOY_FORCE=1
 PASEO_RESTART_COMMAND="sudo systemctl restart paseo"
