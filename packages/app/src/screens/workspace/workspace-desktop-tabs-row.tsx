@@ -27,6 +27,7 @@ import {
   RotateCw,
   Rows2,
   Globe,
+  FileText,
   ListTodo,
   NotebookText,
   Plus,
@@ -90,6 +91,7 @@ const ThemedPencil = withUnistyles(Pencil);
 const ThemedSquarePen = withUnistyles(SquarePen);
 const ThemedSquareTerminal = withUnistyles(SquareTerminal);
 const ThemedGlobe = withUnistyles(Globe);
+const ThemedFileText = withUnistyles(FileText);
 const ThemedListTodo = withUnistyles(ListTodo);
 const ThemedNotebookText = withUnistyles(NotebookText);
 const ThemedPlus = withUnistyles(Plus);
@@ -101,6 +103,7 @@ const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMut
 const newAgentLeadingIcon = <ThemedSquarePen size={16} uniProps={mutedColorMapping} />;
 const newTerminalLeadingIcon = <ThemedSquareTerminal size={16} uniProps={mutedColorMapping} />;
 const newBrowserLeadingIcon = <ThemedGlobe size={16} uniProps={mutedColorMapping} />;
+const filesLeadingIcon = <ThemedFileText size={16} uniProps={mutedColorMapping} />;
 const tasksLeadingIcon = <ThemedListTodo size={16} uniProps={mutedColorMapping} />;
 const notesLeadingIcon = <ThemedNotebookText size={16} uniProps={mutedColorMapping} />;
 
@@ -200,11 +203,13 @@ interface WorkspaceDesktopTabsRowProps {
   onCreateDraftTab: (input: { paneId?: string }) => void;
   onCreateTerminalTab: (input: { paneId?: string }) => void;
   onCreateBrowserTab: (input: { paneId?: string }) => void;
+  onCreateFilesTab?: (input: { paneId?: string }) => void;
   onCreateTasksTab?: (input: { paneId?: string }) => void;
   onCreateNotesTab?: (input: { paneId?: string }) => void;
   showCreateAgentTab?: boolean;
   showCreateTerminalTab?: boolean;
   showCreateBrowserTab?: boolean;
+  showCreateFilesTab?: boolean;
   showCreateTasksTab?: boolean;
   showCreateNotesTab?: boolean;
   disableCreateTerminal?: boolean;
@@ -224,11 +229,13 @@ interface WorkspaceDesktopTabsRowActionsProps {
   onCreateDraftTab: (input: { paneId?: string }) => void;
   onCreateTerminalTab: (input: { paneId?: string }) => void;
   onCreateBrowserTab: (input: { paneId?: string }) => void;
+  onCreateFilesTab?: (input: { paneId?: string }) => void;
   onCreateTasksTab?: (input: { paneId?: string }) => void;
   onCreateNotesTab?: (input: { paneId?: string }) => void;
   showCreateAgentTab: boolean;
   showCreateTerminalTab: boolean;
   showCreateBrowserTab: boolean;
+  showCreateFilesTab: boolean;
   showCreateTasksTab: boolean;
   showCreateNotesTab: boolean;
   disableCreateTerminal: boolean;
@@ -244,18 +251,20 @@ interface NewTabActionsProps {
   onCreateDraftTab: (input: { paneId?: string }) => void;
   onCreateTerminalTab: (input: { paneId?: string }) => void;
   onCreateBrowserTab: (input: { paneId?: string }) => void;
+  onCreateFilesTab?: (input: { paneId?: string }) => void;
   onCreateTasksTab?: (input: { paneId?: string }) => void;
   onCreateNotesTab?: (input: { paneId?: string }) => void;
   showCreateAgentTab: boolean;
   showCreateTerminalTab: boolean;
   showCreateBrowserTab: boolean;
+  showCreateFilesTab: boolean;
   showCreateTasksTab: boolean;
   showCreateNotesTab: boolean;
   disableCreateTerminal: boolean;
   isWaitingOnTerminalReadiness: boolean;
 }
 
-type NewTabActionIcon = "agent" | "terminal" | "browser" | "tasks" | "notes";
+type NewTabActionIcon = "agent" | "terminal" | "browser" | "files" | "tasks" | "notes";
 
 function getFallbackTabLabel(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "draft") {
@@ -308,6 +317,8 @@ function getNewTabActionIcon(icon: NewTabActionIcon) {
       return <ThemedSquareTerminal size={14} uniProps={mutedColorMapping} />;
     case "browser":
       return <ThemedGlobe size={14} uniProps={mutedColorMapping} />;
+    case "files":
+      return <ThemedFileText size={14} uniProps={mutedColorMapping} />;
     case "tasks":
       return <ThemedListTodo size={14} uniProps={mutedColorMapping} />;
     case "notes":
@@ -361,11 +372,13 @@ function ExpandedNewTabActions({
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
   showCreateAgentTab,
   showCreateTerminalTab,
   showCreateBrowserTab,
+  showCreateFilesTab,
   showCreateTasksTab,
   showCreateNotesTab,
   disableCreateTerminal,
@@ -383,6 +396,9 @@ function ExpandedNewTabActions({
   const handleCreateBrowser = useCallback(() => {
     onCreateBrowserTab({ paneId });
   }, [onCreateBrowserTab, paneId]);
+  const handleCreateFiles = useCallback(() => {
+    onCreateFilesTab?.({ paneId });
+  }, [onCreateFilesTab, paneId]);
   const handleCreateTasks = useCallback(() => {
     onCreateTasksTab?.({ paneId });
   }, [onCreateTasksTab, paneId]);
@@ -422,6 +438,15 @@ function ExpandedNewTabActions({
           onPress={handleCreateBrowser}
         />
       ) : null}
+      {showCreateFilesTab ? (
+        <NewTabActionButton
+          testID="workspace-new-files"
+          label="New files tab"
+          tooltipLabel="Files"
+          icon="files"
+          onPress={handleCreateFiles}
+        />
+      ) : null}
       {showCreateTasksTab ? (
         <NewTabActionButton
           testID="workspace-new-tasks"
@@ -444,16 +469,69 @@ function ExpandedNewTabActions({
   );
 }
 
+function ProjectContentDropdownItems({
+  showSeparator,
+  showCreateFilesTab,
+  showCreateTasksTab,
+  showCreateNotesTab,
+  handleCreateFiles,
+  handleCreateTasks,
+  handleCreateNotes,
+}: {
+  showSeparator: boolean;
+  showCreateFilesTab: boolean;
+  showCreateTasksTab: boolean;
+  showCreateNotesTab: boolean;
+  handleCreateFiles: () => void;
+  handleCreateTasks: () => void;
+  handleCreateNotes: () => void;
+}) {
+  return (
+    <>
+      {showSeparator ? <DropdownMenuSeparator /> : null}
+      {showCreateFilesTab ? (
+        <DropdownMenuItem
+          testID="workspace-new-files"
+          leading={filesLeadingIcon}
+          onSelect={handleCreateFiles}
+        >
+          Files
+        </DropdownMenuItem>
+      ) : null}
+      {showCreateTasksTab ? (
+        <DropdownMenuItem
+          testID="workspace-new-tasks"
+          leading={tasksLeadingIcon}
+          onSelect={handleCreateTasks}
+        >
+          Tasks
+        </DropdownMenuItem>
+      ) : null}
+      {showCreateNotesTab ? (
+        <DropdownMenuItem
+          testID="workspace-new-notes"
+          leading={notesLeadingIcon}
+          onSelect={handleCreateNotes}
+        >
+          Notes
+        </DropdownMenuItem>
+      ) : null}
+    </>
+  );
+}
+
 function NewTabDropdown({
   paneId,
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
   showCreateAgentTab,
   showCreateTerminalTab,
   showCreateBrowserTab,
+  showCreateFilesTab,
   showCreateTasksTab,
   showCreateNotesTab,
   disableCreateTerminal,
@@ -471,6 +549,9 @@ function NewTabDropdown({
   const handleCreateBrowser = useCallback(() => {
     onCreateBrowserTab({ paneId });
   }, [onCreateBrowserTab, paneId]);
+  const handleCreateFiles = useCallback(() => {
+    onCreateFilesTab?.({ paneId });
+  }, [onCreateFilesTab, paneId]);
   const handleCreateTasks = useCallback(() => {
     onCreateTasksTab?.({ paneId });
   }, [onCreateTasksTab, paneId]);
@@ -493,11 +574,12 @@ function NewTabDropdown({
     showCreateAgentTab ||
     showCreateTerminalTab ||
     showCreateBrowserTab ||
+    showCreateFilesTab ||
     showCreateTasksTab ||
     showCreateNotesTab;
-  const showProjectContentSeparator =
-    (showCreateTasksTab || showCreateNotesTab) &&
-    (showCreateAgentTab || showCreateTerminalTab || showCreateBrowserTab);
+  const hasProjectContentActions = showCreateFilesTab || showCreateTasksTab || showCreateNotesTab;
+  const hasRuntimeCreateActions =
+    showCreateAgentTab || showCreateTerminalTab || showCreateBrowserTab;
 
   if (!hasCreateActions) {
     return null;
@@ -545,24 +627,16 @@ function NewTabDropdown({
             New browser
           </DropdownMenuItem>
         ) : null}
-        {showProjectContentSeparator ? <DropdownMenuSeparator /> : null}
-        {showCreateTasksTab ? (
-          <DropdownMenuItem
-            testID="workspace-new-tasks"
-            leading={tasksLeadingIcon}
-            onSelect={handleCreateTasks}
-          >
-            Tasks
-          </DropdownMenuItem>
-        ) : null}
-        {showCreateNotesTab ? (
-          <DropdownMenuItem
-            testID="workspace-new-notes"
-            leading={notesLeadingIcon}
-            onSelect={handleCreateNotes}
-          >
-            Notes
-          </DropdownMenuItem>
+        {hasProjectContentActions ? (
+          <ProjectContentDropdownItems
+            showSeparator={hasRuntimeCreateActions}
+            showCreateFilesTab={showCreateFilesTab}
+            showCreateTasksTab={showCreateTasksTab}
+            showCreateNotesTab={showCreateNotesTab}
+            handleCreateFiles={handleCreateFiles}
+            handleCreateTasks={handleCreateTasks}
+            handleCreateNotes={handleCreateNotes}
+          />
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -575,11 +649,13 @@ function WorkspaceDesktopTabsRowActions({
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
   showCreateAgentTab,
   showCreateTerminalTab,
   showCreateBrowserTab,
+  showCreateFilesTab,
   showCreateTasksTab,
   showCreateNotesTab,
   disableCreateTerminal,
@@ -600,11 +676,13 @@ function WorkspaceDesktopTabsRowActions({
           onCreateDraftTab={onCreateDraftTab}
           onCreateTerminalTab={onCreateTerminalTab}
           onCreateBrowserTab={onCreateBrowserTab}
+          onCreateFilesTab={onCreateFilesTab}
           onCreateTasksTab={onCreateTasksTab}
           onCreateNotesTab={onCreateNotesTab}
           showCreateAgentTab={showCreateAgentTab}
           showCreateTerminalTab={showCreateTerminalTab}
           showCreateBrowserTab={showCreateBrowserTab}
+          showCreateFilesTab={showCreateFilesTab}
           showCreateTasksTab={showCreateTasksTab}
           showCreateNotesTab={showCreateNotesTab}
           disableCreateTerminal={disableCreateTerminal}
@@ -616,11 +694,13 @@ function WorkspaceDesktopTabsRowActions({
           onCreateDraftTab={onCreateDraftTab}
           onCreateTerminalTab={onCreateTerminalTab}
           onCreateBrowserTab={onCreateBrowserTab}
+          onCreateFilesTab={onCreateFilesTab}
           onCreateTasksTab={onCreateTasksTab}
           onCreateNotesTab={onCreateNotesTab}
           showCreateAgentTab={showCreateAgentTab}
           showCreateTerminalTab={showCreateTerminalTab}
           showCreateBrowserTab={showCreateBrowserTab}
+          showCreateFilesTab={showCreateFilesTab}
           showCreateTasksTab={showCreateTasksTab}
           showCreateNotesTab={showCreateNotesTab}
           disableCreateTerminal={disableCreateTerminal}
@@ -955,11 +1035,13 @@ export function WorkspaceDesktopTabsRow({
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
   showCreateAgentTab = true,
   showCreateTerminalTab = true,
   showCreateBrowserTab = false,
+  showCreateFilesTab = false,
   showCreateTasksTab = false,
   showCreateNotesTab = false,
   disableCreateTerminal = false,
@@ -1145,11 +1227,13 @@ export function WorkspaceDesktopTabsRow({
         onCreateDraftTab={onCreateDraftTab}
         onCreateTerminalTab={onCreateTerminalTab}
         onCreateBrowserTab={onCreateBrowserTab}
+        onCreateFilesTab={onCreateFilesTab}
         onCreateTasksTab={onCreateTasksTab}
         onCreateNotesTab={onCreateNotesTab}
         showCreateAgentTab={showCreateAgentTab}
         showCreateTerminalTab={showCreateTerminalTab}
         showCreateBrowserTab={showCreateBrowserTab}
+        showCreateFilesTab={showCreateFilesTab}
         showCreateTasksTab={showCreateTasksTab}
         showCreateNotesTab={showCreateNotesTab}
         disableCreateTerminal={disableCreateTerminal}

@@ -94,9 +94,11 @@ interface SplitContainerProps {
   onCreateDraftTab: (input: { paneId?: string }) => void;
   onCreateTerminalTab: (input: { paneId?: string }) => void;
   onCreateBrowserTab: (input: { paneId?: string }) => void;
+  onCreateFilesTab?: (input: { paneId?: string }) => void;
   onCreateTasksTab?: (input: { paneId?: string }) => void;
   onCreateNotesTab?: (input: { paneId?: string }) => void;
   showCreateBrowserTab?: boolean;
+  showCreateFilesTab?: boolean;
   showCreateTasksTab?: boolean;
   showCreateNotesTab?: boolean;
   buildPaneContentModel: (input: {
@@ -377,9 +379,11 @@ export function SplitContainer({
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
   showCreateBrowserTab,
+  showCreateFilesTab,
   showCreateTasksTab,
   showCreateNotesTab,
   buildPaneContentModel,
@@ -598,9 +602,11 @@ export function SplitContainer({
           onCreateDraftTab={onCreateDraftTab}
           onCreateTerminalTab={onCreateTerminalTab}
           onCreateBrowserTab={onCreateBrowserTab}
+          onCreateFilesTab={onCreateFilesTab}
           onCreateTasksTab={onCreateTasksTab}
           onCreateNotesTab={onCreateNotesTab}
           showCreateBrowserTab={showCreateBrowserTab}
+          showCreateFilesTab={showCreateFilesTab}
           showCreateTasksTab={showCreateTasksTab}
           showCreateNotesTab={showCreateNotesTab}
           buildPaneContentModel={buildPaneContentModel}
@@ -743,9 +749,11 @@ function SplitNodeView({
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
   showCreateBrowserTab,
+  showCreateFilesTab,
   showCreateTasksTab,
   showCreateNotesTab,
   buildPaneContentModel,
@@ -800,9 +808,11 @@ function SplitNodeView({
         onCreateDraftTab={onCreateDraftTab}
         onCreateTerminalTab={onCreateTerminalTab}
         onCreateBrowserTab={onCreateBrowserTab}
+        onCreateFilesTab={onCreateFilesTab}
         onCreateTasksTab={onCreateTasksTab}
         onCreateNotesTab={onCreateNotesTab}
         showCreateBrowserTab={showCreateBrowserTab}
+        showCreateFilesTab={showCreateFilesTab}
         showCreateTasksTab={showCreateTasksTab}
         showCreateNotesTab={showCreateNotesTab}
         buildPaneContentModel={buildPaneContentModel}
@@ -850,9 +860,11 @@ function SplitNodeView({
               onCreateDraftTab={onCreateDraftTab}
               onCreateTerminalTab={onCreateTerminalTab}
               onCreateBrowserTab={onCreateBrowserTab}
+              onCreateFilesTab={onCreateFilesTab}
               onCreateTasksTab={onCreateTasksTab}
               onCreateNotesTab={onCreateNotesTab}
               showCreateBrowserTab={showCreateBrowserTab}
+              showCreateFilesTab={showCreateFilesTab}
               showCreateTasksTab={showCreateTasksTab}
               showCreateNotesTab={showCreateNotesTab}
               buildPaneContentModel={buildPaneContentModel}
@@ -906,9 +918,11 @@ function SplitPaneView({
   onCreateDraftTab,
   onCreateTerminalTab,
   onCreateBrowserTab,
+  onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
   showCreateBrowserTab,
+  showCreateFilesTab,
   showCreateTasksTab,
   showCreateNotesTab,
   buildPaneContentModel,
@@ -1052,9 +1066,11 @@ function SplitPaneView({
             onCreateDraftTab={onCreateDraftTab}
             onCreateTerminalTab={onCreateTerminalTab}
             onCreateBrowserTab={onCreateBrowserTab}
+            onCreateFilesTab={onCreateFilesTab}
             onCreateTasksTab={onCreateTasksTab}
             onCreateNotesTab={onCreateNotesTab}
             showCreateBrowserTab={showCreateBrowserTab}
+            showCreateFilesTab={showCreateFilesTab}
             showCreateTasksTab={showCreateTasksTab}
             showCreateNotesTab={showCreateNotesTab}
             onReorderTabs={handleReorderTabs}

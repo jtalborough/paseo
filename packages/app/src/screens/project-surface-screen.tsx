@@ -258,6 +258,14 @@ export function ProjectSurfaceScreen({
     [focusPaneBeforeCreate, openProjectTarget],
   );
 
+  const handleCreateFilesTab = useCallback(
+    (input: { paneId?: string } = {}) => {
+      focusPaneBeforeCreate(input.paneId);
+      openProjectTarget({ kind: "project-files", groupId });
+    },
+    [focusPaneBeforeCreate, groupId, openProjectTarget],
+  );
+
   const handleCreateDraftTab = useCallback(
     (input: { paneId?: string } = {}) => {
       focusPaneBeforeCreate(input.paneId);
@@ -516,9 +524,11 @@ export function ProjectSurfaceScreen({
             onCreateDraftTab={handleCreateDraftTab}
             onCreateTerminalTab={handleCreateTerminalTab}
             onCreateBrowserTab={handleCreateBrowserTab}
+            onCreateFilesTab={handleCreateFilesTab}
             onCreateTasksTab={handleCreateTasksTab}
             onCreateNotesTab={handleCreateNotesTab}
             showCreateBrowserTab={Boolean(primaryWorkspace)}
+            showCreateFilesTab
             showCreateTasksTab
             showCreateNotesTab
             buildPaneContentModel={buildPaneContentModel}
