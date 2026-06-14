@@ -322,6 +322,22 @@ function isCanonicalPathWithinRoot(rootPath: string, candidatePath: string): boo
   return candidatePath === rootPath || candidatePath.startsWith(rootPath + sep);
 }
 
+function resolveTaskProviderAndModel(providerInput: string): {
+  provider: AgentProvider;
+  model?: string;
+} {
+  const slashIndex = providerInput.indexOf("/");
+  if (slashIndex === -1) {
+    return { provider: providerInput as AgentProvider };
+  }
+  const provider = providerInput.slice(0, slashIndex).trim();
+  const model = providerInput.slice(slashIndex + 1).trim();
+  if (!provider || !model) {
+    throw new Error("provider must be <provider> or <provider>/<model>");
+  }
+  return { provider: provider as AgentProvider, model };
+}
+
 type GitMutationRefreshReason =
   | "commit-changes"
   | "pull"
@@ -3010,10 +3026,11 @@ export class Session {
       if (!task) {
         throw new Error(`Task not found: ${msg.projectGroupId}/${msg.id}`);
       }
-      const provider = (msg.provider ?? task.metadata.provider)?.trim();
-      if (!provider) {
+      const providerInput = (msg.provider ?? task.metadata.provider)?.trim();
+      if (!providerInput) {
         throw new Error("Task run requires a provider");
       }
+      const providerModel = resolveTaskProviderAndModel(providerInput);
 
       const folderGrant = await this.resolveTaskRunFolderGrant(msg.projectGroupId, msg.repoRoot);
       const now = new Date().toISOString();
@@ -3026,6 +3043,8 @@ export class Session {
         id: contextPacketId,
         projectGroupId: msg.projectGroupId,
         launchReason,
+        provider: providerModel.provider,
+        model: providerModel.model ?? null,
         task: taskPath,
         folderGrants: [folderGrant],
         now,
@@ -3051,7 +3070,8 @@ export class Session {
       });
 
       const createAgentConfig: AgentSessionConfig = {
-        provider,
+        provider: providerModel.provider,
+        ...(providerModel.model ? { model: providerModel.model } : {}),
         cwd: createdWorktreeForCleanup?.worktree.worktreePath ?? msg.repoRoot,
         title: task.metadata.title.slice(0, 60),
       };
@@ -3091,6 +3111,8 @@ export class Session {
         projectGroupId: msg.projectGroupId,
         launchReason,
         launchedAgentId: snapshot.id,
+        provider: providerModel.provider,
+        model: providerModel.model ?? null,
         task: taskPath,
         folderGrants: [folderGrant],
         now,
@@ -3140,10 +3162,11 @@ export class Session {
       if (!task) {
         throw new Error(`Task not found: ${msg.projectGroupId}/${msg.id}`);
       }
-      const provider = (msg.provider ?? task.metadata.provider)?.trim();
-      if (!provider) {
+      const providerInput = (msg.provider ?? task.metadata.provider)?.trim();
+      if (!providerInput) {
         throw new Error("Task schedule requires a provider");
       }
+      const providerModel = resolveTaskProviderAndModel(providerInput);
       await this.resolveTaskRunFolderGrant(msg.projectGroupId, msg.repoRoot);
 
       const taskPath = `tasks/${task.metadata.id}.md`;
@@ -3162,7 +3185,8 @@ export class Session {
         target: {
           type: "new-agent",
           config: {
-            provider: provider as AgentProvider,
+            provider: providerModel.provider,
+            ...(providerModel.model ? { model: providerModel.model } : {}),
             cwd: msg.repoRoot,
             title: task.metadata.title.slice(0, 60),
           },
@@ -3172,7 +3196,7 @@ export class Session {
       const scheduleIds = Array.from(new Set([...task.metadata.scheduleIds, schedule.id]));
       const updatedTask = await this.taskStore.update(msg.projectGroupId, msg.id, {
         run: "agent",
-        provider,
+        provider: providerInput,
         scheduleIds,
       });
       this.emit({

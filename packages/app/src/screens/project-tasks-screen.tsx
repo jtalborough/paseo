@@ -11,14 +11,20 @@ import type {
   ScheduleRetryPolicy,
   ScheduleSummary,
 } from "@getpaseo/protocol/schedule/types";
-import type { TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient, TaskUpdateRpcPatch } from "@getpaseo/client/internal/daemon-client";
 import { StyleSheet } from "react-native-unistyles";
 import { ProjectSurfaceHeader } from "@/components/project-surface-header";
 import type { TaskScheduleDraft, TaskScheduleUpdateDraft } from "@/components/task-editor";
 import { TaskList, taskKey } from "@/components/task-list";
+import {
+  buildTaskAgentOptions,
+  upsertScheduleInList,
+  upsertTaskInList,
+} from "@/screens/project-tasks-screen-core";
 import { formatDuration } from "@/components/task-timer";
 import type { SelectOption } from "@/components/task-select";
 import { useToast } from "@/contexts/toast-context";
+import { providersSnapshotQueryKey } from "@/hooks/providers-snapshot-query";
 import { useProjectGroups } from "@/hooks/use-project-groups";
 import { useSessionStore } from "@/stores/session-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
@@ -56,6 +62,7 @@ interface ProjectTaskViewContentProps {
   tasks: StoredTask[];
   projectScheduleItems: ProjectScheduleItem[];
   scheduleActionDisabled: boolean;
+  agentOptions: SelectOption[];
   expandedId: string | null;
   config: TaskConfig;
   projectOptions: SelectOption[];
@@ -168,6 +175,14 @@ export function ProjectTasksScreen({
       return payload.schedules;
     },
     staleTime: 2_000,
+  });
+  const agentOptions = useProjectTaskAgentOptions({
+    client,
+    serverId,
+    groupId,
+    taskRunRepoRoot,
+    tasksSupported: Boolean(group && tasksSupported),
+    tasks: tasksQuery.data ?? EMPTY_TASKS,
   });
 
   const onError = useCallback(
@@ -287,6 +302,14 @@ export function ProjectTasksScreen({
       });
     },
     onSuccess: (result) => {
+      queryClient.setQueryData<StoredTask[] | undefined>(tasksKey, (current) =>
+        upsertTaskInList(current, result.task),
+      );
+      queryClient.setQueryData<ScheduleSummary[] | undefined>(schedulesKey, (current) =>
+        upsertScheduleInList(current, result.schedule),
+      );
+      setExpandedId(taskKey(result.task));
+      setView("schedules");
       void invalidateTasks();
       void invalidateSchedules();
       toast.show(`Scheduled ${result.schedule.id}`, { variant: "success" });
@@ -667,6 +690,7 @@ export function ProjectTasksScreen({
         tasks={tasksQuery.data ?? EMPTY_TASKS}
         projectScheduleItems={projectScheduleItems}
         scheduleActionDisabled={scheduleActionDisabled}
+        agentOptions={agentOptions}
         expandedId={expandedId}
         config={config}
         projectOptions={projectOptions}
@@ -702,6 +726,56 @@ export function ProjectTasksScreen({
   );
 }
 
+function useProjectTaskAgentOptions({
+  client,
+  serverId,
+  groupId,
+  taskRunRepoRoot,
+  tasksSupported,
+  tasks,
+}: {
+  client: DaemonClient | null;
+  serverId: string;
+  groupId: string;
+  taskRunRepoRoot: string | null;
+  tasksSupported: boolean;
+  tasks: StoredTask[];
+}): SelectOption[] {
+  const projectAgentProfilesSupported = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.projectAgentProfiles === true,
+  );
+  const agentProfilesKey = useMemo(
+    () => ["project-agent-profiles", serverId, groupId],
+    [groupId, serverId],
+  );
+  const snapshotCwd = taskRunRepoRoot ?? undefined;
+  const providersSnapshotKey = useMemo(
+    () => providersSnapshotQueryKey(serverId, snapshotCwd),
+    [serverId, snapshotCwd],
+  );
+  const agentProfilesQuery = useQuery({
+    queryKey: agentProfilesKey,
+    enabled: Boolean(client && tasksSupported && projectAgentProfilesSupported),
+    queryFn: async () => (client ? client.projectAgentProfileList(groupId) : []),
+    staleTime: 2_000,
+  });
+  const providersSnapshotQuery = useQuery({
+    queryKey: providersSnapshotKey,
+    enabled: Boolean(client && tasksSupported && snapshotCwd),
+    queryFn: async () => (client ? client.getProvidersSnapshot({ cwd: snapshotCwd }) : null),
+    staleTime: 30_000,
+  });
+  return useMemo(
+    () =>
+      buildTaskAgentOptions({
+        providerEntries: providersSnapshotQuery.data?.entries ?? [],
+        profiles: agentProfilesQuery.data ?? [],
+        tasks,
+      }),
+    [agentProfilesQuery.data, providersSnapshotQuery.data?.entries, tasks],
+  );
+}
+
 function ProjectTaskViewContent({
   view,
   tasksPending,
@@ -711,6 +785,7 @@ function ProjectTaskViewContent({
   tasks,
   projectScheduleItems,
   scheduleActionDisabled,
+  agentOptions,
   expandedId,
   config,
   projectOptions,
@@ -785,6 +860,7 @@ function ProjectTaskViewContent({
       onDelete={onDeleteTask}
       onRun={onRunTask}
       getRunDisabled={getRunDisabled}
+      agentOptions={agentOptions}
       onSchedule={onScheduleTask}
       getScheduleDisabled={getScheduleDisabled}
       getScheduleDisabledReason={getScheduleDisabledReason}

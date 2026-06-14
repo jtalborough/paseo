@@ -43,6 +43,7 @@ export function TaskList({
   onChangeProject,
   onRun,
   getRunDisabled,
+  agentOptions,
   onSchedule,
   getScheduleDisabled,
   getScheduleDisabledReason,
@@ -71,6 +72,7 @@ export function TaskList({
   onChangeProject?: (task: StoredTask, projectGroupId: string) => void;
   onRun?: (task: StoredTask) => void;
   getRunDisabled?: (task: StoredTask) => boolean;
+  agentOptions?: SelectOption[];
   onSchedule?: (task: StoredTask, draft: TaskScheduleDraft) => void;
   getScheduleDisabled?: (task: StoredTask) => boolean;
   getScheduleDisabledReason?: (task: StoredTask) => string | null;
@@ -117,6 +119,7 @@ export function TaskList({
         onChangeProject={onChangeProject}
         onRun={onRun}
         getRunDisabled={getRunDisabled}
+        agentOptions={agentOptions}
         onSchedule={onSchedule}
         getScheduleDisabled={getScheduleDisabled}
         getScheduleDisabledReason={getScheduleDisabledReason}
@@ -141,6 +144,7 @@ export function TaskList({
       onToggleExpanded,
       onRun,
       getRunDisabled,
+      agentOptions,
       onSchedule,
       getScheduleDisabled,
       getScheduleDisabledReason,
@@ -201,6 +205,7 @@ function TaskRow({
   onChangeProject,
   onRun,
   getRunDisabled,
+  agentOptions,
   onSchedule,
   getScheduleDisabled,
   getScheduleDisabledReason,
@@ -220,6 +225,7 @@ function TaskRow({
   onChangeProject?: (task: StoredTask, projectGroupId: string) => void;
   onRun?: (task: StoredTask) => void;
   getRunDisabled?: (task: StoredTask) => boolean;
+  agentOptions?: SelectOption[];
   onSchedule?: (task: StoredTask, draft: TaskScheduleDraft) => void;
   getScheduleDisabled?: (task: StoredTask) => boolean;
   getScheduleDisabledReason?: (task: StoredTask) => string | null;
@@ -310,6 +316,7 @@ function TaskRow({
           onChangeProject={onChangeProject ? handleChangeProject : undefined}
           onRun={onRun ? handleRunAdapter(handleRun) : undefined}
           runDisabled={getRunDisabled?.(task) ?? false}
+          agentOptions={agentOptions}
           onSchedule={onSchedule ? handleScheduleAdapter(handleSchedule) : undefined}
           scheduleDisabled={getScheduleDisabled?.(task) ?? false}
           scheduleDisabledReason={getScheduleDisabledReason?.(task) ?? null}

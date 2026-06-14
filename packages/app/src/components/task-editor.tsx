@@ -34,6 +34,7 @@ import { StyleSheet } from "react-native-unistyles";
 const PLACEHOLDER_COLOR = "#9ca3af";
 const EMPTY_SCHEDULES: ScheduleSummary[] = [];
 const EMPTY_SCHEDULE_RUNS: TaskScheduledAgentRun[] = [];
+const EMPTY_AGENT_OPTIONS: SelectOption[] = [];
 const SCHEDULE_APPROVAL_OPTIONS: Option<ScheduleApprovalMode>[] = [
   { value: "auto", label: "Auto" },
   { value: "plan_only", label: "Plan only" },
@@ -130,6 +131,7 @@ export function TaskEditor({
   onRemoveContext,
   onRun,
   runDisabled,
+  agentOptions,
   onSchedule,
   scheduleDisabled,
   scheduleDisabledReason,
@@ -150,6 +152,7 @@ export function TaskEditor({
   onRemoveContext?: (value: string) => void;
   onRun?: (id: string) => void;
   runDisabled?: boolean;
+  agentOptions?: SelectOption[];
   onSchedule?: (id: string, draft: TaskScheduleDraft) => void;
   scheduleDisabled?: boolean;
   scheduleDisabledReason?: string | null;
@@ -332,6 +335,7 @@ export function TaskEditor({
       <AgentRunField
         value={metadata.provider}
         onCommit={setProvider}
+        options={agentOptions ?? EMPTY_AGENT_OPTIONS}
         onRun={onRun ? handleRunPress : undefined}
         runDisabled={runDisabled ?? false}
       />
@@ -1287,36 +1291,39 @@ function TitleField({ value, onCommit }: { value: string; onCommit: (value: stri
 function AgentRunField({
   value,
   onCommit,
+  options,
   onRun,
   runDisabled,
 }: {
   value: string | null;
   onCommit: (value: string) => void;
+  options: SelectOption[];
   onRun?: () => void;
   runDisabled: boolean;
 }) {
-  const [draft, setDraft] = useState(value ?? "");
-  const handleBlur = useCallback(() => {
-    if (draft.trim() !== (value ?? "")) {
-      onCommit(draft.trim());
+  const handleSelect = useCallback(
+    (selected: string | null) => onCommit(selected ?? ""),
+    [onCommit],
+  );
+  const selectOptions = useMemo(() => {
+    if (!value || options.some((option) => option.value === value)) {
+      return options;
     }
-  }, [draft, value, onCommit]);
+    return [{ value, label: value }, ...options];
+  }, [options, value]);
   return (
     <View style={styles.fieldRow}>
-      <Text style={styles.fieldLabel}>Agent</Text>
       <View style={styles.agentRow}>
-        <TextInput
-          style={styles.agentInput}
-          value={draft}
-          onChangeText={setDraft}
-          onBlur={handleBlur}
-          onSubmitEditing={handleBlur}
-          placeholder="claude / codex"
-          placeholderTextColor={PLACEHOLDER_COLOR}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="done"
-        />
+        <View style={styles.agentSelect}>
+          <TaskSelect
+            label="Agent"
+            options={selectOptions}
+            value={value}
+            onSelect={handleSelect}
+            placeholder={selectOptions.length ? "Select agent" : "No agents available"}
+            clearable
+          />
+        </View>
         {onRun ? (
           <Pressable
             accessibilityRole="button"
@@ -1331,7 +1338,6 @@ function AgentRunField({
     </View>
   );
 }
-
 function TextField({
   label,
   value,
@@ -1532,14 +1538,9 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.medium,
   },
   agentRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
-  agentInput: {
+  agentSelect: {
     flex: 1,
-    height: 32,
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surface2,
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
+    minWidth: 0,
   },
   runButton: {
     paddingHorizontal: theme.spacing[3],
