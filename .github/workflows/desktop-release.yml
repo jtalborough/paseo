@@ -62,7 +62,7 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           sparse-checkout: scripts
           ref: ${{ env.CHECKOUT_REF }}
@@ -109,7 +109,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ env.CHECKOUT_REF }}
@@ -119,7 +119,7 @@ jobs:
         run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "npm"
@@ -186,7 +186,7 @@ jobs:
 
       - name: Upload desktop artifacts to workflow
         if: env.SHOULD_PUBLISH != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-macos-${{ matrix.electron_arch }}
           path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/*.dmg
@@ -194,7 +194,7 @@ jobs:
 
       - name: Upload manifest artifact
         if: env.SHOULD_PUBLISH == 'true' && env.IS_SMOKE_TAG != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mac-manifest-${{ matrix.electron_arch }}
           path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/${{ env.RELEASE_CHANNEL }}-mac.yml
@@ -209,7 +209,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ env.CHECKOUT_REF }}
@@ -219,7 +219,7 @@ jobs:
         run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "npm"
@@ -284,7 +284,7 @@ jobs:
 
       - name: Upload desktop artifacts to workflow
         if: env.SHOULD_PUBLISH != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-linux
           path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/*
@@ -292,7 +292,7 @@ jobs:
 
       - name: Upload manifest artifact
         if: env.SHOULD_PUBLISH == 'true' && env.IS_SMOKE_TAG != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-manifest
           path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/${{ env.RELEASE_CHANNEL }}-linux.yml
@@ -307,7 +307,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ env.CHECKOUT_REF }}
@@ -317,7 +317,7 @@ jobs:
         run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "npm"
@@ -379,7 +379,7 @@ jobs:
 
       - name: Upload desktop artifacts to workflow
         if: env.SHOULD_PUBLISH != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-windows
           path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/*
@@ -387,7 +387,7 @@ jobs:
 
       - name: Upload manifest artifact
         if: env.SHOULD_PUBLISH == 'true' && env.IS_SMOKE_TAG != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-manifest
           path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/${{ env.RELEASE_CHANNEL }}.yml
@@ -404,7 +404,7 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           sparse-checkout: |
             package.json
@@ -417,7 +417,7 @@ jobs:
         run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "npm"
@@ -432,21 +432,21 @@ jobs:
 
       - name: Download mac manifest artifacts
         if: env.IS_SMOKE_TAG != 'true' && needs.publish-macos.result == 'success'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: mac-manifest-*
           path: release-manifests
 
       - name: Download Linux manifest artifact
         if: env.IS_SMOKE_TAG != 'true' && needs.publish-linux.result == 'success'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: linux-manifest
           path: release-manifests/linux-manifest
 
       - name: Download Windows manifest artifact
         if: env.IS_SMOKE_TAG != 'true' && needs.publish-windows.result == 'success'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: windows-manifest
           path: release-manifests/windows-manifest
