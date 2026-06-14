@@ -948,6 +948,9 @@ describe("Project context packet MCP tools", () => {
         bookmarks: ["https://example.com"],
         browser: [{ url: "https://example.com", title: "Example" }],
         folderGrants: [{ projectId: "folder-1", mode: "read-write" }],
+        launchCwd: "/tmp/work",
+        instructionSources: [{ path: "/tmp/work/AGENTS.md", sourceType: "agents" }],
+        instructionWarnings: ["Folder instructions may override Project prompt"],
       });
 
       expect(createResponse.structuredContent.path).toBe("context/packets/launch-1.yaml");
@@ -965,6 +968,17 @@ describe("Project context packet MCP tools", () => {
         bookmarks: ["https://example.com"],
         browser: [{ url: "https://example.com", title: "Example" }],
         folderGrants: [{ projectId: "folder-1", path: ".", mode: "read-write" }],
+        launchCwd: "/tmp/work",
+        instructionSources: [
+          {
+            path: "/tmp/work/AGENTS.md",
+            sourceType: "agents",
+            scope: "folder-grant",
+            projectId: null,
+            note: null,
+          },
+        ],
+        instructionWarnings: ["Folder instructions may override Project prompt"],
       });
       expect(typeof createResponse.structuredContent.packet.createdAt).toBe("string");
 

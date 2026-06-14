@@ -52,6 +52,7 @@ import {
   ProjectAgentProfilePathSchema,
   ProjectContextFolderGrantSchema,
   ProjectContextFileIdSchema,
+  ProjectContextInstructionSourceSchema,
   ProjectContextPacketBrowserStateSchema,
   ProjectContextPacketPathSchema,
   ProjectContextPacketSchema,
@@ -1697,6 +1698,9 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         bookmarks: z.array(z.string().min(1)).optional(),
         browser: z.array(ProjectContextPacketBrowserStateSchema).optional(),
         folderGrants: z.array(ProjectContextFolderGrantSchema).optional(),
+        launchCwd: z.string().nullable().optional(),
+        instructionSources: z.array(ProjectContextInstructionSourceSchema).optional(),
+        instructionWarnings: z.array(z.string().min(1)).optional(),
       },
       outputSchema: {
         path: ProjectContextPacketPathSchema,

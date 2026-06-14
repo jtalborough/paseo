@@ -86,13 +86,38 @@ describe("project launch briefing", () => {
         bookmarks: [],
         browser: [{ title: "Preview", url: "http://127.0.0.1:6767" }],
         folderGrants: [],
+        launchCwd: "/tmp/work",
+        instructionSources: [
+          {
+            path: "/tmp/work/AGENTS.md",
+            sourceType: "agents",
+            scope: "folder-grant",
+            projectId: null,
+            note: null,
+          },
+        ],
+        instructionWarnings: ["Folder/provider instructions may constrain Project prompt behavior"],
       },
     });
 
     expect(briefing.ready).toBe(true);
-    expect(briefing.readinessLabel).toBe("Complete");
-    expect(briefing.badgeVariant).toBe("success");
-    expect(briefing.accessSummary).toEqual(["1 file", "1 note", "1 browser state", "1 tool"]);
+    expect(briefing.readinessLabel).toBe("1 note");
+    expect(briefing.badgeVariant).toBe("warning");
+    expect(briefing.items).toContainEqual({ label: "Launch cwd", value: "/tmp/work" });
+    expect(briefing.items).toContainEqual({
+      label: "Instruction sources",
+      value: "1 instruction source",
+    });
+    expect(briefing.warnings).toEqual([
+      "Folder/provider instructions may constrain Project prompt behavior",
+    ]);
+    expect(briefing.accessSummary).toEqual([
+      "1 file",
+      "1 note",
+      "1 browser state",
+      "1 tool",
+      "1 instruction source",
+    ]);
   });
 
   test("notes sparse packet audit data without treating optional metadata as failure", () => {
@@ -117,6 +142,9 @@ describe("project launch briefing", () => {
         bookmarks: [],
         browser: [],
         folderGrants: [],
+        launchCwd: null,
+        instructionSources: [],
+        instructionWarnings: [],
       },
     });
 
@@ -148,6 +176,9 @@ describe("project launch briefing", () => {
         bookmarks: [],
         browser: [],
         folderGrants: [],
+        launchCwd: null,
+        instructionSources: [],
+        instructionWarnings: [],
       },
     });
 

@@ -2878,6 +2878,9 @@ export class Session {
       bookmarks: msg.bookmarks,
       browser: msg.browser,
       folderGrants: msg.folderGrants,
+      launchCwd: msg.launchCwd,
+      instructionSources: msg.instructionSources,
+      instructionWarnings: msg.instructionWarnings,
     });
     this.emit({
       type: "project.context.packets.create.response",

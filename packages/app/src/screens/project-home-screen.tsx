@@ -37,6 +37,7 @@ import {
   buildProfileLaunchBriefing,
   formatFolderGrantDisplay,
 } from "@/projects/project-launch-briefing";
+import { resolveProjectInstructionAuthority } from "@/projects/project-instruction-authority";
 import { resolveProjectLaunchTarget } from "@/projects/project-launch-target";
 import { createWorkspaceBrowser } from "@/stores/browser-store";
 import { generateDraftId } from "@/stores/draft-keys";
@@ -865,6 +866,13 @@ function ProjectAgentProfilesSection({
       }
       let contextPacketPath: string | null = null;
       try {
+        const instructionAuthority = await resolveProjectInstructionAuthority({
+          client,
+          launchCwd,
+          projectDirectory,
+          folderGrants: entry.profile.folderGrants,
+          folders,
+        });
         const packet = await client.projectContextPacketCreate({
           projectGroupId: groupId,
           launchReason: `Use profile: ${entry.profile.name}`,
@@ -874,6 +882,9 @@ function ProjectAgentProfilesSection({
           prompt: entry.profile.prompt,
           tools: entry.profile.defaultTools,
           folderGrants: entry.profile.folderGrants,
+          launchCwd: instructionAuthority.launchCwd,
+          instructionSources: instructionAuthority.instructionSources,
+          instructionWarnings: instructionAuthority.instructionWarnings,
         });
         contextPacketPath = packet.path;
         void queryClient.invalidateQueries({
@@ -904,6 +915,7 @@ function ProjectAgentProfilesSection({
       queryClient,
       serverId,
       toast,
+      folders,
     ],
   );
 

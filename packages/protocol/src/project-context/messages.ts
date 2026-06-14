@@ -5,6 +5,7 @@ import {
   ProjectAgentProfileSchema,
   ProjectContextFileIdSchema,
   ProjectContextFolderGrantSchema,
+  ProjectContextInstructionSourceSchema,
   ProjectContextPacketPathSchema,
   ProjectContextPacketBrowserStateSchema,
   ProjectContextPacketSchema,
@@ -60,6 +61,9 @@ export const ProjectContextPacketCreateRequestSchema = z.object({
   bookmarks: z.array(z.string().min(1)).optional().default([]),
   browser: z.array(ProjectContextPacketBrowserStateSchema).optional().default([]),
   folderGrants: z.array(ProjectContextFolderGrantSchema).optional().default([]),
+  launchCwd: NullableStringFieldSchema,
+  instructionSources: z.array(ProjectContextInstructionSourceSchema).optional().default([]),
+  instructionWarnings: z.array(z.string().min(1)).optional().default([]),
 });
 
 export const ProjectContextPacketCreateResponseSchema = z.object({

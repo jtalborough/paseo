@@ -90,6 +90,8 @@ export function NewProjectAgentScreen({
           composerState,
           projectGroupId: groupId,
           projectDirectory,
+          launchCwd: cwd,
+          folders,
           profilePath,
           setText: (text) => {
             if (!cancelled) {
@@ -120,7 +122,18 @@ export function NewProjectAgentScreen({
     return () => {
       cancelled = true;
     };
-  }, [client, composerState, draft, groupId, profilePath, projectDirectory, queryClient, serverId]);
+  }, [
+    client,
+    composerState,
+    cwd,
+    draft,
+    folders,
+    groupId,
+    profilePath,
+    projectDirectory,
+    queryClient,
+    serverId,
+  ]);
 
   const handleBack = useCallback(() => {
     router.replace(buildHostProjectRoute(serverId, groupId));

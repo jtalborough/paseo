@@ -35,6 +35,9 @@ describe("Project context schemas", () => {
         files: ["context/reference.json"],
         browser: [{ url: "https://example.com" }],
         folderGrants: [{ projectId: "folder-1", mode: "read-write" }],
+        launchCwd: "/tmp/work",
+        instructionSources: [{ path: "/tmp/work/AGENTS.md", sourceType: "agents" }],
+        instructionWarnings: ["Folder instructions may override Project prompt"],
       }),
     ).toEqual({
       schemaVersion: 1,
@@ -55,6 +58,17 @@ describe("Project context schemas", () => {
       bookmarks: [],
       browser: [{ url: "https://example.com", title: null }],
       folderGrants: [{ projectId: "folder-1", path: ".", mode: "read-write" }],
+      launchCwd: "/tmp/work",
+      instructionSources: [
+        {
+          path: "/tmp/work/AGENTS.md",
+          sourceType: "agents",
+          scope: "folder-grant",
+          projectId: null,
+          note: null,
+        },
+      ],
+      instructionWarnings: ["Folder instructions may override Project prompt"],
     });
   });
 

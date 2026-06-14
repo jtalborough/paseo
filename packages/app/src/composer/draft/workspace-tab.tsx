@@ -63,7 +63,9 @@ import type { WorkspaceDraftTabSetup } from "@/stores/workspace-tabs-store";
 import { useToast } from "@/contexts/toast-context";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { useProjectGroups } from "@/hooks/use-project-groups";
+import { useHostProjects } from "@/projects/host-projects";
 import { buildProfileLaunchBriefing } from "@/projects/project-launch-briefing";
+import { resolveProjectInstructionAuthority } from "@/projects/project-instruction-authority";
 import { buildProjectAgentProfileLaunchLabels } from "@/projects/project-agent-launch-labels";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
@@ -816,6 +818,7 @@ export function WorkspaceDraftAgentTab({
                 <DraftAgentProfilesPanel
                   serverId={serverId}
                   projectGroupId={draftProjectGroupId}
+                  launchCwd={draftWorkingDirectory}
                   client={client}
                   providerOptions={profileProviderOptions}
                   modelOptionsByProvider={profileModelsByProvider}
@@ -909,6 +912,7 @@ function buildProfileModelOptionsByProvider(
 function DraftAgentProfilesPanel({
   serverId,
   projectGroupId,
+  launchCwd,
   client,
   providerOptions,
   modelOptionsByProvider,
@@ -917,6 +921,7 @@ function DraftAgentProfilesPanel({
 }: {
   serverId: string;
   projectGroupId: string | null;
+  launchCwd: string | null;
   client: DaemonClient | null;
   providerOptions: ProfileSelectOption[];
   modelOptionsByProvider: Map<string, ProfileSelectOption[]>;
@@ -926,9 +931,14 @@ function DraftAgentProfilesPanel({
   const toast = useToast();
   const queryClient = useQueryClient();
   const { groups } = useProjectGroups(serverId);
+  const projects = useHostProjects(serverId);
   const projectDirectory = useMemo(
     () => groups.find((group) => group.groupId === projectGroupId)?.cwd ?? null,
     [groups, projectGroupId],
+  );
+  const folders = useMemo(
+    () => projects.filter((project) => project.projectGroupId === projectGroupId),
+    [projects, projectGroupId],
   );
   const supported = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.projectAgentProfiles === true,
@@ -1059,6 +1069,13 @@ function DraftAgentProfilesPanel({
       const didApply = await onApplyProfile(entry.profile, promptText);
       if (didApply) {
         try {
+          const instructionAuthority = await resolveProjectInstructionAuthority({
+            client,
+            launchCwd,
+            projectDirectory,
+            folderGrants: entry.profile.folderGrants,
+            folders,
+          });
           const packet = await client.projectContextPacketCreate({
             projectGroupId,
             launchReason: `Use profile: ${entry.profile.name}`,
@@ -1068,6 +1085,9 @@ function DraftAgentProfilesPanel({
             prompt: entry.profile.prompt,
             tools: entry.profile.defaultTools,
             folderGrants: entry.profile.folderGrants,
+            launchCwd: instructionAuthority.launchCwd,
+            instructionSources: instructionAuthority.instructionSources,
+            instructionWarnings: instructionAuthority.instructionWarnings,
           });
           void queryClient.invalidateQueries({
             queryKey: ["project-context-packets", serverId, projectGroupId],
@@ -1084,6 +1104,8 @@ function DraftAgentProfilesPanel({
     [
       canCreateContextPacket,
       client,
+      folders,
+      launchCwd,
       onApplyProfile,
       onProfilePacketCreated,
       projectDirectory,

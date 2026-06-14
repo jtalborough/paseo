@@ -240,7 +240,8 @@ Durable agent context is split into explicit files:
 - `agents/`: reusable agent profile definitions. A profile can point at prompts and declare default
   provider, model, tool grants, folder grants, and launch preferences, but it is not a live session.
 - `context/packets/`: explicit launch bundles for a specific run. A packet records which prompt,
-  task, notes, bookmarks, files, browser state, and Folder grants were selected.
+  task, notes, bookmarks, files, browser state, Folder grants, launch cwd, and detected
+  instruction-authority sources were selected.
 
 Provider-native folder instruction files are a separate layer. Files such as `AGENTS.md`,
 `CLAUDE.md`, `GEMINI.md`, provider command files, and provider-native skills may be loaded by the
@@ -253,6 +254,20 @@ them into `prompts/*.md` or pretend the Project prompt always wins. Instead:
   the run when that changes authority, safety, or expected evidence.
 - Conflicts should be visible to the user or agent. Do not hide them by copying provider-local
   instructions into Project files without an explicit migration decision.
+
+Paseo records instruction authority as observed launch metadata, not as a synthetic merged prompt.
+Launch packets can carry:
+
+- `launchCwd`: where the runtime agent is being started.
+- `instructionSources[]`: provider-native instruction files, command directories, or skill
+  directories detected at the launch cwd or granted Folder roots.
+- `instructionWarnings[]`: the warning text shown when those sources may constrain or override the
+  Project prompt.
+
+This is intentionally shallow. Initial detection covers known files such as `AGENTS.md`,
+`CLAUDE.md`, `GEMINI.md`, `.claude/commands`, and `.agents/skills`. It does not claim to compute
+the full effective prompt or provider precedence. The product contract is provenance first:
+show what was detected, record it in the packet, and make hidden authority visible enough for review.
 
 Skills are workflow affordances layered on top of this Project model:
 

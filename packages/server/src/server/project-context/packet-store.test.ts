@@ -29,6 +29,9 @@ describe("ProjectContextPacketStore", () => {
         bookmarks: ["https://example.com"],
         browser: [{ url: "https://example.com", title: "Example" }],
         folderGrants: [{ projectId: "folder-1", mode: "read-write" }],
+        launchCwd: "/tmp/work",
+        instructionSources: [{ path: "/tmp/work/AGENTS.md", sourceType: "agents" }],
+        instructionWarnings: ["Folder instructions may override Project prompt"],
         now: "2026-06-10T13:00:00.000Z",
       });
 
@@ -48,6 +51,17 @@ describe("ProjectContextPacketStore", () => {
         task: "tasks/2026-06-10-build.md",
         tools: ["project-files", "project-notes"],
         folderGrants: [{ projectId: "folder-1", path: ".", mode: "read-write" }],
+        launchCwd: "/tmp/work",
+        instructionSources: [
+          {
+            path: "/tmp/work/AGENTS.md",
+            sourceType: "agents",
+            scope: "folder-grant",
+            projectId: null,
+            note: null,
+          },
+        ],
+        instructionWarnings: ["Folder instructions may override Project prompt"],
       });
 
       await expect(store.list("grp_work")).resolves.toEqual([stored]);

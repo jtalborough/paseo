@@ -114,6 +114,17 @@ export type ProjectContextPacketBrowserState = z.infer<
   typeof ProjectContextPacketBrowserStateSchema
 >;
 
+export const ProjectContextInstructionSourceSchema = z.object({
+  path: z.string().min(1),
+  sourceType: z
+    .enum(["agents", "claude", "gemini", "provider-command", "provider-skill", "other"])
+    .default("other"),
+  scope: z.enum(["launch-cwd", "folder-grant", "project-directory"]).default("folder-grant"),
+  projectId: z.string().min(1).nullable().optional().default(null),
+  note: z.string().min(1).nullable().optional().default(null),
+});
+export type ProjectContextInstructionSource = z.infer<typeof ProjectContextInstructionSourceSchema>;
+
 export const ProjectContextPacketSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   id: ProjectContextFileIdSchema,
@@ -133,6 +144,9 @@ export const ProjectContextPacketSchema = z.object({
   bookmarks: z.array(z.string().min(1)).optional().default([]),
   browser: z.array(ProjectContextPacketBrowserStateSchema).optional().default([]),
   folderGrants: z.array(ProjectContextFolderGrantSchema).optional().default([]),
+  launchCwd: nullableString(),
+  instructionSources: z.array(ProjectContextInstructionSourceSchema).optional().default([]),
+  instructionWarnings: z.array(z.string().min(1)).optional().default([]),
 });
 export type ProjectContextPacket = z.infer<typeof ProjectContextPacketSchema>;
 

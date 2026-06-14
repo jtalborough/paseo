@@ -3,6 +3,9 @@ import type {
   ProjectContextPacketEntry,
 } from "@getpaseo/client/internal/daemon-client";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
+import type { ProjectContextInstructionSource } from "@getpaseo/protocol/project-context/types";
+import type { HostProjectListItem } from "@/projects/host-projects";
+import { resolveProjectInstructionAuthority } from "@/projects/project-instruction-authority";
 
 interface ProjectAgentProfileClient {
   projectAgentProfileList(projectGroupId: string): Promise<ProjectAgentProfileEntry[]>;
@@ -15,6 +18,9 @@ interface ProjectAgentProfileClient {
     prompt?: string | null;
     tools?: string[];
     folderGrants?: Array<{ projectId: string; path?: string; mode?: "read" | "read-write" }>;
+    launchCwd?: string | null;
+    instructionSources?: ProjectContextInstructionSource[];
+    instructionWarnings?: string[];
   }): Promise<ProjectContextPacketEntry>;
   readFile(cwd: string, path: string): Promise<{ bytes: Uint8Array }>;
 }
@@ -29,6 +35,8 @@ export async function applyProjectAgentProfileToDraft(input: {
   composerState: ProjectAgentProfileComposer;
   projectGroupId: string;
   projectDirectory: string;
+  launchCwd?: string | null;
+  folders?: readonly HostProjectListItem[];
   profilePath: string;
   setText: (text: string) => void;
 }): Promise<ProjectContextPacketEntry> {
@@ -52,6 +60,13 @@ export async function applyProjectAgentProfileToDraft(input: {
     const promptFile = await input.client.readFile(input.projectDirectory, entry.profile.prompt);
     input.setText(new TextDecoder().decode(promptFile.bytes));
   }
+  const instructionAuthority = await resolveProjectInstructionAuthority({
+    client: input.client,
+    launchCwd: input.launchCwd,
+    projectDirectory: input.projectDirectory,
+    folderGrants: entry.profile.folderGrants,
+    folders: input.folders ?? [],
+  });
 
   return input.client.projectContextPacketCreate({
     projectGroupId: input.projectGroupId,
@@ -62,5 +77,8 @@ export async function applyProjectAgentProfileToDraft(input: {
     prompt: entry.profile.prompt,
     tools: entry.profile.defaultTools,
     folderGrants: entry.profile.folderGrants,
+    launchCwd: instructionAuthority.launchCwd,
+    instructionSources: instructionAuthority.instructionSources,
+    instructionWarnings: instructionAuthority.instructionWarnings,
   });
 }

@@ -59,8 +59,9 @@ When adding or changing a provider, verify both views:
 2. Provider-native model view: the model receives the Project guidance, sees the Paseo MCP tools,
    understands which Project/task/profile/packet it belongs to, can identify provider-native
    instruction files that affect the run, and can report what it was handed.
-3. Audit view: Project Context can answer what prompt, task, files, tools, browser state, and folder
-   grants were handed over without reading the provider transcript.
+3. Audit view: Project Context can answer what prompt, task, files, tools, browser state, folder
+   grants, launch cwd, and provider-native instruction sources were handed over without reading the
+   provider transcript.
 
 Pi is a process-backed provider. Paseo requires the user to have the `pi` binary installed and talks to it through `pi --mode rpc`; the server package does not embed Pi's SDK/runtime packages.
 

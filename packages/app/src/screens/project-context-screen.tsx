@@ -185,8 +185,42 @@ function ContextPacketCard({
           })}
         </View>
       ) : null}
+      {packet.instructionSources.length ? (
+        <View style={styles.grants}>
+          {packet.instructionSources.map((source) => (
+            <View
+              key={`${source.scope}:${source.projectId ?? ""}:${source.path}`}
+              style={styles.grantRow}
+            >
+              <Text style={styles.grantTitle} numberOfLines={1}>
+                {formatInstructionSourceTitle(source.sourceType)}
+              </Text>
+              <Text style={styles.grantDetail} numberOfLines={1}>
+                {source.path}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
+}
+
+function formatInstructionSourceTitle(sourceType: string): string {
+  switch (sourceType) {
+    case "agents":
+      return "AGENTS.md";
+    case "claude":
+      return "CLAUDE.md";
+    case "gemini":
+      return "GEMINI.md";
+    case "provider-command":
+      return "Provider commands";
+    case "provider-skill":
+      return "Provider skills";
+    default:
+      return "Instruction source";
+  }
 }
 
 function Meta({ label, value }: { label: string; value?: string | null }) {

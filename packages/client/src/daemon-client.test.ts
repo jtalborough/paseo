@@ -449,6 +449,9 @@ test("creates Project context packets", async () => {
     profile: "agents/qa-tester.yaml",
     prompt: "prompts/qa-tester.md",
     tools: ["project-files"],
+    launchCwd: "/tmp/work",
+    instructionSources: [{ path: "/tmp/work/AGENTS.md", sourceType: "agents" }],
+    instructionWarnings: ["Folder instructions may override Project prompt"],
   });
 
   expect(mock.sent).toHaveLength(1);
@@ -462,6 +465,9 @@ test("creates Project context packets", async () => {
     profile: "agents/qa-tester.yaml",
     prompt: "prompts/qa-tester.md",
     tools: ["project-files"],
+    launchCwd: "/tmp/work",
+    instructionSources: [{ path: "/tmp/work/AGENTS.md", sourceType: "agents" }],
+    instructionWarnings: ["Folder instructions may override Project prompt"],
   });
 
   mock.triggerMessage(
@@ -480,6 +486,9 @@ test("creates Project context packets", async () => {
           profile: "agents/qa-tester.yaml",
           prompt: "prompts/qa-tester.md",
           tools: ["project-files"],
+          launchCwd: "/tmp/work",
+          instructionSources: [{ path: "/tmp/work/AGENTS.md", sourceType: "agents" }],
+          instructionWarnings: ["Folder instructions may override Project prompt"],
         },
       },
     }),
@@ -494,6 +503,9 @@ test("creates Project context packets", async () => {
       profile: "agents/qa-tester.yaml",
       prompt: "prompts/qa-tester.md",
       tools: ["project-files"],
+      launchCwd: "/tmp/work",
+      instructionSources: [{ path: "/tmp/work/AGENTS.md", sourceType: "agents" }],
+      instructionWarnings: ["Folder instructions may override Project prompt"],
     },
   });
 });

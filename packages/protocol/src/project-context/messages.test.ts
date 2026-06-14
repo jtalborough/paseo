@@ -36,6 +36,9 @@ describe("project context packet messages", () => {
                 prompt: "prompts/project-manager.md",
                 tools: ["project-files"],
                 folderGrants: [{ projectId: "project-1", path: ".", mode: "read-write" }],
+                launchCwd: "/tmp/work",
+                instructionSources: [{ path: "/tmp/work/AGENTS.md", sourceType: "agents" }],
+                instructionWarnings: ["Folder instructions may override Project prompt"],
               },
             },
           ],
@@ -58,6 +61,17 @@ describe("project context packet messages", () => {
               profile: "agents/project-manager.yaml",
               provider: "codex",
               tools: ["project-files"],
+              launchCwd: "/tmp/work",
+              instructionSources: [
+                {
+                  path: "/tmp/work/AGENTS.md",
+                  sourceType: "agents",
+                  scope: "folder-grant",
+                  projectId: null,
+                  note: null,
+                },
+              ],
+              instructionWarnings: ["Folder instructions may override Project prompt"],
             },
           },
         ],
@@ -76,6 +90,9 @@ describe("project context packet messages", () => {
         prompt: "prompts/qa-tester.md",
         tools: ["project-files"],
         folderGrants: [{ projectId: "project-1", path: ".", mode: "read-write" }],
+        launchCwd: "/tmp/work",
+        instructionSources: [{ path: "/tmp/work/AGENTS.md", sourceType: "agents" }],
+        instructionWarnings: ["Folder instructions may override Project prompt"],
       }),
     ).toMatchObject({
       type: "project.context.packets.create.request",
@@ -87,6 +104,17 @@ describe("project context packet messages", () => {
       profile: "agents/qa-tester.yaml",
       prompt: "prompts/qa-tester.md",
       tools: ["project-files"],
+      launchCwd: "/tmp/work",
+      instructionSources: [
+        {
+          path: "/tmp/work/AGENTS.md",
+          sourceType: "agents",
+          scope: "folder-grant",
+          projectId: null,
+          note: null,
+        },
+      ],
+      instructionWarnings: ["Folder instructions may override Project prompt"],
     });
 
     expect(

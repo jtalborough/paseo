@@ -4,6 +4,7 @@ import path from "node:path";
 
 import {
   ProjectContextFileIdSchema,
+  type ProjectContextInstructionSource,
   ProjectContextPacketSchema,
   type ProjectContextPacket,
 } from "@getpaseo/protocol/project-context/types";
@@ -33,6 +34,9 @@ export interface CreateProjectContextPacketInput {
   bookmarks?: string[];
   browser?: Array<{ url: string; title?: string | null }>;
   folderGrants?: Array<{ projectId: string; path?: string; mode?: "read" | "read-write" }>;
+  launchCwd?: string | null;
+  instructionSources?: ProjectContextInstructionSource[];
+  instructionWarnings?: string[];
   now?: string;
 }
 
@@ -81,6 +85,9 @@ export class ProjectContextPacketStore {
       bookmarks: input.bookmarks ?? [],
       browser: input.browser ?? [],
       folderGrants: input.folderGrants ?? [],
+      launchCwd: input.launchCwd ?? null,
+      instructionSources: input.instructionSources ?? [],
+      instructionWarnings: input.instructionWarnings ?? [],
     });
     const packetPath = this.relativePacketPath(packet.id);
     await writeFileAtomic(

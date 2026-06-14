@@ -57,6 +57,9 @@ describe("applyProjectAgentProfileToDraft", () => {
               bookmarks: [],
               browser: [],
               folderGrants: normalizeFolderGrants(input.folderGrants),
+              launchCwd: input.launchCwd ?? null,
+              instructionSources: input.instructionSources ?? [],
+              instructionWarnings: input.instructionWarnings ?? [],
             },
           };
         },
@@ -85,6 +88,9 @@ describe("applyProjectAgentProfileToDraft", () => {
         prompt: "prompts/qa-tester.md",
         tools: [],
         folderGrants: [],
+        launchCwd: null,
+        instructionSources: [],
+        instructionWarnings: [],
       },
     ]);
   });
@@ -138,6 +144,9 @@ describe("applyProjectAgentProfileToDraft", () => {
               bookmarks: [],
               browser: [],
               folderGrants: normalizeFolderGrants(input.folderGrants),
+              launchCwd: input.launchCwd ?? null,
+              instructionSources: input.instructionSources ?? [],
+              instructionWarnings: input.instructionWarnings ?? [],
             },
           };
         },
@@ -165,6 +174,117 @@ describe("applyProjectAgentProfileToDraft", () => {
         prompt: null,
         tools: [],
         folderGrants: [],
+        launchCwd: null,
+        instructionSources: [],
+        instructionWarnings: [],
+      },
+    ]);
+  });
+
+  test("adds instruction authority to profile launch packets", async () => {
+    const packets: unknown[] = [];
+
+    await applyProjectAgentProfileToDraft({
+      client: {
+        async projectAgentProfileList() {
+          return [
+            {
+              path: "agents/qa-tester.yaml",
+              profile: {
+                schemaVersion: 1,
+                id: "qa-tester",
+                name: "QA Tester",
+                provider: "codex",
+                model: "gpt-5.4",
+                prompt: null,
+                defaultTools: [],
+                folderGrants: [{ projectId: "repo", path: ".", mode: "read" }],
+              },
+            },
+          ];
+        },
+        async readFile(cwd, path) {
+          if (`${cwd}:${path}` !== "/tmp/repo:AGENTS.md") {
+            throw new Error("missing");
+          }
+          return { bytes: encodeText("# Instructions\n") };
+        },
+        async projectContextPacketCreate(input) {
+          packets.push(input);
+          return {
+            path: "context/packets/qa-tester.yaml",
+            packet: {
+              schemaVersion: 1,
+              id: "qa-tester",
+              projectGroupId: input.projectGroupId,
+              createdAt: "2026-06-13T12:00:00.000Z",
+              createdByAgentId: null,
+              launchedAgentId: null,
+              launchReason: input.launchReason ?? null,
+              provider: input.provider ?? null,
+              model: input.model ?? null,
+              profile: input.profile ?? null,
+              prompt: input.prompt ?? null,
+              task: null,
+              tools: input.tools ?? [],
+              notes: [],
+              files: [],
+              bookmarks: [],
+              browser: [],
+              folderGrants: normalizeFolderGrants(input.folderGrants),
+              launchCwd: input.launchCwd ?? null,
+              instructionSources: input.instructionSources ?? [],
+              instructionWarnings: input.instructionWarnings ?? [],
+            },
+          };
+        },
+      },
+      composerState: {
+        setProviderAndModelFromUser: () => {},
+        setProviderFromUser: () => {},
+      },
+      projectGroupId: "grp_work",
+      projectDirectory: "/tmp/project",
+      launchCwd: "/tmp/project",
+      folders: [
+        {
+          serverId: "mac",
+          projectKey: "repo",
+          projectName: "Repo",
+          projectKind: "git",
+          iconWorkingDir: "/tmp/repo",
+          workspaceKeys: [],
+          canCreateWorktree: true,
+          projectGroupId: "grp_work",
+        },
+      ],
+      profilePath: "agents/qa-tester.yaml",
+      setText: () => {},
+    });
+
+    expect(packets).toEqual([
+      {
+        projectGroupId: "grp_work",
+        launchReason: "Use profile: QA Tester",
+        provider: "codex",
+        model: "gpt-5.4",
+        profile: "agents/qa-tester.yaml",
+        prompt: null,
+        tools: [],
+        folderGrants: [{ projectId: "repo", path: ".", mode: "read" }],
+        launchCwd: "/tmp/project",
+        instructionSources: [
+          {
+            path: "/tmp/repo/AGENTS.md",
+            sourceType: "agents",
+            scope: "folder-grant",
+            projectId: "repo",
+            note: "Provider-neutral folder instructions",
+          },
+        ],
+        instructionWarnings: [
+          "Folder/provider instructions may constrain or override Project prompt behavior.",
+        ],
       },
     ]);
   });

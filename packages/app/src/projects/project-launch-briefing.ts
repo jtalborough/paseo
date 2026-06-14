@@ -76,6 +76,7 @@ export function buildPacketLaunchBriefing(input: {
   const warnings = compact([
     hasPacketLaunchContext(packet) ? null : "No launch context recorded",
     packet.launchedAgentId?.trim() ? null : "No launched agent recorded",
+    ...packet.instructionWarnings,
   ]);
   const providerModel = formatProviderModel(packet.provider, packet.model);
   const items = compactItems([
@@ -84,6 +85,10 @@ export function buildPacketLaunchBriefing(input: {
     packet.prompt ? { label: "Prompt", value: packet.prompt } : null,
     providerModel ? { label: "Provider", value: providerModel } : null,
     packet.task ? { label: "Task", value: packet.task } : null,
+    packet.launchCwd ? { label: "Launch cwd", value: packet.launchCwd } : null,
+    packet.instructionSources.length
+      ? { label: "Instruction sources", value: formatInstructionSourceCount(packet) }
+      : null,
     packet.createdByAgentId ? { label: "Created by", value: packet.createdByAgentId } : null,
     packet.launchedAgentId ? { label: "Agent", value: packet.launchedAgentId } : null,
     { label: "Packet", value: path },
@@ -105,6 +110,7 @@ export function buildPacketLaunchBriefing(input: {
       browser: packet.browser.length,
       tools: packet.tools.length,
       folderGrants: packet.folderGrants.length,
+      instructionSources: packet.instructionSources.length,
     }),
   };
 }
@@ -119,7 +125,9 @@ function hasPacketLaunchContext(packet: ProjectContextPacket): boolean {
     packet.files.length ||
     packet.bookmarks.length ||
     packet.browser.length ||
-    packet.folderGrants.length,
+    packet.folderGrants.length ||
+    packet.launchCwd?.trim() ||
+    packet.instructionSources.length,
   );
 }
 
@@ -148,6 +156,7 @@ function buildAccessSummary(input: {
   browser?: number;
   tools?: number;
   folderGrants?: number;
+  instructionSources?: number;
 }): string[] {
   return compact([
     formatCount(input.files, "file"),
@@ -156,7 +165,13 @@ function buildAccessSummary(input: {
     formatCount(input.browser, "browser state"),
     formatCount(input.tools, "tool"),
     formatCount(input.folderGrants, "folder grant"),
+    formatCount(input.instructionSources, "instruction source"),
   ]);
+}
+
+function formatInstructionSourceCount(packet: ProjectContextPacket): string {
+  const count = formatCount(packet.instructionSources.length, "instruction source");
+  return count ?? "0 instruction sources";
 }
 
 function formatFolderGrantCount(grants: ProjectContextFolderGrant[]): string {

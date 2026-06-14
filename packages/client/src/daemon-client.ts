@@ -101,6 +101,7 @@ import type {
 } from "@getpaseo/protocol/task/messages";
 import type {
   ProjectAgentProfile,
+  ProjectContextInstructionSource,
   ProjectContextPacket,
 } from "@getpaseo/protocol/project-context/types";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
@@ -146,6 +147,9 @@ export interface ProjectContextPacketCreateInput {
   bookmarks?: string[];
   browser?: Array<{ url: string; title?: string | null }>;
   folderGrants?: Array<{ projectId: string; path?: string; mode?: "read" | "read-write" }>;
+  launchCwd?: string | null;
+  instructionSources?: ProjectContextInstructionSource[];
+  instructionWarnings?: string[];
 }
 import { DaemonClientRuntimeMetrics } from "./daemon-client-runtime-metrics.js";
 import { TerminalStreamRouter, type TerminalStreamEvent } from "./terminal-stream-router.js";
