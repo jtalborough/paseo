@@ -577,9 +577,20 @@ test("createAgent injects Project task guidance at runtime only", async () => {
 
   expect(runtimePrompt).toContain("Daemon instructions.");
   expect(runtimePrompt).toContain("Project group id: grp_product");
+  expect(runtimePrompt).toContain("Project organization is Project -> Folder -> Workspace");
+  expect(runtimePrompt).toContain("referenced Folders are external local or remote directories");
+  expect(runtimePrompt).toContain("Project + Task + Profile + Prompt + Context Packet");
   expect(runtimePrompt).toContain("list_project_tasks");
   expect(runtimePrompt).toContain("create_project_task");
   expect(runtimePrompt).toContain("update_project_task");
+  expect(runtimePrompt).toContain("list_project_context_packets");
+  expect(runtimePrompt).toContain("create_project_context_packet");
+  expect(runtimePrompt).toContain("prompts/*.md");
+  expect(runtimePrompt).toContain("agents/*.yaml");
+  expect(runtimePrompt).toContain("Do not treat provider transcripts");
+  expect(runtimePrompt).toContain("paseo-task");
+  expect(runtimePrompt).toContain("paseo-agent-stewardship");
+  expect(runtimePrompt).toContain("Do not assume ToolSearch exists");
   expect(snapshot.config.daemonAppendSystemPrompt).toBe(runtimePrompt);
   expect(record?.projectGroupId).toBe("grp_product");
   expect(record?.config).not.toHaveProperty("daemonAppendSystemPrompt");

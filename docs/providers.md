@@ -16,6 +16,44 @@ Implement the `AgentClient` and `AgentSession` interfaces from `agent-sdk-types.
 
 Existing direct providers: `claude` (in `providers/claude/agent.ts`), `codex` (`codex-app-server-agent.ts`), `opencode` (`opencode-agent.ts`), `pi` (`providers/pi/agent.ts`). The dev-only `mock` provider (`mock-load-test-agent.ts`) is also direct.
 
+## Provider-native handoff contract
+
+Paseo owns the workflow contract; providers own execution mechanics. Every provider integration
+must preserve the user's Project intent across the provider boundary:
+
+- Runtime instructions include Paseo's Project guidance when `projectGroupId` is present.
+- MCP server configuration includes the per-agent Paseo MCP endpoint when the provider supports MCP.
+- Tool metadata should expose read-only, destructive, idempotent, and open-world hints when the
+  provider surface can consume MCP annotations.
+- Runtime agent records preserve provider, model, mode, Project id, labels, and native session
+  handle so the app can trace the run later.
+- Provider-native resume/import commands are convenience entry points, not the durable source of
+  Project truth. The durable truth remains Project Tasks, prompts, profiles, context packets, and
+  runtime records under Paseo's data model.
+
+Provider adapters should document where those fields land in the native runtime. This is required
+because "system prompt", "developer instructions", "append system prompt", MCP config, permission
+requests, and native session metadata are named differently by each provider.
+
+Current handoff map:
+
+| Provider family | Project guidance path                                                                          | MCP path                                                                                  | Main risk                                                                                                                                                         |
+| --------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude          | Paseo appends daemon/Project guidance into Claude's preset prompt before session start/resume. | MCP servers are included in the Claude session options.                                   | Claude login/auth readiness is external to Paseo; native resume/import views can show the session without making Project packet provenance obvious.               |
+| Codex           | Paseo composes Project guidance into Codex developer instructions.                             | MCP servers are written into Codex app-server config for the session.                     | Permission-profile approval and tool annotation behavior depends on the running Codex surface and the packaged daemon being current.                              |
+| ACP providers   | Paseo passes MCP servers through the ACP session config.                                       | MCP servers are included when the ACP client advertises support.                          | Project guidance propagation is provider/protocol dependent and must be verified per ACP adapter; do not assume MCP alone teaches the model the Project workflow. |
+| OpenCode        | Provider-specific adapter handles dynamic MCP injection and native message ownership.          | Dynamic session-scoped MCP add; do not rely on config-backed `connect` after dynamic add. | OpenCode owns message IDs and dynamic MCP semantics differ by version.                                                                                            |
+| Pi              | Paseo passes daemon-wide and per-agent prompts with `--append-system-prompt`.                  | Paseo writes per-agent MCP config and passes it with `--mcp-config`.                      | MCP support depends on the `pi-mcp-adapter` extension and adapter OAuth must be disabled for local Paseo MCP endpoints.                                           |
+
+When adding or changing a provider, verify both views:
+
+1. Top-level Paseo view: the app/CLI/MCP can list models, launch the agent, inspect labels,
+   permissions, Project id, native handle, and context packet provenance.
+2. Provider-native model view: the model receives the Project guidance, sees the Paseo MCP tools,
+   understands which Project/task/profile/packet it belongs to, and can report what it was handed.
+3. Audit view: Project Context can answer what prompt, task, files, tools, browser state, and folder
+   grants were handed over without reading the provider transcript.
+
 Pi is a process-backed provider. Paseo requires the user to have the `pi` binary installed and talks to it through `pi --mode rpc`; the server package does not embed Pi's SDK/runtime packages.
 
 Paseo's per-agent and daemon-wide system prompts are passed to Pi with `--append-system-prompt`, so Pi keeps its default coding prompt while receiving Paseo's additional instructions.

@@ -59,7 +59,12 @@ describe("Project directory", () => {
     expect(readFileSync(path.join(cwd, "notes", "README.md"), "utf8")).toBe("# Notes\n\n");
     expect(JSON.parse(readFileSync(path.join(cwd, ".paseo-seeds.json"), "utf8"))).toMatchObject({
       schemaVersion: 1,
-      seeded: expect.arrayContaining(["qa-tester-agent", "qa-tester-prompt"]),
+      seeded: expect.arrayContaining([
+        "project-manager-agent",
+        "project-manager-prompt",
+        "qa-tester-agent",
+        "qa-tester-prompt",
+      ]),
     });
     expect(readFileSync(path.join(cwd, "context", "README.md"), "utf8")).toContain(
       "Runtime agent state still lives",

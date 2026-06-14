@@ -9,6 +9,42 @@ Project -> Folder -> Workspace
 Projects are keyed by their stable `grp_` id. Tasks, notes, Project-level agents, and future
 domain content key to that id, never to a Folder's legacy `projectId`.
 
+Projects are the durable unit of work in Paseo. A Project may be a software product, GitOps
+repository, homelab operations area, financial workflow, content site, document toolkit, physical
+device system, research folder, or business process. The same primitives apply across all of them:
+tasks, notes, prompts, agent profiles, context packets, referenced folders, runtime agents, and
+audit history.
+
+Paseo should avoid encoding "software repository" assumptions into Project-level behavior. Some
+Projects have git worktrees and pull requests; others have Notion tasks, Kubernetes clusters,
+Tailscale hosts, Word documents, slide decks, MCP services, financial order gates, or physical
+hardware. Project surfaces should ask what work is being coordinated, what tools are granted, and
+what evidence proves completion.
+
+## Project organization contract
+
+Project organization has three separate ownership layers:
+
+- Project-owned files live in the managed Project directory. They are portable, syncable, and
+  durable: tasks, notes, prompts, agent profiles, context packets, bookmarks, and future Project
+  knowledge files.
+- Referenced Folders live outside the Project directory. They may be local or remote directories,
+  git repositories, document toolkits, infrastructure repos, or service workspaces. The Project can
+  grant agents access to them, but does not own or delete them.
+- Runtime state lives in daemon infrastructure. Agents, terminals, provider session handles,
+  indexes, timelines, and live Workspaces are execution artifacts that should be traceable back to
+  Project files, but not stored as Project-owned source.
+
+Every Project agent launch should be explainable as:
+
+```
+Project + Task + Profile + Prompt + Context Packet + Folder grants + Provider/Model/Mode + Runtime Agent
+```
+
+No provider transcript, terminal tab, git checkout, or remote directory is allowed to become the
+only source of truth for the work. If something matters after the run, it belongs in a Project Task,
+note, prompt, profile, context packet, or audit record.
+
 ## Project directory
 
 Every Project has a Paseo-managed working directory:
@@ -66,6 +102,28 @@ plans, cleanup checklists, bug follow-ups, and agent-ready work items. Use docs 
 model, architecture, conventions, and decisions that should outlive a specific task. A planning
 conversation can update both, but the executable "what do we do next?" list should live in tasks so
 it is visible in the app and can later launch or brief agents directly.
+
+## Project beta feedback
+
+Every Sidebar Project is a beta test of Paseo's workstation model. The goal is not to create
+synthetic test projects; the goal is to learn from real work across the user's actual Projects.
+
+When a Project is used through Paseo, the team should be able to review:
+
+- What work was attempted and which Project Task, prompt, profile, or ad-hoc instruction started it.
+- Which context packet, files, browser state, notes, service URLs, and folder grants were handed to
+  the agent.
+- Which provider/model/mode ran the work and whether the model saw the intended Project guidance.
+- Where the user had to compensate manually: missing context, wrong cwd, rejected tool call, unclear
+  permission, lost terminal relationship, weak result evidence, or missing navigation back to the
+  Project.
+- What follow-up task would make the next Project run smoother.
+
+The Product Owner, UX Engineer, Developer Lead, and QA Engineer roles should periodically review
+recent Project usage and convert friction into durable Project Tasks. Product focuses on the
+mandate and prioritization, UX on clarity and trust, Developer Lead on implementation slices and
+architecture risk, and QA on observable evidence. This review loop is part of product development,
+not a separate research exercise.
 
 Task timers are mutually exclusive across active Projects. The daemon owns start/stop operations so
 multiple clients cannot leave competing timers running. Each Task records append-only
@@ -144,6 +202,11 @@ Project-level agents do not create a synthetic Folder or Workspace for the manag
 directory. Agent placement must support a Project directly instead of inferring all ownership from
 `cwd`.
 
+Launching an agent from a Project-level surface starts in the managed Project directory when the
+host exposes one. Launching inside a referenced Folder or Workspace is a separate, explicit user
+choice. Folder access for Project-level agents is represented as Folder grants in the context
+packet, not by silently choosing a child Folder as the launch cwd.
+
 The Project directory contains durable, user-owned context that should sync between hosts: agent
 definitions, instructions, notes, task definitions, knowledge sources, bookmarks, and schedule
 definitions. Runtime process state, provider session handles, generated indexes, and active-agent
@@ -157,6 +220,22 @@ Durable agent context is split into explicit files:
   provider, model, tool grants, folder grants, and launch preferences, but it is not a live session.
 - `context/packets/`: explicit launch bundles for a specific run. A packet records which prompt,
   task, notes, bookmarks, files, browser state, and Folder grants were selected.
+
+Skills are workflow affordances layered on top of this Project model:
+
+- Global/user skills are installed outside the Project and may appear differently by provider.
+- Project skills, when supported, should be ordinary Project files and referenced from profiles or
+  packets the same way prompts are.
+- Provider-native skills or commands are useful execution shortcuts, but they are not the durable
+  Project contract.
+- A launch should record which skill or workflow capability was intentionally used when it changes
+  the work path, permissions, or expected evidence.
+
+Agent-facing guidance must therefore be redundant on purpose. A Project agent should receive the
+Project model in provider-neutral runtime instructions, should see Paseo MCP tools when the provider
+supports them, and may also see Paseo skills when that provider exposes a skill system. Skills make
+the workflow easier; the model must still work when a provider exposes only tool names and runtime
+instructions.
 
 New Projects seed `prompts/project-manager.md`, `agents/project-manager.yaml`,
 `prompts/qa-tester.md`, and `agents/qa-tester.yaml`. These files are ordinary user-owned Project
@@ -192,10 +271,33 @@ are concrete and reviewable: an agent launch should be explainable by pointing t
 live tools it was granted. Retrieval can help assemble a packet, but the packet remains the durable
 record of what was intentionally handed to the agent.
 
+For non-code work, context packets are still the handoff record. A packet may point at runbooks,
+Notion-derived tasks, service URLs, browser state, spreadsheets, documents, diagrams, device notes,
+or external Folders instead of source files. The invariant is not "what code did the agent edit?"
+but "what context and authority did the agent receive, and what evidence did it produce?"
+
+Runtime agents launched from reusable Project profiles carry labels that point back to the durable
+context packet and profile path. Keep those labels in sync with profile launch flows so an agent
+record under `$PASEO_HOME/agents/` can be traced back to the prompt, profile, tools, and Folder
+grants shown in the Project Context tab.
+
+Agent profiles are the Project's team roster. Product work may use Product Owner, UX Engineer,
+Developer Lead, and QA Engineer. Infrastructure work may use Cloudflare Maintainer, NAS Maintainer,
+or Security Reviewer. Finance work may use Researcher, Risk Reviewer, and Trade Reconciler. Content
+work may use Editor, Designer, Publisher, and QA. These roles are Project-authored files with
+explicit prompts and tool grants, not hardcoded personas.
+
 Agents can use `create_project_context_packet` to write that durable launch bundle and
 `list_project_context_packets` to audit prior bundles. A packet belongs under
 `context/packets/*.yaml`, references other Project files with Project-root-relative paths, and may
 record the creating agent, launched agent, and launch reason.
+
+Project-attached agents receive daemon-injected guidance for the core Project workflow. Keep that
+guidance provider-neutral: mention the Project task and context-packet MCP operations by semantic
+name, point at `prompts/*.md` and `agents/*.yaml` as durable user-authored files, and tell agents to
+use visible tool names rather than assuming a provider-specific discovery tool exists. Skills are a
+useful workflow layer, but the runtime prompt must still be actionable when a provider shows only the
+skill list or does not expose full skill bodies.
 
 The app exposes those same packets through the Project Context tab. Treat that tab as the human
 audit trail for an agent launch: it should answer which task, prompt, files, browser state, and
@@ -235,8 +337,10 @@ moves from prototype into stable product behavior.
   where that improves scanning.
 - Agent and linked Terminal tabs should keep a visible relationship: the agent exposes a linked
   terminal affordance, and the terminal title/metadata should identify the owning agent when known.
-- Add-tab actions for Agent, Terminal, Browser, Tasks, and Notes should stay directly visible when
-  there is enough room, and collapse into the overflow menu only when space is tight.
+- Agent-created terminals should be created through the Paseo terminal MCP tool so they inherit the
+  caller agent relationship and appear as linked terminals instead of anonymous shells.
+- Add-tab actions for Agent, Terminal, Browser, Files, Tasks, and Notes should stay directly
+  visible when there is enough room, and collapse into the overflow menu only when space is tight.
 - Project and Workspace headers should keep the same structure and action placement, including
   Scripts, Open, Commit, tab actions, and split controls.
 - Project Overview should stay lightweight once real work happens in Project tabs.

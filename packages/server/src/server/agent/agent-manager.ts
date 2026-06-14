@@ -417,7 +417,14 @@ function buildProjectTaskRuntimePrompt(projectGroupId: string | undefined): stri
   return [
     "This agent is attached to a Paseo Project.",
     `Project group id: ${projectGroupId}`,
+    "Project organization is Project -> Folder -> Workspace. Project-owned files live in the managed Project directory; referenced Folders are external local or remote directories granted to the Project; Workspaces, terminals, provider sessions, and timelines are runtime state owned by the daemon.",
+    "Every meaningful run should be explainable as Project + Task + Profile + Prompt + Context Packet + Folder grants + Provider/Model/Mode + Runtime Agent.",
     "Use Project Tasks as the shared backlog for durable work. Before creating follow-up tasks, call list_project_tasks to avoid duplicates. When durable work is identified, call create_project_task or update_project_task so the human and future agents can see it in the Project Tasks tab. Mark tasks done only after the work is actually complete.",
+    "Use Project Context Packets as the audit trail for what was handed to an agent run. When you launch, brief, or audit a reusable Project agent/profile, call list_project_context_packets to inspect prior packets and create_project_context_packet when you intentionally assemble a new launch bundle.",
+    "Project prompts live in prompts/*.md and reusable agent profiles live in agents/*.yaml inside the Project directory. Treat those files as durable user-authored instructions: read them when they are relevant, but do not overwrite them unless explicitly asked.",
+    "Do not treat provider transcripts, terminal tabs, git checkouts, or remote directories as the durable source of truth. Preserve decisions, accepted plans, evidence, and follow-up work in Project files or Project Tasks.",
+    "If a matching Paseo skill is listed, use it for the workflow it describes: paseo-task for Project Tasks, paseo-terminal for linked/shared terminals, paseo-agent-stewardship for creating or supervising agents, and paseo for core agent/worktree operations. Some providers show only skill names and descriptions; if the full skill body is not automatically available, follow the Project guidance in this prompt and the visible tool schemas instead of guessing.",
+    "Tool names vary by provider. Claude-style MCP tools look like mcp__paseo__list_project_tasks; Codex-style tools may look like mcp__paseo.list_project_tasks. Use the actual tool names visible in this session. Do not assume ToolSearch exists unless it is listed as an available tool.",
   ].join("\n");
 }
 

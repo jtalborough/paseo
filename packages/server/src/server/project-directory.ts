@@ -16,6 +16,10 @@ const AGENTS_README_CONTENT = `# Agent Profiles
 Project agent profiles are durable, syncable definitions for reusable agent roles.
 Runtime agent sessions still live under $PASEO_HOME/agents and are not stored here.
 
+A profile describes who should work, with which prompt, provider/model preferences, tools, and
+Folder grants. It is not a running agent. Launching a profile should create a context packet and a
+runtime agent record that point back to this durable file.
+
 \`\`\`yaml
 schemaVersion: 1
 id: implementation-agent
@@ -35,6 +39,10 @@ const CONTEXT_PACKETS_README_CONTENT = `# Context Packets
 
 Context packets are explicit launch bundles for agents. They list the prompt, task, notes,
 bookmarks, files, and folder grants the user selected for a run.
+
+Use packets to answer: what was the agent asked to do, which Project files shaped the run, which
+external Folders were granted, which provider/model ran it, and what evidence should prove it is
+done?
 
 \`\`\`yaml
 schemaVersion: 1
@@ -56,11 +64,18 @@ const CONTEXT_README_CONTENT = `# Context
 Project context files are durable, local-only authoring files. Packets under \`packets/\` record
 the explicit prompt/profile/file bundle a user chose for a launch. Runtime agent state still lives
 under $PASEO_HOME/agents.
+
+Project-owned context is portable. External Folders and runtime Workspaces are referenced by a
+packet; they are not copied into this directory.
 `;
 const PROMPTS_README_CONTENT = `# Prompts
 
 Reusable Project prompts live here as plain Markdown. Agent profiles and context packets can
 reference these files with Project-root-relative paths such as \`prompts/implementation.md\`.
+
+Prompts should describe durable role or workflow intent. Provider-specific mechanics, live
+transcripts, and one-off runtime state belong in agent records or context packets, not in reusable
+prompt files.
 `;
 const PROJECT_MANAGER_PROMPT_CONTENT = `# Project Manager
 
@@ -71,12 +86,15 @@ Responsibilities:
 - Keep active work in \`tasks/\` as Markdown-backed Project Tasks.
 - Keep durable context, decisions, and reference material in \`notes/\`.
 - Use \`context/packets/\` to explain what was handed to an agent run.
+- Treat \`prompts/\` and \`agents/\` as the Project's reusable instruction and team roster files.
+- Keep external Folders explicit. They are referenced capabilities, not Project-owned files.
 - Prefer local Project files as the execution source of truth. External tools such as Notion can be
   provenance or mirror surfaces, but they are not required to run the Project.
 
 Before launching or briefing an agent, identify the task, relevant notes/files, browser state if
-available, and explicit Folder grants. After an agent finishes, update the task and add or revise
-notes only when they preserve durable context.
+available, explicit Folder grants, provider/model/mode, and any Paseo skill or tool workflow the
+agent should use. After an agent finishes, update the task and add or revise notes only when they
+preserve durable context.
 `;
 const PROJECT_MANAGER_AGENT_CONTENT = `schemaVersion: 1
 id: project-manager
