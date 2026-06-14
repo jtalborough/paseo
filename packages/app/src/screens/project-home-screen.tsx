@@ -208,14 +208,20 @@ export function ProjectHomeScreen({
             onOpenTab({ kind: "project-files", groupId, selectedPath: "roadmap.md" });
             break;
           }
-          handleBrowseFiles();
+          router.navigate(
+            buildHostProjectFilesRoute(serverId, groupId, { selectedPath: "roadmap.md" }),
+          );
           break;
         case "workflows":
           if (onOpenTab) {
             onOpenTab({ kind: "project-files", groupId, selectedPath: "workflows/intake.md" });
             break;
           }
-          handleBrowseFiles();
+          router.navigate(
+            buildHostProjectFilesRoute(serverId, groupId, {
+              selectedPath: "workflows/intake.md",
+            }),
+          );
           break;
         case "files":
           handleBrowseFiles();
@@ -231,7 +237,9 @@ export function ProjectHomeScreen({
             onOpenTab({ kind: "notes", groupId, selectedPath: "decisions.md" });
             break;
           }
-          handleBrowseNotes();
+          router.navigate(
+            buildHostProjectNotesRoute(serverId, groupId, { selectedPath: "decisions.md" }),
+          );
           break;
         case "context":
           handleBrowseContext();
@@ -242,10 +250,10 @@ export function ProjectHomeScreen({
       handleBrowseAgents,
       handleBrowseContext,
       handleBrowseFiles,
-      handleBrowseNotes,
       handleBrowseTasks,
       groupId,
       onOpenTab,
+      serverId,
     ],
   );
 

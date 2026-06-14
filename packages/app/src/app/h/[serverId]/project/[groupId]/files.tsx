@@ -11,9 +11,17 @@ export default function HostProjectFilesRoute() {
 }
 
 function HostProjectFilesRouteContent() {
-  const params = useLocalSearchParams<{ serverId?: string; groupId?: string }>();
+  const params = useLocalSearchParams<{ serverId?: string; groupId?: string; file?: string }>();
   const serverId = typeof params.serverId === "string" ? params.serverId : "";
   const groupId = typeof params.groupId === "string" ? params.groupId : "";
+  const selectedPath = typeof params.file === "string" ? params.file : null;
 
-  return <ProjectSurfaceScreen serverId={serverId} groupId={groupId} initialTab="files" />;
+  return (
+    <ProjectSurfaceScreen
+      serverId={serverId}
+      groupId={groupId}
+      initialTab="files"
+      initialSelectedFilePath={selectedPath}
+    />
+  );
 }

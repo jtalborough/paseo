@@ -154,8 +154,17 @@ describe("workspace route parsing", () => {
   it("builds host Project home routes", () => {
     expect(buildHostProjectRoute("local", "grp_1")).toBe("/h/local/project/grp_1");
     expect(buildHostProjectFilesRoute("local", "grp_1")).toBe("/h/local/project/grp_1/files");
+    expect(buildHostProjectFilesRoute("local", "grp_1", { selectedPath: "roadmap.md" })).toBe(
+      "/h/local/project/grp_1/files?file=roadmap.md",
+    );
+    expect(
+      buildHostProjectFilesRoute("local", "grp_1", { selectedPath: "workflows/intake.md" }),
+    ).toBe("/h/local/project/grp_1/files?file=workflows%2Fintake.md");
     expect(buildHostProjectTasksRoute("local", "grp_1")).toBe("/h/local/project/grp_1/tasks");
     expect(buildHostProjectNotesRoute("local", "grp_1")).toBe("/h/local/project/grp_1/notes");
+    expect(buildHostProjectNotesRoute("local", "grp_1", { selectedPath: "decisions.md" })).toBe(
+      "/h/local/project/grp_1/notes?file=decisions.md",
+    );
     expect(buildHostProjectContextRoute("local", "grp_1")).toBe("/h/local/project/grp_1/context");
     expect(
       buildHostProjectContextRoute("local", "grp_1", {

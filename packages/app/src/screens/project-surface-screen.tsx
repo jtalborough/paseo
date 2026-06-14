@@ -41,19 +41,26 @@ interface ProjectSurfaceScreenProps {
   groupId: string;
   initialTab?: ProjectSurfaceTab;
   initialContextPacketPath?: string | null;
+  initialSelectedFilePath?: string | null;
 }
 
 function projectTargetForTab(
   tab: ProjectSurfaceTab,
   groupId: string,
-  options?: { contextPacketPath?: string | null },
+  options?: { contextPacketPath?: string | null; selectedFilePath?: string | null },
 ): WorkspaceTabTarget | null {
   if (!groupId) {
     return null;
   }
   if (tab === "overview") return { kind: "project-overview", groupId };
   if (tab === "tasks") return { kind: "tasks", groupId };
-  if (tab === "notes") return { kind: "notes", groupId };
+  if (tab === "notes") {
+    return {
+      kind: "notes",
+      groupId,
+      ...(options?.selectedFilePath ? { selectedPath: options.selectedFilePath } : {}),
+    };
+  }
   if (tab === "agents") return { kind: "project-agents", groupId };
   if (tab === "context") {
     return {
@@ -62,7 +69,13 @@ function projectTargetForTab(
       ...(options?.contextPacketPath ? { packetPath: options.contextPacketPath } : {}),
     };
   }
-  if (tab === "files") return { kind: "project-files", groupId };
+  if (tab === "files") {
+    return {
+      kind: "project-files",
+      groupId,
+      ...(options?.selectedFilePath ? { selectedPath: options.selectedFilePath } : {}),
+    };
+  }
   return null;
 }
 
@@ -72,6 +85,19 @@ function isSameProjectTarget(left: WorkspaceTabTarget, right: WorkspaceTabTarget
   }
   if (!("groupId" in left) || !("groupId" in right)) {
     return false;
+  }
+  if (left.kind === "project-context" && right.kind === "project-context") {
+    return (
+      left.groupId === right.groupId && (left.packetPath ?? null) === (right.packetPath ?? null)
+    );
+  }
+  if (
+    (left.kind === "project-files" && right.kind === "project-files") ||
+    (left.kind === "notes" && right.kind === "notes")
+  ) {
+    return (
+      left.groupId === right.groupId && (left.selectedPath ?? null) === (right.selectedPath ?? null)
+    );
   }
   return left.groupId === right.groupId;
 }
@@ -101,6 +127,7 @@ export function ProjectSurfaceScreen({
   groupId,
   initialTab = "overview",
   initialContextPacketPath = null,
+  initialSelectedFilePath = null,
 }: ProjectSurfaceScreenProps) {
   const scope = useMemo(() => projectSurfaceScope(groupId), [groupId]);
   const persistenceKey = useMemo(
@@ -181,12 +208,13 @@ export function ProjectSurfaceScreen({
 
       const target = projectTargetForTab(tab, groupId, {
         contextPacketPath: initialContextPacketPath,
+        selectedFilePath: initialSelectedFilePath,
       });
       if (target) {
         openProjectTarget(target);
       }
     },
-    [groupId, initialContextPacketPath, openProjectTarget],
+    [groupId, initialContextPacketPath, initialSelectedFilePath, openProjectTarget],
   );
 
   const handleNavigateTab = useCallback(
@@ -344,14 +372,26 @@ export function ProjectSurfaceScreen({
       handleOpenInitialTab("browser");
       return;
     }
-    const target = projectTargetForTab(initialTab, groupId);
+    const target = projectTargetForTab(initialTab, groupId, {
+      contextPacketPath: initialContextPacketPath,
+      selectedFilePath: initialSelectedFilePath,
+    });
     const targetAlreadyOpen = target
       ? uiTabs.some((tab) => isSameProjectTarget(tab.target, target))
       : false;
     if (target && !targetAlreadyOpen) {
       openLayoutTabFocused(persistenceKey, target);
     }
-  }, [groupId, handleOpenInitialTab, initialTab, openLayoutTabFocused, persistenceKey, uiTabs]);
+  }, [
+    groupId,
+    handleOpenInitialTab,
+    initialContextPacketPath,
+    initialSelectedFilePath,
+    initialTab,
+    openLayoutTabFocused,
+    persistenceKey,
+    uiTabs,
+  ]);
 
   const buildPaneContentModel = useCallback(
     (input: { paneId: string; tab: WorkspaceTabDescriptor }) =>

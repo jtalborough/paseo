@@ -385,12 +385,20 @@ export function buildHostProjectRoute(serverId: string, groupId: string) {
   return `${base}/project/${encodeSegment(normalizedGroupId)}` as const;
 }
 
-export function buildHostProjectFilesRoute(serverId: string, groupId: string) {
+export function buildHostProjectFilesRoute(
+  serverId: string,
+  groupId: string,
+  options?: { selectedPath?: string | null },
+) {
   const projectRoute = buildHostProjectRoute(serverId, groupId);
   if (projectRoute === "/") {
     return "/" as const;
   }
-  return `${projectRoute}/files` as const;
+  const selectedPath = trimNonEmpty(options?.selectedPath);
+  if (!selectedPath) {
+    return `${projectRoute}/files` as const;
+  }
+  return `${projectRoute}/files?file=${encodeURIComponent(selectedPath)}` as const;
 }
 
 export function buildHostProjectTasksRoute(serverId: string, groupId: string) {
@@ -401,12 +409,20 @@ export function buildHostProjectTasksRoute(serverId: string, groupId: string) {
   return `${projectRoute}/tasks` as const;
 }
 
-export function buildHostProjectNotesRoute(serverId: string, groupId: string) {
+export function buildHostProjectNotesRoute(
+  serverId: string,
+  groupId: string,
+  options?: { selectedPath?: string | null },
+) {
   const projectRoute = buildHostProjectRoute(serverId, groupId);
   if (projectRoute === "/") {
     return "/" as const;
   }
-  return `${projectRoute}/notes` as const;
+  const selectedPath = trimNonEmpty(options?.selectedPath);
+  if (!selectedPath) {
+    return `${projectRoute}/notes` as const;
+  }
+  return `${projectRoute}/notes?file=${encodeURIComponent(selectedPath)}` as const;
 }
 
 export function buildHostProjectContextRoute(
