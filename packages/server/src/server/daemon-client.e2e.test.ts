@@ -1,5 +1,5 @@
 import { test, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir, homedir } from "node:os";
 import path from "node:path";
@@ -812,6 +812,51 @@ test("returns home-scoped directory suggestions", async () => {
   } finally {
     rmSync(insideHomeDir, { recursive: true, force: true });
     rmSync(outsideHomeDir, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("browses directories through the websocket RPC", async () => {
+  const browseRoot = mkdtempSync(path.join(tmpdir(), "paseo-dir-browse-"));
+  const childDir = path.join(browseRoot, "projects");
+  const nestedDir = path.join(childDir, "paseo");
+  writeFileSync(path.join(browseRoot, "README.md"), "not a directory\n");
+
+  try {
+    mkdirSync(nestedDir, { recursive: true });
+    const resolvedRoot = realpathSync(browseRoot);
+    const resolvedChild = realpathSync(childDir);
+    const resolvedNested = realpathSync(nestedDir);
+    const serverInfo = ctx.client.getLastServerInfoMessage();
+    expect(serverInfo?.features?.remoteDirectoryBrowse).toBe(true);
+
+    const rootResult = await ctx.client.browseDirectory({
+      root: browseRoot,
+      path: ".",
+    });
+    expect(rootResult.error).toBeNull();
+    expect(rootResult.root).toBe(resolvedRoot);
+    expect(rootResult.path).toBe(resolvedRoot);
+    expect(rootResult.parentPath).toBeNull();
+    expect(rootResult.entries).toContainEqual({ name: "projects", path: resolvedChild });
+    expect(rootResult.entries.some((entry) => entry.name === "README.md")).toBe(false);
+
+    const childResult = await ctx.client.browseDirectory({
+      root: browseRoot,
+      path: childDir,
+    });
+    expect(childResult.error).toBeNull();
+    expect(childResult.path).toBe(resolvedChild);
+    expect(childResult.parentPath).toBe(resolvedRoot);
+    expect(childResult.entries).toContainEqual({ name: "paseo", path: resolvedNested });
+
+    const outsideResult = await ctx.client.browseDirectory({
+      root: browseRoot,
+      path: tmpdir(),
+    });
+    expect(outsideResult.error).toBe("Browse path is outside the selected root");
+    expect(outsideResult.entries).toEqual([]);
+  } finally {
+    rmSync(browseRoot, { recursive: true, force: true });
   }
 }, 30000);
 
