@@ -17,6 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   SOURCE_TAG: ${{ inputs.tag }}
 
 jobs:
