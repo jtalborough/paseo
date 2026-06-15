@@ -10,6 +10,10 @@ This repo ships public desktop/mobile/web releases through the release workflows
 
 This keeps the server closed to inbound deploy traffic. GitHub never SSHs into the host.
 
+For the proposed fork-owned package scope, GitHub Packages channel, endpoint ownership, and
+ai-machine install structure, see `docs/breakaway.md`. This deployment document describes the
+working deploy flow that exists today.
+
 ## Linux Server Artifact Build
 
 `.github/workflows/deploy-linux-server.yml` builds the server-side workspace stack, typechecks it,
