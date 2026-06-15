@@ -205,4 +205,4 @@ server {
 
 ## License
 
-AGPL-3.0
+AGPL-3.0-or-later. See `NOTICE.md` for fork provenance and source-offer notes.

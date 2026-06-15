@@ -17,6 +17,7 @@ playbook.
 - Use this document when planning package scope changes, GitHub Packages
   publishing, fork-owned endpoints, AGPL/source-offer work, and ai-machine
   install structure.
+- Use `NOTICE.md` as the current fork notice and source-offer text.
 - Keep this document until the package scope, product name, endpoint domains,
   and host install model are approved and represented in implementation docs.
 - Do not run publish, release, tag, or registry mutation commands from this plan
@@ -64,7 +65,7 @@ Smallest useful implementation branch:
    - `bugs`
    - package descriptions where user-visible
 4. Keep upstream copyright and AGPL license text.
-5. Add a fork notice describing the modified-source location and upstream
+5. Keep `NOTICE.md` current with the modified-source location and upstream
    provenance.
 6. Replace default relay/app endpoints with approved fork endpoints.
 7. Update the Linux artifact workflow and install scripts for the chosen package
@@ -213,7 +214,10 @@ The project is AGPL-3.0-or-later. For this fork:
   to users.
 - Ensure published packages, deploy artifacts, desktop builds, mobile builds,
   and hosted app/relay services point users to the fork's source.
-- Add a clear fork notice once the public name and source URL are final.
+- Keep `NOTICE.md` available from published packages, deploy artifacts, desktop
+  builds, mobile builds, hosted app/relay services, and any retained website.
+- Update `NOTICE.md` once the public name, domains, and release channel are
+  final.
 
 This is engineering guidance, not legal advice.
 
@@ -236,7 +240,7 @@ This is engineering guidance, not legal advice.
 ## First Implementation Checklist
 
 - [ ] Approve package scope and package visibility.
-- [ ] Add fork notice/source-offer text.
+- [x] Add fork notice/source-offer text.
 - [ ] Add fork-specific GitHub Packages dry-run workflow.
 - [ ] Update package metadata and internal workspace dependencies.
 - [ ] Update Linux deploy artifact packing and install script for the new scope.
