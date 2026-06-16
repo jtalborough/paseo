@@ -80,6 +80,8 @@ export async function recordTaskScheduleRun(input: {
         launchReason: `Scheduled task: ${task.metadata.title}`,
         provider: schedule.target.type === "new-agent" ? schedule.target.config.provider : null,
         model: schedule.target.type === "new-agent" ? (schedule.target.config.model ?? null) : null,
+        goal: task.metadata.goalId ? `goals/${task.metadata.goalId}.md` : null,
+        thread: task.metadata.threadId ? `threads/${task.metadata.threadId}.md` : null,
         task: `tasks/${task.metadata.id}.md`,
         now: run.startedAt,
       });

@@ -81,6 +81,23 @@ Every provider adapter owns its canonical user-message timeline rows. When a for
 
 Draft metadata lookups should avoid creating provider sessions when the upstream provider has top-level APIs for that metadata. Prefer `AgentClient.listModels`, `listModes`, `listCommands`, or `listFeatures` over creating a scratch `AgentSession`; scratch sessions can show up as empty native sessions in provider import/history UIs.
 
+## Slash Commands
+
+Slash commands belong first to the active provider. Paseo may intercept commands it explicitly owns
+for local UI actions, but unknown provider-native slash commands must pass through unchanged.
+
+Codex `/goal` is a provider-native session goal feature, not a Paseo Project Goal. Paseo should
+enable it when the Codex runtime supports goals, route it without canceling an active turn, preserve
+the resulting timeline events, and keep it distinct from durable Project Goals under `goals/`.
+
+The product contract is:
+
+```text
+If Paseo recognizes a command, it may handle it.
+If Paseo does not recognize it, it must pass it through unchanged to the provider.
+If the provider emits command state, Paseo preserves and displays it.
+```
+
 ---
 
 ## Provider Snapshot Refresh Contract

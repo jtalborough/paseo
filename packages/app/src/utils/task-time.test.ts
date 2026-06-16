@@ -38,6 +38,8 @@ function task(
       links: [],
       github: null,
       sources: [],
+      goalId: null,
+      threadId: null,
       createdAt: "2026-06-08T00:00:00.000Z",
       updatedAt: "2026-06-08T00:00:00.000Z",
       agentId: null,

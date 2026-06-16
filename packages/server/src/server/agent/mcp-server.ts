@@ -50,16 +50,21 @@ import {
 } from "@getpaseo/protocol/schedule/types";
 import {
   ProjectAgentProfilePathSchema,
+  ProjectDecisionPathSchema,
+  ProjectEvidencePathSchema,
   ProjectContextFolderGrantSchema,
   ProjectContextFileIdSchema,
   ProjectContextInstructionSourceSchema,
   ProjectContextPacketBrowserStateSchema,
   ProjectContextPacketPathSchema,
   ProjectContextPacketSchema,
+  ProjectGoalPathSchema,
+  ProjectMemoryPathSchema,
   ProjectNotePathSchema,
   ProjectPromptPathSchema,
   ProjectRelativePathSchema,
   ProjectTaskPathSchema,
+  ProjectThreadPathSchema,
 } from "@getpaseo/protocol/project-context/types";
 import {
   ActionStateSchema,
@@ -1692,8 +1697,13 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         launchedAgentId: z.string().nullable().optional(),
         profile: ProjectAgentProfilePathSchema.nullable().optional(),
         prompt: ProjectPromptPathSchema.nullable().optional(),
+        goal: ProjectGoalPathSchema.nullable().optional(),
+        thread: ProjectThreadPathSchema.nullable().optional(),
         task: ProjectTaskPathSchema.nullable().optional(),
         notes: z.array(ProjectNotePathSchema).optional(),
+        decisions: z.array(ProjectDecisionPathSchema).optional(),
+        evidence: z.array(ProjectEvidencePathSchema).optional(),
+        memory: z.array(ProjectMemoryPathSchema).optional(),
         files: z.array(ProjectRelativePathSchema).optional(),
         bookmarks: z.array(z.string().min(1)).optional(),
         browser: z.array(ProjectContextPacketBrowserStateSchema).optional(),
@@ -1744,6 +1754,8 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         links: z.array(z.string()).optional(),
         github: z.string().nullable().optional(),
         sources: z.array(TaskExternalSourceSchema).optional(),
+        goalId: z.string().nullable().optional(),
+        threadId: z.string().nullable().optional(),
       },
       outputSchema: {
         task: TaskWireSchema,
@@ -1765,6 +1777,8 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         ...(input.links !== undefined ? { links: input.links } : {}),
         ...(input.github !== undefined ? { github: input.github } : {}),
         ...(input.sources !== undefined ? { sources: input.sources } : {}),
+        ...(input.goalId !== undefined ? { goalId: input.goalId } : {}),
+        ...(input.threadId !== undefined ? { threadId: input.threadId } : {}),
       };
       const task = await requireTaskStore().create(taskInput);
       return {
@@ -1851,6 +1865,8 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         links: z.array(z.string()).optional(),
         github: z.string().nullable().optional(),
         sources: z.array(TaskExternalSourceSchema).optional(),
+        goalId: z.string().nullable().optional(),
+        threadId: z.string().nullable().optional(),
       },
       outputSchema: {
         task: TaskWireSchema,
@@ -1871,6 +1887,8 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         ...(patch.links !== undefined ? { links: patch.links } : {}),
         ...(patch.github !== undefined ? { github: patch.github } : {}),
         ...(patch.sources !== undefined ? { sources: patch.sources } : {}),
+        ...(patch.goalId !== undefined ? { goalId: patch.goalId } : {}),
+        ...(patch.threadId !== undefined ? { threadId: patch.threadId } : {}),
       };
       const task = await requireTaskStore().update(resolvedProjectGroupId, id, taskPatch);
       return {

@@ -27,9 +27,14 @@ export interface CreateProjectContextPacketInput {
   model?: string | null;
   profile?: string | null;
   prompt?: string | null;
+  goal?: string | null;
+  thread?: string | null;
   task?: string | null;
   tools?: string[];
   notes?: string[];
+  decisions?: string[];
+  evidence?: string[];
+  memory?: string[];
   files?: string[];
   bookmarks?: string[];
   browser?: Array<{ url: string; title?: string | null }>;
@@ -66,28 +71,12 @@ export class ProjectContextPacketStore {
   async create(input: CreateProjectContextPacketInput): Promise<StoredProjectContextPacket> {
     await mkdir(this.packetDir(input.projectGroupId), { recursive: true });
     const id = input.id ?? (await this.allocateId(input.projectGroupId, input.launchReason));
+    const { now, ...packetInput } = input;
     const packet = ProjectContextPacketSchema.parse({
+      ...packetInput,
       schemaVersion: 1,
       id,
-      projectGroupId: input.projectGroupId,
-      createdAt: input.now ?? new Date().toISOString(),
-      createdByAgentId: input.createdByAgentId ?? null,
-      launchedAgentId: input.launchedAgentId ?? null,
-      launchReason: input.launchReason ?? null,
-      provider: input.provider ?? null,
-      model: input.model ?? null,
-      profile: input.profile ?? null,
-      prompt: input.prompt ?? null,
-      task: input.task ?? null,
-      tools: input.tools ?? [],
-      notes: input.notes ?? [],
-      files: input.files ?? [],
-      bookmarks: input.bookmarks ?? [],
-      browser: input.browser ?? [],
-      folderGrants: input.folderGrants ?? [],
-      launchCwd: input.launchCwd ?? null,
-      instructionSources: input.instructionSources ?? [],
-      instructionWarnings: input.instructionWarnings ?? [],
+      createdAt: now ?? new Date().toISOString(),
     });
     const packetPath = this.relativePacketPath(packet.id);
     await writeFileAtomic(

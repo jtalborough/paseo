@@ -30,11 +30,32 @@ describe("TaskStore", () => {
     expect(created.metadata.actionState).toBe("todo");
     expect(created.metadata.run).toBe("self");
     expect(created.metadata.links).toEqual([]);
+    expect(created.metadata.goalId).toBeNull();
+    expect(created.metadata.threadId).toBeNull();
 
     const loaded = await store.get("grp_one", created.metadata.id);
     expect(loaded).not.toBeNull();
     expect(loaded?.metadata).toEqual(created.metadata);
     expect(loaded?.body).toBe("Buy a 16x25x1 MERV 11.\n");
+  });
+
+  it("records optional Project goal and thread links", async () => {
+    const created = await store.create({
+      projectGroupId: "grp_one",
+      title: "Ship linked task",
+      goalId: "2026-06-16-workstation-model",
+      threadId: "2026-06-16-agent-memory-design",
+    });
+
+    expect(created.metadata.goalId).toBe("2026-06-16-workstation-model");
+    expect(created.metadata.threadId).toBe("2026-06-16-agent-memory-design");
+
+    const updated = await store.update("grp_one", created.metadata.id, {
+      threadId: "2026-06-16-agent-memory-implementation",
+    });
+
+    expect(updated.metadata.goalId).toBe("2026-06-16-workstation-model");
+    expect(updated.metadata.threadId).toBe("2026-06-16-agent-memory-implementation");
   });
 
   it("writes a real markdown file with a frontmatter fence", async () => {

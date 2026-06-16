@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   ProjectAgentProfilePathSchema,
   ProjectAgentProfileSchema,
+  ProjectDecisionPathSchema,
+  ProjectEvidencePathSchema,
   ProjectContextFileIdSchema,
   ProjectContextFolderGrantSchema,
   ProjectContextInstructionSourceSchema,
@@ -10,10 +12,13 @@ import {
   ProjectContextPacketBrowserStateSchema,
   ProjectContextPacketSchema,
   ProjectContextToolGrantSchema,
+  ProjectGoalPathSchema,
+  ProjectMemoryPathSchema,
   ProjectNotePathSchema,
   ProjectPromptPathSchema,
   ProjectRelativePathSchema,
   ProjectTaskPathSchema,
+  ProjectThreadPathSchema,
 } from "@getpaseo/protocol/project-context/types";
 
 const ProjectGroupIdSchema = z.string().regex(/^grp_[A-Za-z0-9_-]+$/);
@@ -54,9 +59,14 @@ export const ProjectContextPacketCreateRequestSchema = z.object({
   model: NullableStringFieldSchema,
   profile: ProjectAgentProfilePathSchema.nullable().optional().default(null),
   prompt: ProjectPromptPathSchema.nullable().optional().default(null),
+  goal: ProjectGoalPathSchema.nullable().optional().default(null),
+  thread: ProjectThreadPathSchema.nullable().optional().default(null),
   task: ProjectTaskPathSchema.nullable().optional().default(null),
   tools: z.array(ProjectContextToolGrantSchema).optional().default([]),
   notes: z.array(ProjectNotePathSchema).optional().default([]),
+  decisions: z.array(ProjectDecisionPathSchema).optional().default([]),
+  evidence: z.array(ProjectEvidencePathSchema).optional().default([]),
+  memory: z.array(ProjectMemoryPathSchema).optional().default([]),
   files: z.array(ProjectRelativePathSchema).optional().default([]),
   bookmarks: z.array(z.string().min(1)).optional().default([]),
   browser: z.array(ProjectContextPacketBrowserStateSchema).optional().default([]),

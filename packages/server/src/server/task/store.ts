@@ -169,32 +169,17 @@ export class TaskStore {
     const now = new Date().toISOString();
     assertProjectGroupId(input.projectGroupId);
     const id = await this.allocateId(input.projectGroupId, input.title, now);
+    const { body, ...metadataInput } = input;
     const metadata: TaskFrontmatter = TaskFrontmatterSchema.parse({
+      ...metadataInput,
       id,
       projectGroupId: input.projectGroupId,
       title: input.title,
-      actionState: input.actionState ?? "todo",
-      run: input.run ?? "self",
-      priority: input.priority ?? null,
-      type: input.type ?? null,
-      people: input.people ?? [],
-      context: input.context ?? null,
-      attention: input.attention ?? null,
-      doDate: input.doDate ?? null,
-      recurrence: input.recurrence ?? null,
-      remind: input.remind ?? [],
       ...scheduleCreateFields(input),
-      timerStartedAt: input.timerStartedAt ?? null,
-      trackedSeconds: input.trackedSeconds ?? 0,
-      timeEntries: input.timeEntries ?? [],
-      provider: input.provider ?? null,
-      links: input.links ?? [],
-      github: input.github ?? null,
-      sources: input.sources ?? [],
       createdAt: now,
       updatedAt: now,
     });
-    const task: StoredTask = { metadata, body: input.body ?? "" };
+    const task: StoredTask = { metadata, body: body ?? "" };
     await this.write(task);
     return task;
   }
@@ -232,6 +217,8 @@ export class TaskStore {
         links: patch.links,
         github: patch.github,
         sources: patch.sources,
+        goalId: patch.goalId,
+        threadId: patch.threadId,
         agentId: patch.agentId,
         worktree: patch.worktree,
         contextPacket: patch.contextPacket,

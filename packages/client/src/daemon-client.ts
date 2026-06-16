@@ -140,9 +140,14 @@ export interface ProjectContextPacketCreateInput {
   model?: string | null;
   profile?: string | null;
   prompt?: string | null;
+  goal?: string | null;
+  thread?: string | null;
   task?: string | null;
   tools?: string[];
   notes?: string[];
+  decisions?: string[];
+  evidence?: string[];
+  memory?: string[];
   files?: string[];
   bookmarks?: string[];
   browser?: Array<{ url: string; title?: string | null }>;

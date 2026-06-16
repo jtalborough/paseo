@@ -71,6 +71,26 @@ export const ProjectTaskPathSchema = createProjectPathSchema({
   prefix: "tasks",
   extensions: [".md"],
 });
+export const ProjectGoalPathSchema = createProjectPathSchema({
+  prefix: "goals",
+  extensions: [".md"],
+});
+export const ProjectThreadPathSchema = createProjectPathSchema({
+  prefix: "threads",
+  extensions: [".md"],
+});
+export const ProjectDecisionPathSchema = createProjectPathSchema({
+  prefix: "decisions",
+  extensions: [".md"],
+});
+export const ProjectEvidencePathSchema = createProjectPathSchema({
+  prefix: "evidence",
+  extensions: [".md", ".json", ".txt", ".png", ".jpg", ".jpeg", ".webp"],
+});
+export const ProjectMemoryPathSchema = createProjectPathSchema({
+  prefix: "memory",
+  extensions: [".md", ".yaml", ".yml", ".json"],
+});
 export const ProjectNotePathSchema = createProjectPathSchema({
   prefix: "notes",
   extensions: [".md"],
@@ -137,9 +157,14 @@ export const ProjectContextPacketSchema = z.object({
   model: nullableString(),
   profile: ProjectAgentProfilePathSchema.nullable().optional().default(null),
   prompt: ProjectPromptPathSchema.nullable().optional().default(null),
+  goal: ProjectGoalPathSchema.nullable().optional().default(null),
+  thread: ProjectThreadPathSchema.nullable().optional().default(null),
   task: ProjectTaskPathSchema.nullable().optional().default(null),
   tools: z.array(ProjectContextToolGrantSchema).optional().default([]),
   notes: z.array(ProjectNotePathSchema).optional().default([]),
+  decisions: z.array(ProjectDecisionPathSchema).optional().default([]),
+  evidence: z.array(ProjectEvidencePathSchema).optional().default([]),
+  memory: z.array(ProjectMemoryPathSchema).optional().default([]),
   files: z.array(ProjectRelativePathSchema).optional().default([]),
   bookmarks: z.array(z.string().min(1)).optional().default([]),
   browser: z.array(ProjectContextPacketBrowserStateSchema).optional().default([]),

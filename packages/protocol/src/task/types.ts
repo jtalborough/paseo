@@ -201,6 +201,8 @@ export interface TaskFrontmatter {
   links: string[];
   github: string | null;
   sources: TaskExternalSource[];
+  goalId: string | null;
+  threadId: string | null;
   createdAt: string;
   updatedAt: string;
   agentId: string | null;
@@ -275,6 +277,10 @@ export const TaskFrontmatterSchema: z.ZodType<TaskFrontmatter, z.ZodTypeDef, unk
     github: nullableString(),
     /** External system source records. Local files remain authoritative. */
     sources: z.array(TaskExternalSourceSchema).default([]),
+    /** Optional Project Goal id this task advances. */
+    goalId: nullableString(),
+    /** Optional Project Thread id that shaped or tracks this task. */
+    threadId: nullableString(),
 
     createdAt: z.string(),
     updatedAt: z.string(),
@@ -359,6 +365,8 @@ export interface CreateTaskInput {
   links?: string[];
   github?: string | null;
   sources?: TaskExternalSource[];
+  goalId?: string | null;
+  threadId?: string | null;
   body?: string;
 }
 
@@ -383,6 +391,8 @@ export interface UpdateTaskInput {
   links?: string[];
   github?: string | null;
   sources?: TaskExternalSource[];
+  goalId?: string | null;
+  threadId?: string | null;
   body?: string;
   // Roll-up / completion fields (set by the daemon, not the UI).
   agentId?: string | null;

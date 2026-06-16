@@ -51,9 +51,17 @@ id: 2026-06-09-example-run
 projectGroupId: grp_example
 profile: agents/implementation-agent.yaml
 prompt: prompts/implementation.md
+goal: goals/2026-06-09-example-goal.md
+thread: threads/2026-06-09-example-thread.md
 task: tasks/2026-06-09-example-task.md
 notes:
   - notes/architecture.md
+decisions:
+  - decisions/2026-06-09-example-decision.md
+evidence:
+  - evidence/2026-06-09-example-check.md
+memory:
+  - memory/qa-tester.md
 folderGrants:
   - projectId: child-1
     path: .
@@ -84,12 +92,17 @@ You are the Project manager for this Paseo Project. Keep the local Project files
 the human and future agents.
 
 Responsibilities:
+- Keep durable objectives in \`goals/\` and connect them to threads, tasks, decisions, and evidence.
+- Keep work trails in \`threads/\` when a goal, task, team review, handoff, or decision needs history.
 - Keep active work in \`tasks/\` as Markdown-backed Project Tasks.
 - Keep product direction in \`roadmap.md\` and durable decisions in \`notes/decisions.md\`.
 - Use \`workflows/\` for repeatable operating paths such as intake, QA, release, or field work.
-- Keep durable context, decisions, and reference material in \`notes/\`.
+- Keep compact durable context and reference material in \`notes/\`.
+- Use \`decisions/\` and \`evidence/\` when records need first-class links to goals, threads, tasks,
+  or agent runs.
 - Use \`context/packets/\` to explain what was handed to an agent run.
 - Treat \`prompts/\` and \`agents/\` as the Project's reusable instruction and team roster files.
+- Keep role-specific learned behavior in \`memory/\` as exploration or exploitation entries.
 - Keep external Folders explicit. They are referenced capabilities, not Project-owned files.
 - Prefer local Project files as the execution source of truth. External tools such as Notion can be
   provenance or mirror surfaces, but they are not required to run the Project.
@@ -155,8 +168,13 @@ Use this workflow when converting an existing standalone agent folder into a Pas
 3. Inventory the old folder's durable files: identity, workflow, tools, memory, reference data,
    scripts, templates, tests, and historical notes.
 4. Promote only durable coordination content into Project files:
-   - goals and sequencing -> \`roadmap.md\`
+   - durable objectives -> \`goals/*.md\`
+   - sequencing and milestones -> \`roadmap.md\`
+   - work trails or handoffs -> \`threads/*.md\`
    - decisions and cadence rules -> \`notes/decisions.md\`
+   - first-class decisions -> \`decisions/*.md\`
+   - evidence records -> \`evidence/*\`
+   - role-specific learned behavior -> \`memory/*\`
    - repeatable procedures -> \`workflows/*.md\`
    - executable follow-ups -> \`tasks/*.md\`
    - reusable roles -> \`agents/*.yaml\`
@@ -241,12 +259,131 @@ projectGroupId: grp_example
 title: Example task
 actionState: todo
 run: self
+goalId: 2026-06-08-example-goal
+threadId: 2026-06-08-example-thread
 createdAt: 2026-06-08T00:00:00.000Z
 updatedAt: 2026-06-08T00:00:00.000Z
 ---
 
 Notes, context, and acceptance criteria.
 \`\`\`
+`;
+const GOALS_README_CONTENT = `# Goals
+
+Goals are durable Project objectives. Use them for outcomes that may span several threads, tasks,
+agent runs, decisions, and evidence records.
+
+Project Goals supplement provider-native session goals such as Codex \`/goal\`; they do not replace
+or override provider commands. A provider session goal is runtime state. A Project Goal is local
+Project truth that survives across providers and hosts.
+
+\`\`\`markdown
+---
+id: 2026-06-16-example-goal
+projectGroupId: grp_example
+title: Example goal
+status: active
+priority: high
+ownerRole: product-owner
+linkedThreads: []
+linkedTasks: []
+linkedDecisions: []
+linkedEvidence: []
+createdAt: 2026-06-16T00:00:00.000Z
+updatedAt: 2026-06-16T00:00:00.000Z
+closedAt: null
+---
+
+## Objective
+
+## Scope
+
+## Success Criteria
+
+## Current State
+
+## Open Questions
+
+## Evidence
+
+## Decisions
+
+## Next Threads
+\`\`\`
+`;
+const THREADS_README_CONTENT = `# Threads
+
+Threads are durable work trails around a Goal, Task, agent run, team review, handoff, or decision.
+They are not just raw chat transcripts. Keep the useful trail: intake, participants, context,
+turning points, linked runs, decisions, evidence, and follow-up tasks.
+
+\`\`\`markdown
+---
+id: 2026-06-16-example-thread
+projectGroupId: grp_example
+goalId: 2026-06-16-example-goal
+title: Example thread
+type: product-review
+status: active
+participants:
+  - user
+  - product-owner
+  - ux-engineer
+linkedTasks: []
+linkedAgentRuns: []
+linkedDecisions: []
+linkedEvidence: []
+createdAt: 2026-06-16T00:00:00.000Z
+updatedAt: 2026-06-16T00:00:00.000Z
+---
+
+## Purpose
+
+## Context
+
+## Timeline
+
+## Decisions
+
+## Evidence
+
+## Follow-up
+\`\`\`
+`;
+const MEMORY_README_CONTENT = `# Role Memory
+
+Role memory captures learned operating behavior for this Project. Keep memory role-specific so the
+Product Owner, UX Engineer, Developer Lead, QA Engineer, and domain roles can improve without
+collapsing into one generic agent.
+
+Use two pools:
+
+- \`exploration\`: candidate behavior being tried for an unfamiliar context.
+- \`exploitation\`: behavior promoted by evidence from successful Project work.
+
+Promotion rule:
+
+\`\`\`text
+exploration -> exploitation only after evidence
+exploitation -> retired when contradicted by evidence
+\`\`\`
+
+Memory can advise future launches, but it does not silently override user instructions, Project
+docs, provider-native files, or Folder instruction files.
+`;
+const EVIDENCE_README_CONTENT = `# Evidence
+
+Evidence records what proved a Goal, Thread, Task, agent run, or decision. Use this directory for
+command outputs, screenshots, endpoint checks, commit references, artifacts, user feedback, and
+other reviewable proof.
+
+Prefer short Markdown summaries that link to durable artifacts rather than pasting large logs.
+`;
+const DECISIONS_README_CONTENT = `# Decisions
+
+Project decisions can live here as one file per decision when they need stronger linking than
+\`notes/decisions.md\`. Use \`notes/decisions.md\` for a compact running log and this directory for
+decisions that need linked Goals, Threads, Tasks, or Evidence.
 `;
 
 interface ProjectSeedFile {
@@ -317,6 +454,31 @@ const PROJECT_SEED_FILES: ProjectSeedFile[] = [
     contents: TASKS_README_CONTENT,
   },
   {
+    id: "goals-readme",
+    relativePath: "goals/README.md",
+    contents: GOALS_README_CONTENT,
+  },
+  {
+    id: "threads-readme",
+    relativePath: "threads/README.md",
+    contents: THREADS_README_CONTENT,
+  },
+  {
+    id: "memory-readme",
+    relativePath: "memory/README.md",
+    contents: MEMORY_README_CONTENT,
+  },
+  {
+    id: "evidence-readme",
+    relativePath: "evidence/README.md",
+    contents: EVIDENCE_README_CONTENT,
+  },
+  {
+    id: "decisions-readme",
+    relativePath: "decisions/README.md",
+    contents: DECISIONS_README_CONTENT,
+  },
+  {
     id: "workflows-readme",
     relativePath: "workflows/README.md",
     contents: WORKFLOWS_README_CONTENT,
@@ -368,6 +530,11 @@ export async function syncProjectDirectory(input: {
   await fs.mkdir(path.join(cwd, "context", "packets"), { recursive: true });
   await fs.mkdir(path.join(cwd, "prompts"), { recursive: true });
   await fs.mkdir(path.join(cwd, "tasks"), { recursive: true });
+  await fs.mkdir(path.join(cwd, "goals"), { recursive: true });
+  await fs.mkdir(path.join(cwd, "threads"), { recursive: true });
+  await fs.mkdir(path.join(cwd, "memory"), { recursive: true });
+  await fs.mkdir(path.join(cwd, "evidence"), { recursive: true });
+  await fs.mkdir(path.join(cwd, "decisions"), { recursive: true });
   await fs.mkdir(path.join(cwd, "notes"), { recursive: true });
   await fs.mkdir(path.join(cwd, "workflows"), { recursive: true });
   await syncSeedFiles(cwd, input.group.displayName);

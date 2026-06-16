@@ -38,12 +38,14 @@ Project organization has three separate ownership layers:
 Every Project agent launch should be explainable as:
 
 ```
-Project + Task + Profile + Prompt + Context Packet + Folder grants + Provider/Model/Mode + Runtime Agent
+Project + Goal + Thread + Task + Profile + Prompt + Context Packet + Folder grants +
+Provider/Model/Mode + Runtime Agent + Decisions + Evidence + Role Memory Updates
 ```
 
 No provider transcript, terminal tab, git checkout, or remote directory is allowed to become the
-only source of truth for the work. If something matters after the run, it belongs in a Project Task,
-note, prompt, profile, context packet, or audit record.
+only source of truth for the work. If something matters after the run, it belongs in a Project Goal,
+Thread, Task, note, prompt, profile, context packet, decision, evidence record, memory entry, or
+audit record.
 
 ## Project directory
 
@@ -69,6 +71,16 @@ $PASEO_HOME/projects/{groupId}/
 │   ├── README.md
 │   ├── project-manager.md
 │   └── qa-tester.md
+├── goals/
+│   └── README.md
+├── threads/
+│   └── README.md
+├── decisions/
+│   └── README.md
+├── evidence/
+│   └── README.md
+├── memory/
+│   └── README.md
 ├── tasks/
 │   └── README.md
 └── workflows/
@@ -112,12 +124,37 @@ it is visible in the app and can later launch or brief agents directly.
 Project Roadmap, Decisions, and Workflows are durable planning files inside the Project directory:
 
 - `roadmap.md` captures outcomes, milestones, risks, and sequencing.
-- `notes/decisions.md` captures decisions and their consequences.
+- `goals/` captures durable objectives that may span several threads, tasks, decisions, and
+  evidence records.
+- `threads/` captures durable work trails around a Goal, Task, agent run, team review, handoff, or
+  decision. Threads are structured workflow history, not just raw chat transcripts.
+- `notes/decisions.md` captures a compact decision log and their consequences.
+- `decisions/` captures first-class decision files when a decision needs stronger links to Goals,
+  Threads, Tasks, or Evidence.
+- `evidence/` captures command outputs, screenshots, endpoint checks, commits, artifacts, user
+  feedback, and other proof.
+- `memory/` captures role-specific learned behavior. Use `exploration` for candidate behavior and
+  `exploitation` for behavior promoted by evidence.
 - `workflows/*.md` captures repeatable operating paths such as intake, QA, release, field work,
   finance review, content publishing, or infrastructure maintenance.
 
 These files are intentionally provider-neutral. Coding and non-coding Projects can define different
 teams, evidence, and operating paths without changing Paseo's data model.
+
+The working hierarchy is:
+
+```text
+Project
+  -> Goals
+    -> Threads
+      -> Tasks / Agent Runs / Decisions / Evidence
+        -> Role Memory Updates
+```
+
+Paseo Project Goals are durable local objectives. Provider-native goals, such as Codex `/goal`, are
+runtime/session features. Paseo should pass provider slash commands through, preserve the resulting
+events, and link them to Project Goals when useful, but it must not collapse provider-native goals
+and Project Goals into one hidden prompt mechanism.
 
 Project Tasks should identify the operating lane when that affects execution: solo slice,
 intake/shape, Product/UX review, architecture/implementation, QA/audit, or loop/epic. See
@@ -236,12 +273,17 @@ portable content.
 
 Durable agent context is split into explicit files:
 
+- `goals/`: Project-level objectives that explain what work should make true over time.
+- `threads/`: structured work trails for intake, reviews, handoffs, decisions, and follow-up.
 - `prompts/`: reusable Markdown instructions for a Project, team, role, or workflow.
 - `agents/`: reusable agent profile definitions. A profile can point at prompts and declare default
   provider, model, tool grants, folder grants, and launch preferences, but it is not a live session.
 - `context/packets/`: explicit launch bundles for a specific run. A packet records which prompt,
-  task, notes, bookmarks, files, browser state, Folder grants, launch cwd, and detected
-  instruction-authority sources were selected.
+  goal, thread, task, notes, decisions, evidence, bookmarks, files, browser state, Folder grants,
+  launch cwd, and detected instruction-authority sources were selected.
+- `memory/`: role-specific learned behavior derived from evidence. Memory advises future launches
+  but does not silently override Project docs, user instructions, or provider-native instruction
+  files.
 
 Provider-native folder instruction files are a separate layer. Files such as `AGENTS.md`,
 `CLAUDE.md`, `GEMINI.md`, provider command files, and provider-native skills may be loaded by the
@@ -384,8 +426,10 @@ Migration path:
 3. Create Project profiles in `agents/*.yaml` for the roles the Project actually needs.
 4. Create Project prompts in `prompts/*.md` that reference the old folder's current operating files
    instead of duplicating them blindly.
-5. Move durable decisions into `notes/decisions.md`, durable goals into `roadmap.md`, repeatable
-   procedures into `workflows/*.md`, and executable work into `tasks/*.md`.
+5. Move durable objectives into `goals/*.md`, sequencing into `roadmap.md`, work trails into
+   `threads/*.md`, durable decisions into `notes/decisions.md` or `decisions/*.md`, repeatable
+   procedures into `workflows/*.md`, evidence into `evidence/`, role learning into `memory/`, and
+   executable work into `tasks/*.md`.
 6. Launch agents from the Project profile plus a context packet that names the task, selected notes,
    prompt, Folder grants, provider/model/mode, and evidence expected from the run.
 7. After the run, update the task, decision note, workflow, or roadmap item only when the result
@@ -394,11 +438,15 @@ Migration path:
 For a health-coaching agent such as Cass, the Project should not behave like a code repository even
 if the folder contains scripts and tests. A good Project shape is:
 
-- `roadmap.md`: health coaching outcomes, current focus, and longer-term behavior changes.
+- `goals/*.md`: health coaching outcomes, current focus, and longer-term behavior changes.
+- `roadmap.md`: sequencing across health coaching outcomes.
+- `threads/*.md`: meaningful coaching interactions, reviews, handoffs, and follow-up trails.
 - `workflows/health-check.md`: on-demand health review procedure and safety boundaries.
 - `workflows/workout-logging.md`: trigger, logging command, duplicate guard, and verification.
 - `notes/decisions.md`: cadence decisions such as no noisy daily check-ins, use
   `scripts/health-data.sh`, and route meal-planning handoffs only when useful.
+- `evidence/*.md`: data-source checks, command results, and user feedback used to verify work.
+- `memory/cass.md`: role-specific coaching patterns promoted only after evidence.
 - `agents/cass.yaml`: the primary health coach profile, with explicit prompt and Folder grants.
 - `agents/qa-tester.yaml` or a domain-specific auditor profile: verifies scripts, logs, and data
   access without turning into medical advice.

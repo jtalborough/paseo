@@ -44,6 +44,8 @@ const TaskEditableFields = {
   links: z.array(z.string()).optional(),
   github: z.string().nullable().optional(),
   sources: z.array(TaskExternalSourceSchema).optional(),
+  goalId: z.string().nullable().optional(),
+  threadId: z.string().nullable().optional(),
   body: z.string().optional(),
 } as const;
 

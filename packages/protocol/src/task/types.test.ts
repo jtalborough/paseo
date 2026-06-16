@@ -14,6 +14,8 @@ describe("Task schemas", () => {
       }),
     ).toMatchObject({
       sources: [],
+      goalId: null,
+      threadId: null,
       scheduleIds: [],
       scheduledRuns: [],
     });

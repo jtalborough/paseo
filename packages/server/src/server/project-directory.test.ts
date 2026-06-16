@@ -56,6 +56,24 @@ describe("Project directory", () => {
     expect(readFileSync(path.join(cwd, "tasks", "README.md"), "utf8")).toContain(
       "projectGroupId: grp_example",
     );
+    expect(readFileSync(path.join(cwd, "tasks", "README.md"), "utf8")).toContain(
+      "goalId: 2026-06-08-example-goal",
+    );
+    expect(readFileSync(path.join(cwd, "goals", "README.md"), "utf8")).toContain(
+      "Goals are durable Project objectives",
+    );
+    expect(readFileSync(path.join(cwd, "threads", "README.md"), "utf8")).toContain(
+      "Threads are durable work trails",
+    );
+    expect(readFileSync(path.join(cwd, "memory", "README.md"), "utf8")).toContain(
+      "exploration -> exploitation",
+    );
+    expect(readFileSync(path.join(cwd, "evidence", "README.md"), "utf8")).toContain(
+      "what proved a Goal",
+    );
+    expect(readFileSync(path.join(cwd, "decisions", "README.md"), "utf8")).toContain(
+      "one file per decision",
+    );
     expect(readFileSync(path.join(cwd, "notes", "README.md"), "utf8")).toBe("# Notes\n\n");
     expect(readFileSync(path.join(cwd, "roadmap.md"), "utf8")).toContain("# Roadmap");
     expect(readFileSync(path.join(cwd, "workflows", "README.md"), "utf8")).toContain(
@@ -73,6 +91,11 @@ describe("Project directory", () => {
       seeded: expect.arrayContaining([
         "decisions-note",
         "intake-workflow",
+        "goals-readme",
+        "threads-readme",
+        "memory-readme",
+        "evidence-readme",
+        "decisions-readme",
         "migrate-agent-workspace-workflow",
         "project-roadmap",
         "project-manager-agent",
@@ -145,6 +168,11 @@ describe("Project directory", () => {
     writeFileSync(path.join(cwd, "agents", "qa-tester.yaml"), "id: custom-qa\n");
     writeFileSync(path.join(cwd, "context", "README.md"), "# My context\n");
     writeFileSync(path.join(cwd, "context", "packets", "README.md"), "# My packets\n");
+    writeFileSync(path.join(cwd, "goals", "README.md"), "# My goals\n");
+    writeFileSync(path.join(cwd, "threads", "README.md"), "# My threads\n");
+    writeFileSync(path.join(cwd, "memory", "README.md"), "# My memory\n");
+    writeFileSync(path.join(cwd, "evidence", "README.md"), "# My evidence\n");
+    writeFileSync(path.join(cwd, "decisions", "README.md"), "# My decisions directory\n");
     writeFileSync(path.join(cwd, "workflows", "README.md"), "# My workflows\n");
     writeFileSync(path.join(cwd, "workflows", "intake.md"), "# My intake workflow\n");
     writeFileSync(path.join(cwd, "notes", "decisions.md"), "# My decisions\n");
@@ -173,6 +201,13 @@ describe("Project directory", () => {
     expect(readFileSync(path.join(cwd, "context", "README.md"), "utf8")).toBe("# My context\n");
     expect(readFileSync(path.join(cwd, "context", "packets", "README.md"), "utf8")).toBe(
       "# My packets\n",
+    );
+    expect(readFileSync(path.join(cwd, "goals", "README.md"), "utf8")).toBe("# My goals\n");
+    expect(readFileSync(path.join(cwd, "threads", "README.md"), "utf8")).toBe("# My threads\n");
+    expect(readFileSync(path.join(cwd, "memory", "README.md"), "utf8")).toBe("# My memory\n");
+    expect(readFileSync(path.join(cwd, "evidence", "README.md"), "utf8")).toBe("# My evidence\n");
+    expect(readFileSync(path.join(cwd, "decisions", "README.md"), "utf8")).toBe(
+      "# My decisions directory\n",
     );
     expect(readFileSync(path.join(cwd, "workflows", "README.md"), "utf8")).toBe("# My workflows\n");
     expect(readFileSync(path.join(cwd, "workflows", "intake.md"), "utf8")).toBe(
