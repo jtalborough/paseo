@@ -2429,6 +2429,38 @@ function WorkspaceScreenContent({
     [focusWorkspacePane, openWorkspaceTabFocused, persistenceKey, workspaceProjectGroupId],
   );
 
+  const handleCreateGoalsTab = useCallback(
+    (input?: { paneId?: string }) => {
+      if (!persistenceKey || !workspaceProjectGroupId) {
+        return;
+      }
+      if (input?.paneId) {
+        focusWorkspacePane(persistenceKey, input.paneId);
+      }
+      openWorkspaceTabFocused(persistenceKey, {
+        kind: "project-goals",
+        groupId: workspaceProjectGroupId,
+      });
+    },
+    [focusWorkspacePane, openWorkspaceTabFocused, persistenceKey, workspaceProjectGroupId],
+  );
+
+  const handleCreateThreadsTab = useCallback(
+    (input?: { paneId?: string }) => {
+      if (!persistenceKey || !workspaceProjectGroupId) {
+        return;
+      }
+      if (input?.paneId) {
+        focusWorkspacePane(persistenceKey, input.paneId);
+      }
+      openWorkspaceTabFocused(persistenceKey, {
+        kind: "project-threads",
+        groupId: workspaceProjectGroupId,
+      });
+    },
+    [focusWorkspacePane, openWorkspaceTabFocused, persistenceKey, workspaceProjectGroupId],
+  );
+
   const handleOpenUrlInBrowserTab = useCallback(
     (url: string) => {
       if (!persistenceKey || !getIsElectron()) {
@@ -3475,9 +3507,13 @@ function WorkspaceScreenContent({
         onCreateBrowserTab={handleCreateBrowserTab}
         onCreateTasksTab={handleCreateTasksTab}
         onCreateNotesTab={handleCreateNotesTab}
+        onCreateGoalsTab={handleCreateGoalsTab}
+        onCreateThreadsTab={handleCreateThreadsTab}
         showCreateBrowserTab={showCreateBrowserTab}
         showCreateTasksTab={showCreateProjectContentTabs}
         showCreateNotesTab={showCreateProjectContentTabs}
+        showCreateGoalsTab={showCreateProjectContentTabs}
+        showCreateThreadsTab={showCreateProjectContentTabs}
         buildPaneContentModel={buildDesktopPaneContentModel}
         onFocusPane={handleFocusPane}
         onSplitPane={handleSplitPane}
@@ -3514,6 +3550,8 @@ function WorkspaceScreenContent({
     handleCreateBrowserTab,
     handleCreateTasksTab,
     handleCreateNotesTab,
+    handleCreateGoalsTab,
+    handleCreateThreadsTab,
     showCreateBrowserTab,
     showCreateProjectContentTabs,
     buildDesktopPaneContentModel,
@@ -3619,9 +3657,13 @@ function WorkspaceScreenContent({
           onCreateBrowserTab={handleCreateBrowserTab}
           onCreateTasksTab={handleCreateTasksTab}
           onCreateNotesTab={handleCreateNotesTab}
+          onCreateGoalsTab={handleCreateGoalsTab}
+          onCreateThreadsTab={handleCreateThreadsTab}
           showCreateBrowserTab={showCreateBrowserTab}
           showCreateTasksTab={showCreateProjectContentTabs}
           showCreateNotesTab={showCreateProjectContentTabs}
+          showCreateGoalsTab={showCreateProjectContentTabs}
+          showCreateThreadsTab={showCreateProjectContentTabs}
           disableCreateTerminal={createTerminalMutation.isPending}
           isWaitingOnTerminalReadiness={pendingTerminalCreateInput !== null}
           onReorderTabs={handleReorderTabsInFocusedPane}

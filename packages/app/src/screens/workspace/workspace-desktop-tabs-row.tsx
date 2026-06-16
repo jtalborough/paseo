@@ -30,10 +30,12 @@ import {
   Globe,
   FileText,
   ListTodo,
+  MessagesSquare,
   NotebookText,
   Plus,
   SquarePen,
   SquareTerminal,
+  Target,
   X,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -96,11 +98,13 @@ const ThemedSquareTerminal = withUnistyles(SquareTerminal);
 const ThemedGlobe = withUnistyles(Globe);
 const ThemedFileText = withUnistyles(FileText);
 const ThemedListTodo = withUnistyles(ListTodo);
+const ThemedMessagesSquare = withUnistyles(MessagesSquare);
 const ThemedNotebookText = withUnistyles(NotebookText);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
 const ThemedRows2 = withUnistyles(Rows2);
 const ThemedAppWindow = withUnistyles(AppWindow);
+const ThemedTarget = withUnistyles(Target);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -110,6 +114,8 @@ const newBrowserLeadingIcon = <ThemedGlobe size={16} uniProps={mutedColorMapping
 const filesLeadingIcon = <ThemedFileText size={16} uniProps={mutedColorMapping} />;
 const tasksLeadingIcon = <ThemedListTodo size={16} uniProps={mutedColorMapping} />;
 const notesLeadingIcon = <ThemedNotebookText size={16} uniProps={mutedColorMapping} />;
+const goalsLeadingIcon = <ThemedTarget size={16} uniProps={mutedColorMapping} />;
+const threadsLeadingIcon = <ThemedMessagesSquare size={16} uniProps={mutedColorMapping} />;
 
 function newTabActionButtonStyle({ hovered, pressed }: PressableStateCallbackType) {
   return [styles.newTabActionButton, (hovered || pressed) && styles.newTabActionButtonHovered];
@@ -210,12 +216,16 @@ interface WorkspaceDesktopTabsRowProps {
   onCreateFilesTab?: (input: { paneId?: string }) => void;
   onCreateTasksTab?: (input: { paneId?: string }) => void;
   onCreateNotesTab?: (input: { paneId?: string }) => void;
+  onCreateGoalsTab?: (input: { paneId?: string }) => void;
+  onCreateThreadsTab?: (input: { paneId?: string }) => void;
   showCreateAgentTab?: boolean;
   showCreateTerminalTab?: boolean;
   showCreateBrowserTab?: boolean;
   showCreateFilesTab?: boolean;
   showCreateTasksTab?: boolean;
   showCreateNotesTab?: boolean;
+  showCreateGoalsTab?: boolean;
+  showCreateThreadsTab?: boolean;
   disableCreateTerminal?: boolean;
   isWaitingOnTerminalReadiness?: boolean;
   onReorderTabs: (nextTabs: WorkspaceTabDescriptor[]) => void;
@@ -237,12 +247,16 @@ interface WorkspaceDesktopTabsRowActionsProps {
   onCreateFilesTab?: (input: { paneId?: string }) => void;
   onCreateTasksTab?: (input: { paneId?: string }) => void;
   onCreateNotesTab?: (input: { paneId?: string }) => void;
+  onCreateGoalsTab?: (input: { paneId?: string }) => void;
+  onCreateThreadsTab?: (input: { paneId?: string }) => void;
   showCreateAgentTab: boolean;
   showCreateTerminalTab: boolean;
   showCreateBrowserTab: boolean;
   showCreateFilesTab: boolean;
   showCreateTasksTab: boolean;
   showCreateNotesTab: boolean;
+  showCreateGoalsTab: boolean;
+  showCreateThreadsTab: boolean;
   disableCreateTerminal: boolean;
   isWaitingOnTerminalReadiness: boolean;
   collapseCreateActions: boolean;
@@ -260,56 +274,54 @@ interface NewTabActionsProps {
   onCreateFilesTab?: (input: { paneId?: string }) => void;
   onCreateTasksTab?: (input: { paneId?: string }) => void;
   onCreateNotesTab?: (input: { paneId?: string }) => void;
+  onCreateGoalsTab?: (input: { paneId?: string }) => void;
+  onCreateThreadsTab?: (input: { paneId?: string }) => void;
   showCreateAgentTab: boolean;
   showCreateTerminalTab: boolean;
   showCreateBrowserTab: boolean;
   showCreateFilesTab: boolean;
   showCreateTasksTab: boolean;
   showCreateNotesTab: boolean;
+  showCreateGoalsTab: boolean;
+  showCreateThreadsTab: boolean;
   disableCreateTerminal: boolean;
   isWaitingOnTerminalReadiness: boolean;
 }
 
-type NewTabActionIcon = "agent" | "terminal" | "browser" | "files" | "tasks" | "notes";
+type NewTabActionIcon =
+  | "agent"
+  | "terminal"
+  | "browser"
+  | "files"
+  | "tasks"
+  | "notes"
+  | "goals"
+  | "threads";
+
+const FALLBACK_TAB_LABEL_BY_KIND: Partial<Record<WorkspaceTabDescriptor["kind"], string>> = {
+  draft: "New Agent",
+  setup: "Setup",
+  terminal: "Terminal",
+  browser: "Browser",
+  "project-overview": "Overview",
+  tasks: "Tasks",
+  "project-tasks": "Tasks",
+  notes: "Notes",
+  "project-notes": "Notes",
+  "project-goals": "Goals",
+  "project-threads": "Threads",
+  "project-agents": "Agents",
+  "project-context": "Context",
+  "project-files": "Files",
+};
 
 function getFallbackTabLabel(tab: WorkspaceTabDescriptor): string {
-  if (tab.target.kind === "draft") {
-    return "New Agent";
-  }
-  if (tab.target.kind === "setup") {
-    return "Setup";
-  }
-  if (tab.target.kind === "terminal") {
-    return "Terminal";
-  }
-  if (tab.target.kind === "browser") {
-    return "Browser";
-  }
   if (tab.target.kind === "file") {
     return tab.target.path.split("/").findLast(Boolean) ?? tab.target.path;
   }
-  if (tab.target.kind === "project-overview") {
-    return "Overview";
-  }
-  if (tab.target.kind === "tasks") {
-    return "Tasks";
-  }
-  if (tab.target.kind === "notes" || tab.target.kind === "project-notes") {
-    return tab.target.selectedPath?.split("/").findLast(Boolean) ?? "Notes";
-  }
-  if (tab.target.kind === "project-tasks") {
-    return "Tasks";
-  }
-  if (tab.target.kind === "project-agents") {
-    return "Agents";
-  }
-  if (tab.target.kind === "project-context") {
-    return "Context";
-  }
-  if (tab.target.kind === "project-files") {
-    return tab.target.selectedPath?.split("/").findLast(Boolean) ?? "Files";
-  }
-  return "Agent";
+  const fallback = FALLBACK_TAB_LABEL_BY_KIND[tab.target.kind] ?? "Agent";
+  const selectedPath = "selectedPath" in tab.target ? tab.target.selectedPath : null;
+  return selectedPath?.split("/").findLast(Boolean) ?? fallback;
 }
 
 function getNewTabActionIcon(icon: NewTabActionIcon) {
@@ -326,6 +338,10 @@ function getNewTabActionIcon(icon: NewTabActionIcon) {
       return <ThemedListTodo size={14} uniProps={mutedColorMapping} />;
     case "notes":
       return <ThemedNotebookText size={14} uniProps={mutedColorMapping} />;
+    case "goals":
+      return <ThemedTarget size={14} uniProps={mutedColorMapping} />;
+    case "threads":
+      return <ThemedMessagesSquare size={14} uniProps={mutedColorMapping} />;
   }
 }
 
@@ -378,12 +394,16 @@ function ExpandedNewTabActions({
   onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
+  onCreateGoalsTab,
+  onCreateThreadsTab,
   showCreateAgentTab,
   showCreateTerminalTab,
   showCreateBrowserTab,
   showCreateFilesTab,
   showCreateTasksTab,
   showCreateNotesTab,
+  showCreateGoalsTab,
+  showCreateThreadsTab,
   disableCreateTerminal,
   isWaitingOnTerminalReadiness,
 }: NewTabActionsProps) {
@@ -408,6 +428,12 @@ function ExpandedNewTabActions({
   const handleCreateNotes = useCallback(() => {
     onCreateNotesTab?.({ paneId });
   }, [onCreateNotesTab, paneId]);
+  const handleCreateGoals = useCallback(() => {
+    onCreateGoalsTab?.({ paneId });
+  }, [onCreateGoalsTab, paneId]);
+  const handleCreateThreads = useCallback(() => {
+    onCreateThreadsTab?.({ paneId });
+  }, [onCreateThreadsTab, paneId]);
 
   return (
     <>
@@ -468,6 +494,24 @@ function ExpandedNewTabActions({
           onPress={handleCreateNotes}
         />
       ) : null}
+      {showCreateGoalsTab ? (
+        <NewTabActionButton
+          testID="workspace-new-goals"
+          label="New goals tab"
+          tooltipLabel="Goals"
+          icon="goals"
+          onPress={handleCreateGoals}
+        />
+      ) : null}
+      {showCreateThreadsTab ? (
+        <NewTabActionButton
+          testID="workspace-new-threads"
+          label="New threads tab"
+          tooltipLabel="Threads"
+          icon="threads"
+          onPress={handleCreateThreads}
+        />
+      ) : null}
     </>
   );
 }
@@ -477,17 +521,25 @@ function ProjectContentDropdownItems({
   showCreateFilesTab,
   showCreateTasksTab,
   showCreateNotesTab,
+  showCreateGoalsTab,
+  showCreateThreadsTab,
   handleCreateFiles,
   handleCreateTasks,
   handleCreateNotes,
+  handleCreateGoals,
+  handleCreateThreads,
 }: {
   showSeparator: boolean;
   showCreateFilesTab: boolean;
   showCreateTasksTab: boolean;
   showCreateNotesTab: boolean;
+  showCreateGoalsTab: boolean;
+  showCreateThreadsTab: boolean;
   handleCreateFiles: () => void;
   handleCreateTasks: () => void;
   handleCreateNotes: () => void;
+  handleCreateGoals: () => void;
+  handleCreateThreads: () => void;
 }) {
   return (
     <>
@@ -519,6 +571,24 @@ function ProjectContentDropdownItems({
           Notes
         </DropdownMenuItem>
       ) : null}
+      {showCreateGoalsTab ? (
+        <DropdownMenuItem
+          testID="workspace-new-goals"
+          leading={goalsLeadingIcon}
+          onSelect={handleCreateGoals}
+        >
+          Goals
+        </DropdownMenuItem>
+      ) : null}
+      {showCreateThreadsTab ? (
+        <DropdownMenuItem
+          testID="workspace-new-threads"
+          leading={threadsLeadingIcon}
+          onSelect={handleCreateThreads}
+        >
+          Threads
+        </DropdownMenuItem>
+      ) : null}
     </>
   );
 }
@@ -531,12 +601,16 @@ function NewTabDropdown({
   onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
+  onCreateGoalsTab,
+  onCreateThreadsTab,
   showCreateAgentTab,
   showCreateTerminalTab,
   showCreateBrowserTab,
   showCreateFilesTab,
   showCreateTasksTab,
   showCreateNotesTab,
+  showCreateGoalsTab,
+  showCreateThreadsTab,
   disableCreateTerminal,
   isWaitingOnTerminalReadiness,
 }: NewTabActionsProps) {
@@ -561,6 +635,12 @@ function NewTabDropdown({
   const handleCreateNotes = useCallback(() => {
     onCreateNotesTab?.({ paneId });
   }, [onCreateNotesTab, paneId]);
+  const handleCreateGoals = useCallback(() => {
+    onCreateGoalsTab?.({ paneId });
+  }, [onCreateGoalsTab, paneId]);
+  const handleCreateThreads = useCallback(() => {
+    onCreateThreadsTab?.({ paneId });
+  }, [onCreateThreadsTab, paneId]);
   const newAgentShortcut = useMemo(
     () =>
       newTabKeys ? <Shortcut chord={newTabKeys} style={styles.newTabTooltipShortcut} /> : null,
@@ -573,14 +653,23 @@ function NewTabDropdown({
       ) : null,
     [newTerminalKeys],
   );
-  const hasCreateActions =
-    showCreateAgentTab ||
-    showCreateTerminalTab ||
-    showCreateBrowserTab ||
-    showCreateFilesTab ||
-    showCreateTasksTab ||
-    showCreateNotesTab;
-  const hasProjectContentActions = showCreateFilesTab || showCreateTasksTab || showCreateNotesTab;
+  const hasCreateActions = [
+    showCreateAgentTab,
+    showCreateTerminalTab,
+    showCreateBrowserTab,
+    showCreateFilesTab,
+    showCreateTasksTab,
+    showCreateNotesTab,
+    showCreateGoalsTab,
+    showCreateThreadsTab,
+  ].some(Boolean);
+  const hasProjectContentActions = [
+    showCreateFilesTab,
+    showCreateTasksTab,
+    showCreateNotesTab,
+    showCreateGoalsTab,
+    showCreateThreadsTab,
+  ].some(Boolean);
   const hasRuntimeCreateActions =
     showCreateAgentTab || showCreateTerminalTab || showCreateBrowserTab;
 
@@ -636,9 +725,13 @@ function NewTabDropdown({
             showCreateFilesTab={showCreateFilesTab}
             showCreateTasksTab={showCreateTasksTab}
             showCreateNotesTab={showCreateNotesTab}
+            showCreateGoalsTab={showCreateGoalsTab}
+            showCreateThreadsTab={showCreateThreadsTab}
             handleCreateFiles={handleCreateFiles}
             handleCreateTasks={handleCreateTasks}
             handleCreateNotes={handleCreateNotes}
+            handleCreateGoals={handleCreateGoals}
+            handleCreateThreads={handleCreateThreads}
           />
         ) : null}
       </DropdownMenuContent>
@@ -655,12 +748,16 @@ function WorkspaceDesktopTabsRowActions({
   onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
+  onCreateGoalsTab,
+  onCreateThreadsTab,
   showCreateAgentTab,
   showCreateTerminalTab,
   showCreateBrowserTab,
   showCreateFilesTab,
   showCreateTasksTab,
   showCreateNotesTab,
+  showCreateGoalsTab,
+  showCreateThreadsTab,
   disableCreateTerminal,
   isWaitingOnTerminalReadiness,
   collapseCreateActions,
@@ -713,12 +810,16 @@ function WorkspaceDesktopTabsRowActions({
           onCreateFilesTab={onCreateFilesTab}
           onCreateTasksTab={onCreateTasksTab}
           onCreateNotesTab={onCreateNotesTab}
+          onCreateGoalsTab={onCreateGoalsTab}
+          onCreateThreadsTab={onCreateThreadsTab}
           showCreateAgentTab={showCreateAgentTab}
           showCreateTerminalTab={showCreateTerminalTab}
           showCreateBrowserTab={showCreateBrowserTab}
           showCreateFilesTab={showCreateFilesTab}
           showCreateTasksTab={showCreateTasksTab}
           showCreateNotesTab={showCreateNotesTab}
+          showCreateGoalsTab={showCreateGoalsTab}
+          showCreateThreadsTab={showCreateThreadsTab}
           disableCreateTerminal={disableCreateTerminal}
           isWaitingOnTerminalReadiness={isWaitingOnTerminalReadiness}
         />
@@ -731,12 +832,16 @@ function WorkspaceDesktopTabsRowActions({
           onCreateFilesTab={onCreateFilesTab}
           onCreateTasksTab={onCreateTasksTab}
           onCreateNotesTab={onCreateNotesTab}
+          onCreateGoalsTab={onCreateGoalsTab}
+          onCreateThreadsTab={onCreateThreadsTab}
           showCreateAgentTab={showCreateAgentTab}
           showCreateTerminalTab={showCreateTerminalTab}
           showCreateBrowserTab={showCreateBrowserTab}
           showCreateFilesTab={showCreateFilesTab}
           showCreateTasksTab={showCreateTasksTab}
           showCreateNotesTab={showCreateNotesTab}
+          showCreateGoalsTab={showCreateGoalsTab}
+          showCreateThreadsTab={showCreateThreadsTab}
           disableCreateTerminal={disableCreateTerminal}
           isWaitingOnTerminalReadiness={isWaitingOnTerminalReadiness}
         />
@@ -1049,6 +1154,32 @@ function TabChip({
   );
 }
 
+function resolveWorkspaceDesktopTabsRowActionState(input: {
+  showCreateAgentTab?: boolean;
+  showCreateTerminalTab?: boolean;
+  showCreateBrowserTab?: boolean;
+  showCreateFilesTab?: boolean;
+  showCreateTasksTab?: boolean;
+  showCreateNotesTab?: boolean;
+  showCreateGoalsTab?: boolean;
+  showCreateThreadsTab?: boolean;
+  disableCreateTerminal?: boolean;
+  isWaitingOnTerminalReadiness?: boolean;
+}) {
+  return {
+    showCreateAgentTab: input.showCreateAgentTab ?? true,
+    showCreateTerminalTab: input.showCreateTerminalTab ?? true,
+    showCreateBrowserTab: input.showCreateBrowserTab ?? false,
+    showCreateFilesTab: input.showCreateFilesTab ?? false,
+    showCreateTasksTab: input.showCreateTasksTab ?? false,
+    showCreateNotesTab: input.showCreateNotesTab ?? false,
+    showCreateGoalsTab: input.showCreateGoalsTab ?? false,
+    showCreateThreadsTab: input.showCreateThreadsTab ?? false,
+    disableCreateTerminal: input.disableCreateTerminal ?? false,
+    isWaitingOnTerminalReadiness: input.isWaitingOnTerminalReadiness ?? false,
+  };
+}
+
 export function WorkspaceDesktopTabsRow({
   paneId,
   isFocused = false,
@@ -1072,14 +1203,18 @@ export function WorkspaceDesktopTabsRow({
   onCreateFilesTab,
   onCreateTasksTab,
   onCreateNotesTab,
-  showCreateAgentTab = true,
-  showCreateTerminalTab = true,
-  showCreateBrowserTab = false,
-  showCreateFilesTab = false,
-  showCreateTasksTab = false,
-  showCreateNotesTab = false,
-  disableCreateTerminal = false,
-  isWaitingOnTerminalReadiness = false,
+  onCreateGoalsTab,
+  onCreateThreadsTab,
+  showCreateAgentTab,
+  showCreateTerminalTab,
+  showCreateBrowserTab,
+  showCreateFilesTab,
+  showCreateTasksTab,
+  showCreateNotesTab,
+  showCreateGoalsTab,
+  showCreateThreadsTab,
+  disableCreateTerminal,
+  isWaitingOnTerminalReadiness,
   onReorderTabs,
   onSplitRight,
   onSplitDown,
@@ -1089,6 +1224,18 @@ export function WorkspaceDesktopTabsRow({
   showPaneSplitActions = true,
   activeTab = null,
 }: WorkspaceDesktopTabsRowProps) {
+  const actionState = resolveWorkspaceDesktopTabsRowActionState({
+    showCreateAgentTab,
+    showCreateTerminalTab,
+    showCreateBrowserTab,
+    showCreateFilesTab,
+    showCreateTasksTab,
+    showCreateNotesTab,
+    showCreateGoalsTab,
+    showCreateThreadsTab,
+    disableCreateTerminal,
+    isWaitingOnTerminalReadiness,
+  });
   const [tabsContainerWidth, setTabsContainerWidth] = useState<number>(0);
   const [tabsActionsWidth, setTabsActionsWidth] = useState<number>(0);
   const collapseCreateActions =
@@ -1265,14 +1412,18 @@ export function WorkspaceDesktopTabsRow({
         onCreateFilesTab={onCreateFilesTab}
         onCreateTasksTab={onCreateTasksTab}
         onCreateNotesTab={onCreateNotesTab}
-        showCreateAgentTab={showCreateAgentTab}
-        showCreateTerminalTab={showCreateTerminalTab}
-        showCreateBrowserTab={showCreateBrowserTab}
-        showCreateFilesTab={showCreateFilesTab}
-        showCreateTasksTab={showCreateTasksTab}
-        showCreateNotesTab={showCreateNotesTab}
-        disableCreateTerminal={disableCreateTerminal}
-        isWaitingOnTerminalReadiness={isWaitingOnTerminalReadiness}
+        onCreateGoalsTab={onCreateGoalsTab}
+        onCreateThreadsTab={onCreateThreadsTab}
+        showCreateAgentTab={actionState.showCreateAgentTab}
+        showCreateTerminalTab={actionState.showCreateTerminalTab}
+        showCreateBrowserTab={actionState.showCreateBrowserTab}
+        showCreateFilesTab={actionState.showCreateFilesTab}
+        showCreateTasksTab={actionState.showCreateTasksTab}
+        showCreateNotesTab={actionState.showCreateNotesTab}
+        showCreateGoalsTab={actionState.showCreateGoalsTab}
+        showCreateThreadsTab={actionState.showCreateThreadsTab}
+        disableCreateTerminal={actionState.disableCreateTerminal}
+        isWaitingOnTerminalReadiness={actionState.isWaitingOnTerminalReadiness}
         collapseCreateActions={collapseCreateActions}
         showPaneSplitActions={showPaneSplitActions}
         activeTabTarget={activeTab ? activeTab.target : null}

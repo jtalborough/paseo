@@ -4,6 +4,8 @@ import { buildProjectAgentProfileLaunchLabels } from "@/projects/project-agent-l
 
 export type ProjectOperatingStepId =
   | "roadmap"
+  | "goals"
+  | "threads"
   | "tasks"
   | "agents"
   | "workflows"
@@ -35,6 +37,18 @@ export function buildProjectOperatingPath(input: {
       title: "Shape the work",
       detail: "Create executable work, bugs, follow-ups, and acceptance criteria.",
       actionLabel: "Open tasks",
+    },
+    {
+      id: "goals",
+      title: "Set goals",
+      detail: "Track durable objectives that can span threads, tasks, decisions, and evidence.",
+      actionLabel: "Open goals",
+    },
+    {
+      id: "threads",
+      title: "Trace threads",
+      detail: "Keep the durable work trails that connect goals to runs, decisions, and evidence.",
+      actionLabel: "Open threads",
     },
     {
       id: "agents",

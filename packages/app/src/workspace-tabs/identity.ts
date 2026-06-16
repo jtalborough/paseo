@@ -11,6 +11,8 @@ type ProjectWorkspaceTabTarget = Extract<
       | "notes"
       | "project-tasks"
       | "project-notes"
+      | "project-goals"
+      | "project-threads"
       | "project-agents"
       | "project-context"
       | "project-files";
@@ -24,6 +26,8 @@ const PROJECT_WORKSPACE_TAB_KINDS = new Set<string>([
   "notes",
   "project-tasks",
   "project-notes",
+  "project-goals",
+  "project-threads",
   "project-agents",
   "project-context",
   "project-files",
@@ -51,7 +55,13 @@ function normalizeProjectWorkspaceTabTarget(
       ...(packetPath ? { packetPath } : {}),
     };
   }
-  if (value.kind === "project-files" || value.kind === "project-notes" || value.kind === "notes") {
+  if (
+    value.kind === "project-files" ||
+    value.kind === "project-notes" ||
+    value.kind === "project-goals" ||
+    value.kind === "project-threads" ||
+    value.kind === "notes"
+  ) {
     const selectedPath = trimOptionalString(value.selectedPath);
     return {
       kind: value.kind,
@@ -200,6 +210,8 @@ function projectWorkspaceTargetsEqual(
   if (
     (left.kind === "project-files" && right.kind === "project-files") ||
     (left.kind === "project-notes" && right.kind === "project-notes") ||
+    (left.kind === "project-goals" && right.kind === "project-goals") ||
+    (left.kind === "project-threads" && right.kind === "project-threads") ||
     (left.kind === "notes" && right.kind === "notes")
   ) {
     return (

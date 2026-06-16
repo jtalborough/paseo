@@ -10,6 +10,8 @@ export type ProjectSurfaceTab =
   | "overview"
   | "tasks"
   | "notes"
+  | "goals"
+  | "threads"
   | "agents"
   | "context"
   | "files"

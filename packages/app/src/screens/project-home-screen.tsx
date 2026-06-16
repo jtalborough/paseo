@@ -21,9 +21,11 @@ import {
   Folder,
   Globe,
   ListTodo,
+  MessagesSquare,
   NotebookText,
   Plus,
   ScrollText,
+  Target,
   Trash2,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -53,10 +55,12 @@ import {
   buildHostNewProjectAgentRoute,
   buildHostProjectAgentsRoute,
   buildHostProjectContextRoute,
+  buildHostProjectGoalsRoute,
   buildHostNewWorkspaceRoute,
   buildHostProjectFilesRoute,
   buildHostProjectNotesRoute,
   buildHostProjectTasksRoute,
+  buildHostProjectThreadsRoute,
   buildHostWorkspaceRoute,
 } from "@/utils/host-routes";
 import { confirmDialog } from "@/utils/confirm-dialog";
@@ -81,9 +85,11 @@ const ThemedFileText = withUnistyles(FileText);
 const ThemedFolder = withUnistyles(Folder);
 const ThemedGlobe = withUnistyles(Globe);
 const ThemedListTodo = withUnistyles(ListTodo);
+const ThemedMessagesSquare = withUnistyles(MessagesSquare);
 const ThemedNotebookText = withUnistyles(NotebookText);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedScrollText = withUnistyles(ScrollText);
+const ThemedTarget = withUnistyles(Target);
 const ThemedTrash2 = withUnistyles(Trash2);
 
 export function ProjectHomeScreen({
@@ -155,6 +161,20 @@ export function ProjectHomeScreen({
       return;
     }
     router.navigate(buildHostProjectNotesRoute(serverId, groupId));
+  }, [groupId, onOpenTab, serverId]);
+  const handleBrowseGoals = useCallback(() => {
+    if (onOpenTab) {
+      onOpenTab({ kind: "project-goals", groupId });
+      return;
+    }
+    router.navigate(buildHostProjectGoalsRoute(serverId, groupId));
+  }, [groupId, onOpenTab, serverId]);
+  const handleBrowseThreads = useCallback(() => {
+    if (onOpenTab) {
+      onOpenTab({ kind: "project-threads", groupId });
+      return;
+    }
+    router.navigate(buildHostProjectThreadsRoute(serverId, groupId));
   }, [groupId, onOpenTab, serverId]);
   const handleBrowseAgents = useCallback(() => {
     if (onOpenTab) {
@@ -233,6 +253,12 @@ export function ProjectHomeScreen({
         case "tasks":
           handleBrowseTasks();
           break;
+        case "goals":
+          handleBrowseGoals();
+          break;
+        case "threads":
+          handleBrowseThreads();
+          break;
         case "agents":
           handleBrowseAgents();
           break;
@@ -254,7 +280,9 @@ export function ProjectHomeScreen({
       handleBrowseAgents,
       handleBrowseContext,
       handleBrowseFiles,
+      handleBrowseGoals,
       handleBrowseTasks,
+      handleBrowseThreads,
       groupId,
       onOpenTab,
       serverId,
@@ -319,6 +347,20 @@ export function ProjectHomeScreen({
                 Icon={ThemedNotebookText}
                 onPress={handleBrowseNotes}
                 testID="project-home-action-notes"
+              />
+              <LaunchpadAction
+                label="Goals"
+                description="Open Project goals"
+                Icon={ThemedTarget}
+                onPress={handleBrowseGoals}
+                testID="project-home-action-goals"
+              />
+              <LaunchpadAction
+                label="Threads"
+                description="Open Project threads"
+                Icon={ThemedMessagesSquare}
+                onPress={handleBrowseThreads}
+                testID="project-home-action-threads"
               />
               <LaunchpadAction
                 label="Files"
@@ -603,6 +645,10 @@ function getProjectOperatingStepIcon(stepId: ProjectOperatingStep["id"]): typeof
       return ThemedBot;
     case "decisions":
       return ThemedNotebookText;
+    case "goals":
+      return ThemedTarget;
+    case "threads":
+      return ThemedMessagesSquare;
     case "roadmap":
     case "workflows":
     case "files":

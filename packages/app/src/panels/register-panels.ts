@@ -7,8 +7,10 @@ import {
   projectAgentsPanelRegistration,
   projectContextPanelRegistration,
   projectFilesPanelRegistration,
+  projectGoalsPanelRegistration,
   projectNotesPanelRegistration,
   projectOverviewPanelRegistration,
+  projectThreadsPanelRegistration,
   projectTasksPanelRegistration,
   tasksPanelRegistration,
 } from "@/panels/project-panels";
@@ -33,6 +35,8 @@ export function ensurePanelsRegistered(): void {
   registerPanel(notesPanelRegistration);
   registerPanel(projectTasksPanelRegistration);
   registerPanel(projectNotesPanelRegistration);
+  registerPanel(projectGoalsPanelRegistration);
+  registerPanel(projectThreadsPanelRegistration);
   registerPanel(projectAgentsPanelRegistration);
   registerPanel(projectContextPanelRegistration);
   registerPanel(projectFilesPanelRegistration);

@@ -5,6 +5,8 @@ import {
   ListTodo,
   NotebookText,
   ScrollText,
+  Target,
+  MessagesSquare,
 } from "lucide-react-native";
 import { View } from "react-native";
 import { usePaneContext } from "@/panels/pane-context";
@@ -22,6 +24,8 @@ type ProjectPanelKind = Extract<
   | "notes"
   | "project-tasks"
   | "project-notes"
+  | "project-goals"
+  | "project-threads"
   | "project-agents"
   | "project-context"
   | "project-files"
@@ -63,6 +67,20 @@ const projectPanelDescriptors: Record<ProjectPanelKind, PanelDescriptor> = {
     icon: NotebookText,
     statusBucket: null,
   },
+  "project-goals": {
+    label: "Goals",
+    subtitle: "Project goals",
+    titleState: "ready",
+    icon: Target,
+    statusBucket: null,
+  },
+  "project-threads": {
+    label: "Threads",
+    subtitle: "Project threads",
+    titleState: "ready",
+    icon: MessagesSquare,
+    statusBucket: null,
+  },
   "project-agents": {
     label: "Agents",
     subtitle: "Project agents",
@@ -93,6 +111,8 @@ function getProjectGroupIdFromTarget(target: WorkspaceTabTarget): string | null 
     target.kind === "notes" ||
     target.kind === "project-tasks" ||
     target.kind === "project-notes" ||
+    target.kind === "project-goals" ||
+    target.kind === "project-threads" ||
     target.kind === "project-agents" ||
     target.kind === "project-context" ||
     target.kind === "project-files"
@@ -134,6 +154,44 @@ function ProjectNotesPanel() {
       surfaceName="notes"
       emptySelectionLabel="Select a note file"
       emptySelectionDescription="Project notes are plain Markdown files. Pick one from the explorer, or create a Markdown file in the notes folder."
+      selectedPath={target.selectedPath ?? null}
+      embedded
+    />
+  );
+}
+
+function ProjectGoalsPanel() {
+  const { serverId, target } = usePaneContext();
+  if (target.kind !== "project-goals") {
+    return <View />;
+  }
+  return (
+    <ProjectFilesScreen
+      serverId={serverId}
+      groupId={target.groupId}
+      directory="goals"
+      surfaceName="goals"
+      emptySelectionLabel="Select a goal file"
+      emptySelectionDescription="Project goals are durable Markdown objectives. Pick one from the explorer, or create a Markdown file in the goals folder."
+      selectedPath={target.selectedPath ?? null}
+      embedded
+    />
+  );
+}
+
+function ProjectThreadsPanel() {
+  const { serverId, target } = usePaneContext();
+  if (target.kind !== "project-threads") {
+    return <View />;
+  }
+  return (
+    <ProjectFilesScreen
+      serverId={serverId}
+      groupId={target.groupId}
+      directory="threads"
+      surfaceName="threads"
+      emptySelectionLabel="Select a thread file"
+      emptySelectionDescription="Project threads are durable work trails linked to goals, tasks, agent runs, decisions, and evidence."
       selectedPath={target.selectedPath ?? null}
       embedded
     />
@@ -204,6 +262,14 @@ export const projectTasksPanelRegistration = createProjectPanelRegistration(
 export const projectNotesPanelRegistration = createProjectPanelRegistration(
   "project-notes",
   ProjectNotesPanel,
+);
+export const projectGoalsPanelRegistration = createProjectPanelRegistration(
+  "project-goals",
+  ProjectGoalsPanel,
+);
+export const projectThreadsPanelRegistration = createProjectPanelRegistration(
+  "project-threads",
+  ProjectThreadsPanel,
 );
 export const projectAgentsPanelRegistration = createProjectPanelRegistration(
   "project-agents",

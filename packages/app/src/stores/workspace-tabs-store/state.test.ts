@@ -256,6 +256,66 @@ describe("workspace-tabs-store reducers", () => {
     ]);
   });
 
+  it("retargets existing Project goal and thread tabs when opening selected files", () => {
+    const projectScope = { kind: "project" as const, groupId: "grp_123" };
+    const projectKey = `${SERVER_ID}:project:grp_123`;
+    let state = applyOpenOrFocusTab(emptyState(), {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: { kind: "project-goals", groupId: "grp_123" },
+      now: NOW,
+    }).state;
+    state = applyOpenOrFocusTab(state, {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: { kind: "project-threads", groupId: "grp_123" },
+      now: NOW,
+    }).state;
+
+    state = applyOpenOrFocusTab(state, {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: {
+        kind: "project-goals",
+        groupId: "grp_123",
+        selectedPath: "README.md",
+      },
+      now: NOW + 1,
+    }).state;
+    const focused = applyOpenOrFocusTab(state, {
+      serverId: SERVER_ID,
+      scope: projectScope,
+      target: {
+        kind: "project-threads",
+        groupId: "grp_123",
+        selectedPath: "2026-06-16-intake.md",
+      },
+      now: NOW + 2,
+    });
+
+    expect(focused.tabId).toBe("project-threads_grp_123");
+    expect(focused.state.uiTabsByWorkspace[projectKey]).toEqual([
+      {
+        tabId: "project-goals_grp_123",
+        target: {
+          kind: "project-goals",
+          groupId: "grp_123",
+          selectedPath: "README.md",
+        },
+        createdAt: NOW,
+      },
+      {
+        tabId: "project-threads_grp_123",
+        target: {
+          kind: "project-threads",
+          groupId: "grp_123",
+          selectedPath: "2026-06-16-intake.md",
+        },
+        createdAt: NOW,
+      },
+    ]);
+  });
+
   it("ensureTab deduplicates by target when a retargeted tab already exists", () => {
     const draftTabId = "draft_x";
 

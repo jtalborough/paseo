@@ -61,6 +61,20 @@ function projectTargetForTab(
       ...(options?.selectedFilePath ? { selectedPath: options.selectedFilePath } : {}),
     };
   }
+  if (tab === "goals") {
+    return {
+      kind: "project-goals",
+      groupId,
+      ...(options?.selectedFilePath ? { selectedPath: options.selectedFilePath } : {}),
+    };
+  }
+  if (tab === "threads") {
+    return {
+      kind: "project-threads",
+      groupId,
+      ...(options?.selectedFilePath ? { selectedPath: options.selectedFilePath } : {}),
+    };
+  }
   if (tab === "agents") return { kind: "project-agents", groupId };
   if (tab === "context") {
     return {
@@ -93,6 +107,8 @@ function isSameProjectTarget(left: WorkspaceTabTarget, right: WorkspaceTabTarget
   }
   if (
     (left.kind === "project-files" && right.kind === "project-files") ||
+    (left.kind === "project-goals" && right.kind === "project-goals") ||
+    (left.kind === "project-threads" && right.kind === "project-threads") ||
     (left.kind === "notes" && right.kind === "notes")
   ) {
     return (
@@ -348,6 +364,20 @@ export function ProjectSurfaceScreen({
     },
     [focusPaneBeforeCreate, groupId, openProjectTarget],
   );
+  const handleCreateGoalsTab = useCallback(
+    (input: { paneId?: string } = {}) => {
+      focusPaneBeforeCreate(input.paneId);
+      openProjectTarget({ kind: "project-goals", groupId });
+    },
+    [focusPaneBeforeCreate, groupId, openProjectTarget],
+  );
+  const handleCreateThreadsTab = useCallback(
+    (input: { paneId?: string } = {}) => {
+      focusPaneBeforeCreate(input.paneId);
+      openProjectTarget({ kind: "project-threads", groupId });
+    },
+    [focusPaneBeforeCreate, groupId, openProjectTarget],
+  );
   const handleOpenTerminalTab = useCallback(
     (terminalId: string) => {
       openProjectTarget({ kind: "terminal", terminalId });
@@ -567,10 +597,14 @@ export function ProjectSurfaceScreen({
             onCreateFilesTab={handleCreateFilesTab}
             onCreateTasksTab={handleCreateTasksTab}
             onCreateNotesTab={handleCreateNotesTab}
+            onCreateGoalsTab={handleCreateGoalsTab}
+            onCreateThreadsTab={handleCreateThreadsTab}
             showCreateBrowserTab={Boolean(primaryWorkspace)}
             showCreateFilesTab
             showCreateTasksTab
             showCreateNotesTab
+            showCreateGoalsTab
+            showCreateThreadsTab
             buildPaneContentModel={buildPaneContentModel}
             onFocusPane={handleFocusPane}
             onSplitPane={handleSplitPane}

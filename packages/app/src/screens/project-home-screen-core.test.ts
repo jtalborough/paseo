@@ -27,6 +27,18 @@ describe("buildProjectOperatingPath", () => {
         actionLabel: "Open tasks",
       },
       {
+        id: "goals",
+        title: "Set goals",
+        detail: "Track durable objectives that can span threads, tasks, decisions, and evidence.",
+        actionLabel: "Open goals",
+      },
+      {
+        id: "threads",
+        title: "Trace threads",
+        detail: "Keep the durable work trails that connect goals to runs, decisions, and evidence.",
+        actionLabel: "Open threads",
+      },
+      {
         id: "agents",
         title: "Set the team",
         detail: "1 active agent attached.",

@@ -472,6 +472,38 @@ export function buildHostProjectNotesRoute(
   return `${projectRoute}/notes?file=${encodeURIComponent(selectedPath)}` as const;
 }
 
+export function buildHostProjectGoalsRoute(
+  serverId: string,
+  groupId: string,
+  options?: { selectedPath?: string | null },
+) {
+  const projectRoute = buildHostProjectRoute(serverId, groupId);
+  if (projectRoute === "/") {
+    return "/" as const;
+  }
+  const selectedPath = trimNonEmpty(options?.selectedPath);
+  if (!selectedPath) {
+    return `${projectRoute}/goals` as const;
+  }
+  return `${projectRoute}/goals?file=${encodeURIComponent(selectedPath)}` as const;
+}
+
+export function buildHostProjectThreadsRoute(
+  serverId: string,
+  groupId: string,
+  options?: { selectedPath?: string | null },
+) {
+  const projectRoute = buildHostProjectRoute(serverId, groupId);
+  if (projectRoute === "/") {
+    return "/" as const;
+  }
+  const selectedPath = trimNonEmpty(options?.selectedPath);
+  if (!selectedPath) {
+    return `${projectRoute}/threads` as const;
+  }
+  return `${projectRoute}/threads?file=${encodeURIComponent(selectedPath)}` as const;
+}
+
 export function buildHostProjectContextRoute(
   serverId: string,
   groupId: string,

@@ -5,10 +5,12 @@ import {
   buildHostNewProjectAgentRoute,
   buildHostProjectAgentsRoute,
   buildHostProjectContextRoute,
+  buildHostProjectGoalsRoute,
   buildHostProjectNotesRoute,
   buildHostProjectFilesRoute,
   buildHostProjectRoute,
   buildHostProjectTasksRoute,
+  buildHostProjectThreadsRoute,
   buildHostRootRoute,
   buildHostTaskRoute,
   buildHostWorkspaceOpenRoute,
@@ -218,6 +220,14 @@ describe("workspace route parsing", () => {
     expect(buildHostProjectNotesRoute("local", "grp_1", { selectedPath: "decisions.md" })).toBe(
       "/h/local/project/grp_1/notes?file=decisions.md",
     );
+    expect(buildHostProjectGoalsRoute("local", "grp_1")).toBe("/h/local/project/grp_1/goals");
+    expect(buildHostProjectGoalsRoute("local", "grp_1", { selectedPath: "README.md" })).toBe(
+      "/h/local/project/grp_1/goals?file=README.md",
+    );
+    expect(buildHostProjectThreadsRoute("local", "grp_1")).toBe("/h/local/project/grp_1/threads");
+    expect(
+      buildHostProjectThreadsRoute("local", "grp_1", { selectedPath: "2026-06-16-intake.md" }),
+    ).toBe("/h/local/project/grp_1/threads?file=2026-06-16-intake.md");
     expect(buildHostProjectContextRoute("local", "grp_1")).toBe("/h/local/project/grp_1/context");
     expect(
       buildHostProjectContextRoute("local", "grp_1", {
