@@ -49,6 +49,7 @@ export function TaskList({
   getScheduleDisabledReason,
   getSchedules,
   getScheduleActions,
+  onOpenThread,
 }: {
   pending: boolean;
   error: Error | null;
@@ -78,6 +79,7 @@ export function TaskList({
   getScheduleDisabledReason?: (task: StoredTask) => string | null;
   getSchedules?: (task: StoredTask) => ScheduleSummary[];
   getScheduleActions?: (task: StoredTask) => TaskScheduleActions;
+  onOpenThread?: (task: StoredTask) => void;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const { activeTasks, completedTasks } = useMemo(() => {
@@ -125,6 +127,7 @@ export function TaskList({
         getScheduleDisabledReason={getScheduleDisabledReason}
         getSchedules={getSchedules}
         getScheduleActions={getScheduleActions}
+        onOpenThread={onOpenThread}
       />
     ),
     [
@@ -150,6 +153,7 @@ export function TaskList({
       getScheduleDisabledReason,
       getSchedules,
       getScheduleActions,
+      onOpenThread,
       projectOptions,
     ],
   );
@@ -211,6 +215,7 @@ function TaskRow({
   getScheduleDisabledReason,
   getSchedules,
   getScheduleActions,
+  onOpenThread,
   ...editorProps
 }: {
   task: StoredTask;
@@ -231,6 +236,7 @@ function TaskRow({
   getScheduleDisabledReason?: (task: StoredTask) => string | null;
   getSchedules?: (task: StoredTask) => ScheduleSummary[];
   getScheduleActions?: (task: StoredTask) => TaskScheduleActions;
+  onOpenThread?: (task: StoredTask) => void;
   onAddType: (value: string) => void;
   onAddPerson: (value: string) => void;
   onAddContext: (value: string) => void;
@@ -265,6 +271,7 @@ function TaskRow({
     [onChangeProject, task],
   );
   const handleRun = useCallback(() => onRun?.(task), [onRun, task]);
+  const handleOpenThread = useCallback(() => onOpenThread?.(task), [onOpenThread, task]);
   const handleSchedule = useCallback(
     (draft: TaskScheduleDraft) => onSchedule?.(task, draft),
     [onSchedule, task],
@@ -304,7 +311,19 @@ function TaskRow({
             </View>
           ) : null}
         </Pressable>
-        <TaskTimer task={task} onStart={onTimerStart} onStop={onTimerStop} />
+        <View style={styles.taskHeaderActions}>
+          {onOpenThread ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open task thread"
+              onPress={handleOpenThread}
+              style={styles.threadButton}
+            >
+              <Text style={styles.threadButtonText}>Thread</Text>
+            </Pressable>
+          ) : null}
+          <TaskTimer task={task} onStart={onTimerStart} onStop={onTimerStop} />
+        </View>
       </View>
       {expanded ? (
         <TaskEditor
@@ -397,6 +416,24 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "transparent",
   },
   taskText: { flex: 1, minWidth: 0, gap: theme.spacing[1] },
+  taskHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  threadButton: {
+    minHeight: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colors.surface2,
+  },
+  threadButtonText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+  },
   taskTitle: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
   taskTitleRunning: { fontWeight: theme.fontWeight.semibold },
   taskTitleDone: { color: theme.colors.foregroundMuted, textDecorationLine: "line-through" },

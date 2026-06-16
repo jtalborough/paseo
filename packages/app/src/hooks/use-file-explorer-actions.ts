@@ -244,7 +244,7 @@ export function useFileExplorerActions(params: { serverId: string } & FileExplor
   );
 
   const createFile = useCallback(
-    async (relativePath: string): Promise<string> => {
+    async (relativePath: string, content = ""): Promise<string> => {
       if (!normalizedWorkspaceRoot) {
         throw new Error("Workspace is unavailable");
       }
@@ -255,7 +255,7 @@ export function useFileExplorerActions(params: { serverId: string } & FileExplor
       if (!normalizedPath) {
         throw new Error("File name is required");
       }
-      const result = await client.writeFile(normalizedWorkspaceRoot, normalizedPath, "", {
+      const result = await client.writeFile(normalizedWorkspaceRoot, normalizedPath, content, {
         createIfMissing: true,
       });
       if (result.error) {

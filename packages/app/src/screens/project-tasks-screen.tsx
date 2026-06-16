@@ -26,11 +26,13 @@ import type { SelectOption } from "@/components/task-select";
 import { useToast } from "@/contexts/toast-context";
 import { providersSnapshotQueryKey } from "@/hooks/providers-snapshot-query";
 import { useProjectGroups } from "@/hooks/use-project-groups";
+import type { ProjectGroup } from "@/stores/project-groups-store";
 import { useSessionStore } from "@/stores/session-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
-import { buildHostProjectContextRoute } from "@/utils/host-routes";
+import { buildHostProjectContextRoute, buildHostProjectThreadsRoute } from "@/utils/host-routes";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import type { WorkspaceTabTarget } from "@/stores/workspace-tabs-store";
+import { buildProjectLineageTemplate } from "@/screens/project-files-screen-core";
 import {
   addTaskTimeDays,
   aggregateTaskDayTotals,
@@ -95,6 +97,7 @@ interface ProjectTaskViewContentProps {
     onOpenPacket: (packetPath: string) => void;
     onOpenAgent: (agentId: string) => void;
   };
+  onOpenThread: (task: StoredTask) => void;
   onChangeProject: (task: StoredTask, projectGroupId: string) => void;
   onAddType: (value: string) => void;
   onAddPerson: (value: string) => void;
@@ -106,6 +109,89 @@ interface ProjectTaskViewContentProps {
 
 const EMPTY_CONFIG: TaskConfig = { types: [], people: [], contexts: [] };
 const EMPTY_TASKS: StoredTask[] = [];
+
+function getSingleGitChildRoot(group: ProjectGroup | null): string | null {
+  if (!group) {
+    return null;
+  }
+  const gitChildren = group.children.filter((child) => child.kind === "git");
+  return gitChildren.length === 1 ? gitChildren[0].rootPath : null;
+}
+
+function getProjectDirectory(group: ProjectGroup | null): string | null {
+  return group?.cwd ?? null;
+}
+
+function getTasksQueryEnabled({
+  client,
+  group,
+  tasksSupported,
+}: {
+  client: DaemonClient | null;
+  group: ProjectGroup | null;
+  tasksSupported: boolean;
+}): boolean {
+  return Boolean(client && group && tasksSupported);
+}
+
+function useTaskThreadOpener({
+  client,
+  serverId,
+  groupId,
+  projectDirectory,
+  onOpenTab,
+}: {
+  client: DaemonClient | null;
+  serverId: string;
+  groupId: string;
+  projectDirectory: string | null;
+  onOpenTab?: (target: WorkspaceTabTarget) => void;
+}) {
+  const router = useRouter();
+  const toast = useToast();
+
+  return useCallback(
+    async (task: StoredTask) => {
+      if (!client) {
+        toast.error("Host is not connected");
+        return;
+      }
+      if (!projectDirectory) {
+        toast.error("Project directory is not available");
+        return;
+      }
+      const threadPath = `task-${task.metadata.id}.md`;
+      const threadRoot = `${projectDirectory.replace(/[\\/]+$/, "")}/threads`;
+      try {
+        const createdAt = new Date().toISOString();
+        const content = buildProjectLineageTemplate("thread", {
+          id: `thread_task_${task.metadata.id}`,
+          createdAt,
+        }).replace("# New Thread", `# ${task.metadata.title}\n\nTask: ${task.metadata.id}`);
+        const result = await client.writeFile(threadRoot, threadPath, content, {
+          createIfMissing: true,
+        });
+        if (result.error && !result.error.includes("already exists")) {
+          throw new Error(result.error);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to create task thread";
+        if (!message.includes("already exists")) {
+          toast.error(message);
+          return;
+        }
+      }
+      if (onOpenTab) {
+        onOpenTab({ kind: "project-threads", groupId, selectedPath: threadPath });
+        return;
+      }
+      router.navigate(
+        buildHostProjectThreadsRoute(serverId, groupId, { selectedPath: threadPath }),
+      );
+    },
+    [client, groupId, onOpenTab, projectDirectory, router, serverId, toast],
+  );
+}
 
 export function ProjectTasksScreen({
   serverId,
@@ -128,10 +214,8 @@ export function ProjectTasksScreen({
     () => groups.find((candidate) => candidate.groupId === groupId) ?? null,
     [groupId, groups],
   );
-  const taskRunRepoRoot = useMemo(() => {
-    const gitChildren = group?.children.filter((child) => child.kind === "git") ?? [];
-    return gitChildren.length === 1 ? gitChildren[0].rootPath : null;
-  }, [group]);
+  const taskRunRepoRoot = useMemo(() => getSingleGitChildRoot(group), [group]);
+  const projectDirectory = getProjectDirectory(group);
   const projectOptions = useMemo<SelectOption[]>(
     () => groups.map((candidate) => ({ value: candidate.groupId, label: candidate.displayName })),
     [groups],
@@ -139,6 +223,7 @@ export function ProjectTasksScreen({
   const tasksKey = useMemo(() => ["project-tasks", serverId, groupId], [groupId, serverId]);
   const configKey = useMemo(() => ["task-config", serverId, groupId], [groupId, serverId]);
   const schedulesKey = useMemo(() => ["schedules", serverId], [serverId]);
+  const tasksQueryEnabled = getTasksQueryEnabled({ client, group, tasksSupported });
   const invalidateTasks = useCallback(async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: tasksKey }),
@@ -151,19 +236,19 @@ export function ProjectTasksScreen({
   }, [queryClient, schedulesKey]);
   const tasksQuery = useQuery({
     queryKey: tasksKey,
-    enabled: Boolean(client && group && tasksSupported),
+    enabled: tasksQueryEnabled,
     queryFn: async () => (client ? client.taskList(groupId) : []),
     staleTime: 2_000,
   });
   const configQuery = useQuery({
     queryKey: configKey,
-    enabled: Boolean(client && group && tasksSupported),
+    enabled: tasksQueryEnabled,
     queryFn: async () => (client ? client.taskConfigGet(groupId) : EMPTY_CONFIG),
     staleTime: 30_000,
   });
   const schedulesQuery = useQuery({
     queryKey: schedulesKey,
-    enabled: Boolean(client && group && tasksSupported),
+    enabled: tasksQueryEnabled,
     queryFn: async () => {
       if (!client) {
         return [];
@@ -181,7 +266,7 @@ export function ProjectTasksScreen({
     serverId,
     groupId,
     taskRunRepoRoot,
-    tasksSupported: Boolean(group && tasksSupported),
+    tasksSupported: tasksQueryEnabled,
     tasks: tasksQuery.data ?? EMPTY_TASKS,
   });
 
@@ -572,6 +657,13 @@ export function ProjectTasksScreen({
     setExpandedId(taskKey(task));
     setView("tasks");
   }, []);
+  const handleOpenTaskThread = useTaskThreadOpener({
+    client,
+    serverId,
+    groupId,
+    projectDirectory,
+    onOpenTab,
+  });
 
   const config = configQuery.data ?? EMPTY_CONFIG;
   const updateConfigMutate = updateConfig.mutate;
@@ -714,6 +806,7 @@ export function ProjectTasksScreen({
         getScheduleDisabledReason={getScheduleDisabledReason}
         getSchedules={getTaskSchedules}
         getScheduleActions={getScheduleActions}
+        onOpenThread={handleOpenTaskThread}
         onChangeProject={handleChangeProject}
         onAddType={handleAddType}
         onAddPerson={handleAddPerson}
@@ -816,6 +909,7 @@ function ProjectTaskViewContent({
   onRemoveType,
   onRemovePerson,
   onRemoveContext,
+  onOpenThread,
 }: ProjectTaskViewContentProps) {
   if (view === "timesheet") {
     return (
@@ -866,6 +960,7 @@ function ProjectTaskViewContent({
       getScheduleDisabledReason={getScheduleDisabledReason}
       getSchedules={getSchedules}
       getScheduleActions={getScheduleActions}
+      onOpenThread={onOpenThread}
       projectOptions={projectOptions}
       onChangeProject={onChangeProject}
       onAddType={onAddType}

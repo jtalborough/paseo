@@ -11,8 +11,10 @@ import { router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   DaemonClient,
+  FileExplorerDirectoryPayload,
   ProjectAgentProfileEntry,
 } from "@getpaseo/client/internal/daemon-client";
+import type { StoredTask } from "@getpaseo/protocol/task/types";
 import type { ProjectAgentProfile } from "@getpaseo/protocol/project-context/types";
 import {
   Bot,
@@ -101,6 +103,10 @@ export function ProjectHomeScreen({
   const selectGroup = useProjectSelectionStore((state) => state.selectGroup);
   const projects = useHostProjects(serverId);
   const hostAgents = useSessionStore((state) => state.sessions[serverId]?.agents ?? null);
+  const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
+  const tasksSupported = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.tasks === true,
+  );
   const { groups, supported, canAddFromDisk, addFolderFromDisk, addFolderPath } =
     useProjectGroups(serverId);
   const isLocalDaemon = useIsLocalDaemon(serverId);
@@ -397,6 +403,17 @@ export function ProjectHomeScreen({
 
           <ProjectOperatingPathSection steps={operatingPath} onOpenStep={handleOpenOperatingStep} />
 
+          <ProjectLineageSection
+            client={client}
+            serverId={serverId}
+            groupId={groupId}
+            projectDirectory={group.cwd}
+            tasksSupported={tasksSupported}
+            onOpenGoals={handleBrowseGoals}
+            onOpenThreads={handleBrowseThreads}
+            onOpenTasks={handleBrowseTasks}
+          />
+
           {group.cwd ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -552,6 +569,166 @@ export function ProjectAgentsScreen({
         </View>
       </ScrollView>
     </View>
+  );
+}
+
+interface ProjectLineageSummary {
+  goals: string[];
+  threads: string[];
+  openTaskCount: number;
+}
+
+const EMPTY_LINEAGE_SUMMARY: ProjectLineageSummary = {
+  goals: [],
+  threads: [],
+  openTaskCount: 0,
+};
+
+async function listProjectMarkdownFiles(client: DaemonClient, root: string): Promise<string[]> {
+  try {
+    const directory: FileExplorerDirectoryPayload = await client.listDirectory(root, ".");
+    return directory.entries
+      .filter((entry) => entry.kind === "file" && entry.name.endsWith(".md"))
+      .sort((left, right) => right.modifiedAt.localeCompare(left.modifiedAt))
+      .slice(0, 3)
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+function countOpenTasks(tasks: StoredTask[]): number {
+  return tasks.filter((task) => !["done", "dropped"].includes(task.metadata.actionState)).length;
+}
+
+function ProjectLineageSection({
+  client,
+  serverId,
+  groupId,
+  projectDirectory,
+  tasksSupported,
+  onOpenGoals,
+  onOpenThreads,
+  onOpenTasks,
+}: {
+  client: DaemonClient | null;
+  serverId: string;
+  groupId: string;
+  projectDirectory: string | null | undefined;
+  tasksSupported: boolean;
+  onOpenGoals: () => void;
+  onOpenThreads: () => void;
+  onOpenTasks: () => void;
+}) {
+  const lineageQuery = useQuery({
+    queryKey: ["project-lineage-summary", serverId, groupId],
+    enabled: Boolean(client && projectDirectory),
+    staleTime: 5_000,
+    queryFn: async (): Promise<ProjectLineageSummary> => {
+      if (!client || !projectDirectory) {
+        return EMPTY_LINEAGE_SUMMARY;
+      }
+      const [goals, threads, tasks] = await Promise.all([
+        listProjectMarkdownFiles(client, `${projectDirectory.replace(/[\\/]+$/, "")}/goals`),
+        listProjectMarkdownFiles(client, `${projectDirectory.replace(/[\\/]+$/, "")}/threads`),
+        tasksSupported ? client.taskList(groupId) : Promise.resolve([]),
+      ]);
+      return {
+        goals,
+        threads,
+        openTaskCount: countOpenTasks(tasks),
+      };
+    },
+  });
+  const summary = lineageQuery.data ?? EMPTY_LINEAGE_SUMMARY;
+
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionHeaderText}>
+          <Text style={settingsStyles.sectionHeaderTitle}>Lineage</Text>
+          <Text style={styles.sectionHint}>Goals, threads, and open tasks for this Project.</Text>
+        </View>
+      </View>
+      <View style={styles.lineageGrid} testID="project-lineage-summary">
+        <LineageSummaryCard
+          label="Active goals"
+          value={summary.goals.length}
+          detail={formatLineageFiles(summary.goals)}
+          Icon={ThemedTarget}
+          onPress={onOpenGoals}
+          testID="project-lineage-goals"
+        />
+        <LineageSummaryCard
+          label="Recent threads"
+          value={summary.threads.length}
+          detail={formatLineageFiles(summary.threads)}
+          Icon={ThemedMessagesSquare}
+          onPress={onOpenThreads}
+          testID="project-lineage-threads"
+        />
+        <LineageSummaryCard
+          label="Open tasks"
+          value={summary.openTaskCount}
+          detail={summary.openTaskCount === 1 ? "1 task needs action" : "Tasks needing action"}
+          Icon={ThemedListTodo}
+          onPress={onOpenTasks}
+          testID="project-lineage-tasks"
+        />
+      </View>
+    </View>
+  );
+}
+
+function formatLineageFiles(files: string[]): string {
+  if (files.length === 0) {
+    return "No files yet";
+  }
+  return files.join(", ");
+}
+
+function LineageSummaryCard({
+  label,
+  value,
+  detail,
+  Icon,
+  onPress,
+  testID,
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  Icon: typeof ThemedBot;
+  onPress: () => void;
+  testID: string;
+}) {
+  const cardStyle = useCallback(
+    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.lineageCard,
+      hovered && styles.rowHovered,
+      pressed && styles.rowPressed,
+    ],
+    [],
+  );
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={cardStyle}
+      testID={testID}
+    >
+      <View style={styles.lineageCardHeader}>
+        <Icon size={16} uniProps={iconColorMapping} />
+        <Text style={styles.lineageCardLabel} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+      <Text style={styles.lineageCardValue}>{value}</Text>
+      <Text style={styles.lineageCardDetail} numberOfLines={2}>
+        {detail}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -1648,6 +1825,47 @@ const styles = StyleSheet.create((theme) => ({
   operatingStepActionText: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
+  },
+  lineageGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[3],
+  },
+  lineageCard: {
+    minWidth: 180,
+    flexBasis: {
+      xs: "100%",
+      md: "31%",
+    },
+    flexGrow: 1,
+    gap: theme.spacing[2],
+    padding: theme.spacing[3],
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface1,
+  },
+  lineageCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  lineageCardLabel: {
+    flex: 1,
+    minWidth: 0,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    textTransform: "uppercase",
+  },
+  lineageCardValue: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.xl,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  lineageCardDetail: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    lineHeight: theme.fontSize.xs * 1.35,
   },
   folderCount: {
     color: theme.colors.foregroundMuted,

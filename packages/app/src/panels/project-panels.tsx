@@ -174,6 +174,8 @@ function ProjectGoalsPanel() {
       emptySelectionLabel="Select a goal file"
       emptySelectionDescription="Project goals are durable Markdown objectives. Pick one from the explorer, or create a Markdown file in the goals folder."
       selectedPath={target.selectedPath ?? null}
+      createTemplateKind="goal"
+      createTemplateLabel="New goal"
       embedded
     />
   );
@@ -193,6 +195,8 @@ function ProjectThreadsPanel() {
       emptySelectionLabel="Select a thread file"
       emptySelectionDescription="Project threads are durable work trails linked to goals, tasks, agent runs, decisions, and evidence."
       selectedPath={target.selectedPath ?? null}
+      createTemplateKind="thread"
+      createTemplateLabel="New thread"
       embedded
     />
   );
