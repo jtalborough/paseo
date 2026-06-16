@@ -1,8 +1,9 @@
 import equal from "fast-deep-equal";
 import { v4 as uuidv4 } from "uuid";
 import { realpathSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import type { FSWatcher } from "node:fs";
-import { basename, resolve, sep } from "path";
+import { basename, join, resolve, sep } from "path";
 import { homedir } from "node:os";
 import { z } from "zod";
 import type { ToolSet } from "ai";
@@ -190,6 +191,7 @@ import { ProjectContextPacketStore } from "./project-context/packet-store.js";
 import { ProjectAgentProfileStore } from "./project-context/profile-store.js";
 import { TaskStore } from "./task/store.js";
 import type { StoredTask } from "@getpaseo/protocol/task/types";
+import { writeFileAtomic } from "./atomic-file.js";
 import {
   readPaseoConfigForEdit,
   writePaseoConfigForEdit,
@@ -395,6 +397,129 @@ function diffChangeTypeFor(file: { isNew?: boolean; isDeleted?: boolean }): "A" 
   if (file.isNew) return "A";
   if (file.isDeleted) return "D";
   return "M";
+}
+
+function yamlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function buildTaskThreadId(task: StoredTask): string {
+  return task.metadata.threadId?.trim() || `task-${task.metadata.id}`;
+}
+
+function buildTaskThreadPath(threadId: string): string {
+  return `threads/${threadId}.md`;
+}
+
+function buildTaskThreadMarkdown(input: {
+  task: StoredTask;
+  threadId: string;
+  createdAt: string;
+}): string {
+  const { task, threadId, createdAt } = input;
+  const goalId = task.metadata.goalId?.trim() ?? "";
+  return `---
+id: ${yamlString(threadId)}
+goalId: ${yamlString(goalId)}
+status: active
+taskIds:
+  - ${yamlString(task.metadata.id)}
+agentRunIds: []
+decisionIds: []
+evidenceIds: []
+createdAt: ${yamlString(createdAt)}
+---
+
+# ${task.metadata.title}
+
+Task: ${task.metadata.id}
+
+## Context
+
+
+## Work Trail
+
+- ${createdAt}: Thread created for task ${task.metadata.id}.
+
+## Decisions
+
+-
+
+## Evidence
+
+-
+
+## Role Memory Updates
+
+-
+`;
+}
+
+function appendTaskRunToThreadMarkdown(
+  content: string,
+  input: { now: string; agentId: string; contextPacketPath: string },
+): string {
+  const line = `- ${input.now}: Agent run ${input.agentId} launched with ${input.contextPacketPath}.`;
+  if (content.includes(line)) {
+    return content;
+  }
+  if (content.includes("## Work Trail\n\n")) {
+    return content.replace("## Work Trail\n\n", `## Work Trail\n\n${line}\n`);
+  }
+  return `${content.replace(/\s+$/, "")}\n\n## Work Trail\n\n${line}\n`;
+}
+
+async function ensureTaskThreadFile(input: {
+  paseoHome: string;
+  projectGroupId: string;
+  task: StoredTask;
+  threadId: string;
+  now: string;
+}): Promise<string> {
+  const threadPath = buildTaskThreadPath(input.threadId);
+  const absolutePath = join(
+    projectDirectoryPath(input.paseoHome, input.projectGroupId),
+    threadPath,
+  );
+  try {
+    await readFile(absolutePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+    await writeFileAtomic(
+      absolutePath,
+      buildTaskThreadMarkdown({
+        task: input.task,
+        threadId: input.threadId,
+        createdAt: input.now,
+      }),
+    );
+  }
+  return threadPath;
+}
+
+async function appendTaskRunToThreadFile(input: {
+  paseoHome: string;
+  projectGroupId: string;
+  threadPath: string;
+  now: string;
+  agentId: string;
+  contextPacketPath: string;
+}): Promise<void> {
+  const absolutePath = join(
+    projectDirectoryPath(input.paseoHome, input.projectGroupId),
+    input.threadPath,
+  );
+  const content = await readFile(absolutePath, "utf8");
+  const updated = appendTaskRunToThreadMarkdown(content, {
+    now: input.now,
+    agentId: input.agentId,
+    contextPacketPath: input.contextPacketPath,
+  });
+  if (updated !== content) {
+    await writeFileAtomic(absolutePath, updated);
+  }
 }
 
 function buildTaskRunPrompt(input: {
@@ -3039,7 +3164,7 @@ export class Session {
     let createdAgentId: string | null = null;
     try {
       await this.assertActiveTaskProject(msg.projectGroupId);
-      const task = await this.taskStore.get(msg.projectGroupId, msg.id);
+      let task = await this.taskStore.get(msg.projectGroupId, msg.id);
       if (!task) {
         throw new Error(`Task not found: ${msg.projectGroupId}/${msg.id}`);
       }
@@ -3055,6 +3180,17 @@ export class Session {
       const contextPacketId = `task-run-${now.slice(0, 10)}-${task.metadata.id}-${runSuffix}`;
       const contextPacketPath = `context/packets/${contextPacketId}.yaml`;
       const taskPath = `tasks/${task.metadata.id}.md`;
+      const threadId = buildTaskThreadId(task);
+      const threadPath = await ensureTaskThreadFile({
+        paseoHome: this.paseoHome,
+        projectGroupId: msg.projectGroupId,
+        task,
+        threadId,
+        now,
+      });
+      if (task.metadata.threadId !== threadId) {
+        task = await this.taskStore.update(msg.projectGroupId, msg.id, { threadId });
+      }
       const launchReason = `Run task: ${task.metadata.title}`;
       await this.contextPacketStore.create({
         id: contextPacketId,
@@ -3063,7 +3199,7 @@ export class Session {
         provider: providerModel.provider,
         model: providerModel.model ?? null,
         goal: task.metadata.goalId ? `goals/${task.metadata.goalId}.md` : null,
-        thread: task.metadata.threadId ? `threads/${task.metadata.threadId}.md` : null,
+        thread: threadPath,
         task: taskPath,
         folderGrants: [folderGrant],
         now,
@@ -3113,6 +3249,7 @@ export class Session {
           labels: {
             projectGroupId: msg.projectGroupId,
             taskId: task.metadata.id,
+            thread: threadPath,
             contextPacket: contextPacketPath,
           },
           provisionalTitle: task.metadata.title.slice(0, 60),
@@ -3132,13 +3269,24 @@ export class Session {
         launchedAgentId: snapshot.id,
         provider: providerModel.provider,
         model: providerModel.model ?? null,
+        goal: task.metadata.goalId ? `goals/${task.metadata.goalId}.md` : null,
+        thread: threadPath,
         task: taskPath,
         folderGrants: [folderGrant],
         now,
       });
+      await appendTaskRunToThreadFile({
+        paseoHome: this.paseoHome,
+        projectGroupId: msg.projectGroupId,
+        threadPath,
+        now,
+        agentId: snapshot.id,
+        contextPacketPath,
+      });
       const updatedTask = await this.taskStore.update(msg.projectGroupId, msg.id, {
         run: "agent",
         actionState: "waiting",
+        threadId,
         agentId: snapshot.id,
         worktree: liveSnapshot.cwd,
         contextPacket: contextPacketPath,
@@ -3154,6 +3302,7 @@ export class Session {
           task: updatedTask,
           agentId: snapshot.id,
           contextPacket: contextPacketPath,
+          thread: threadPath,
         },
       });
     } catch (error) {

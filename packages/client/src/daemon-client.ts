@@ -163,6 +163,7 @@ export interface TaskRunResult {
   task: StoredTask;
   agentId: string;
   contextPacket: string;
+  thread: string | null;
 }
 
 export interface TaskScheduleCreateResult {
@@ -2072,6 +2073,7 @@ export class DaemonClient {
           task: payload.task,
           agentId: payload.agentId,
           contextPacket: payload.contextPacket,
+          thread: payload.thread ?? null,
         };
       },
     });

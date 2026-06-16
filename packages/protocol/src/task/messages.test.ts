@@ -27,6 +27,7 @@ describe("Task message schemas", () => {
           requestId: "req-run",
           agentId: "agent-1",
           contextPacket: "context/packets/task-run.yaml",
+          thread: "threads/task-task-1.md",
           task: {
             metadata: {
               id: "task-1",
@@ -45,6 +46,7 @@ describe("Task message schemas", () => {
         ok: true,
         agentId: "agent-1",
         contextPacket: "context/packets/task-run.yaml",
+        thread: "threads/task-task-1.md",
       },
     });
   });

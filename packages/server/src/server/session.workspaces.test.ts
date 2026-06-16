@@ -1056,6 +1056,7 @@ test("task.run creates an agent, worktree, and durable context packet", async ()
       ok: true,
       requestId: "task-run",
       agentId: "00000000-0000-4000-8000-000000000553",
+      thread: `threads/task-${createdTask.metadata.id}.md`,
     });
     expect(runPayload.contextPacket).toMatch(/^context\/packets\/task-run-/);
     expect(runPayload.task).toMatchObject({
@@ -1063,6 +1064,7 @@ test("task.run creates an agent, worktree, and durable context packet", async ()
         id: createdTask.metadata.id,
         actionState: "waiting",
         run: "agent",
+        threadId: `task-${createdTask.metadata.id}`,
         agentId: "00000000-0000-4000-8000-000000000553",
         contextPacket: runPayload.contextPacket,
       },
@@ -1074,6 +1076,7 @@ test("task.run creates an agent, worktree, and durable context packet", async ()
       labels: {
         projectGroupId: "grp_task_run",
         taskId: createdTask.metadata.id,
+        thread: `threads/task-${createdTask.metadata.id}.md`,
         contextPacket: runPayload.contextPacket,
       },
     });
@@ -1083,8 +1086,22 @@ test("task.run creates an agent, worktree, and durable context packet", async ()
     );
     expect(packetText).toContain("launchedAgentId: 00000000-0000-4000-8000-000000000553");
     expect(packetText).toContain(`task: tasks/${createdTask.metadata.id}.md`);
+    expect(packetText).toContain(`thread: threads/task-${createdTask.metadata.id}.md`);
     expect(packetText).toContain("projectId: proj-task-run");
     expect(packetText).toContain("mode: read-write");
+    const threadText = readFileSync(
+      path.join(
+        paseoHome,
+        "projects",
+        "grp_task_run",
+        `threads/task-${createdTask.metadata.id}.md`,
+      ),
+      "utf8",
+    );
+    expect(threadText).toContain(`Task: ${createdTask.metadata.id}`);
+    expect(threadText).toContain(
+      `Agent run 00000000-0000-4000-8000-000000000553 launched with ${runPayload.contextPacket}.`,
+    );
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

@@ -217,6 +217,7 @@ export const TaskRunResponseSchema = z.object({
       task: TaskWireSchema,
       agentId: z.string(),
       contextPacket: z.string(),
+      thread: z.string().optional(),
     }),
     z.object({
       ok: z.literal(false),

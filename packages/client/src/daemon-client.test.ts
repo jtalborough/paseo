@@ -248,6 +248,7 @@ test("sends task.run requests and resolves launched agent context", async () => 
         requestId: request.requestId,
         agentId: "agent-1",
         contextPacket: "context/packets/task-run.yaml",
+        thread: "threads/task-task-1.md",
         task: {
           metadata: {
             id: "task-1",
@@ -269,6 +270,7 @@ test("sends task.run requests and resolves launched agent context", async () => 
   await expect(promise).resolves.toMatchObject({
     agentId: "agent-1",
     contextPacket: "context/packets/task-run.yaml",
+    thread: "threads/task-task-1.md",
     task: {
       metadata: {
         id: "task-1",
