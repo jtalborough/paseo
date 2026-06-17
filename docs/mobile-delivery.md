@@ -55,6 +55,57 @@ npm run ios:device -- --device
 If the doctor reports no physical iPhone, unlock the phone, trust the Mac, and confirm it appears in
 Xcode > Window > Devices and Simulators before rerunning the install.
 
+## iPhone over-the-air install
+
+Use this when the phone is not connected to the Mac. This creates an EAS internal distribution build
+and returns an install link.
+
+One-time setup per iPhone:
+
+```bash
+npm run ios:ota:register
+npm run ios:ota:devices
+```
+
+The register command opens Expo's device registration flow so the iPhone UDID can be added to the
+iOS provisioning profile. Apple requires this for ad hoc/internal iOS install links.
+
+Build an over-the-air install:
+
+```bash
+npm run ios:ota
+```
+
+This builds the `preview` EAS profile: production app variant, `preview` update channel, internal
+distribution, and Paseo build line `2.0`. When the build finishes, EAS prints an install URL or QR
+code that can be opened on the registered iPhone.
+
+## iPhone over-the-air update
+
+Use this only after a compatible `preview` native build is already installed on the iPhone:
+
+```bash
+npm run ios:update:preview
+```
+
+This publishes a JS/assets update to the `preview` EAS update channel. It is appropriate for
+compatible React Native UI/client changes. It does not ship native module changes, entitlements,
+app config changes that affect native projects, dependency native-code changes, or anything that
+requires a fresh binary. Those changes need `npm run ios:ota` or the TestFlight path.
+
+## TestFlight install
+
+Use this when the build should go through App Store Connect/TestFlight instead of an ad hoc install
+link:
+
+```bash
+npm run ios:testflight
+```
+
+This builds the production EAS profile and submits the result to App Store Connect. TestFlight does
+not require a cable or device UDID for testers, but it depends on App Store Connect access and
+Apple's TestFlight processing/review rules.
+
 ## iPhone release-style local install
 
 Use this when you need a production-variant local build on a physical iPhone:

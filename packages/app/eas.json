@@ -15,10 +15,19 @@
         "gradleCommand": ":app:assembleDebug"
       }
     },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "APP_VARIANT": "production",
+        "PASEO_BUILD_VERSION": "2.0"
+      }
+    },
     "production": {
       "channel": "production",
       "env": {
-        "APP_VARIANT": "production"
+        "APP_VARIANT": "production",
+        "PASEO_BUILD_VERSION": "2.0"
       },
       "android": {
         "autoIncrement": "versionCode"
