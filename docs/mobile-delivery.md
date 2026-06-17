@@ -63,12 +63,19 @@ and returns an install link.
 One-time setup per iPhone:
 
 ```bash
+npm run ios:ota:doctor
 npm run ios:ota:register
 npm run ios:ota:devices
 ```
 
-The register command opens Expo's device registration flow so the iPhone UDID can be added to the
+The doctor verifies the logged-in Expo account and confirms it can read this app's EAS project. The
+register command then opens Expo's device registration flow so the iPhone UDID can be added to the
 iOS provisioning profile. Apple requires this for ad hoc/internal iOS install links.
+
+If the doctor reports `EAS project access` failure, the logged-in Expo account cannot access the
+project configured in `packages/app/app.config.js`. Log in with an account that belongs to the
+configured Expo owner, add your account to that owner/project, or relink the app to an EAS project
+owned by your Expo account or organization.
 
 Build an over-the-air install:
 

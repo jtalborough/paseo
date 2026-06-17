@@ -86,6 +86,7 @@
     "ios:device": "npm run ios:device --workspace=@getpaseo/app",
     "ios:device:release": "npm run ios:device:release --workspace=@getpaseo/app",
     "ios:ota": "npm run ios:ota --workspace=@getpaseo/app",
+    "ios:ota:doctor": "npm run ios:ota:doctor --workspace=@getpaseo/app",
     "ios:ota:register": "npm run ios:ota:register --workspace=@getpaseo/app",
     "ios:ota:devices": "npm run ios:ota:devices --workspace=@getpaseo/app",
     "ios:update:preview": "npm run ios:update:preview --workspace=@getpaseo/app",
