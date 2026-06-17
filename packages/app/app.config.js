@@ -3,6 +3,14 @@ const path = require("node:path");
 const pkg = require("./package.json");
 const appVariant = process.env.APP_VARIANT ?? "production";
 
+function normalizeBuildString(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function resolveSecretFile(params) {
   const fromEnv = process.env[params.envKey];
   if (typeof fromEnv === "string" && fromEnv.trim().length > 0) {
@@ -147,6 +155,18 @@ export default {
     },
     extra: {
       router: {},
+      appVariant,
+      build: {
+        version: normalizeBuildString(process.env.PASEO_BUILD_VERSION) ?? "2.0",
+        packageVersion: pkg.version,
+        sha:
+          normalizeBuildString(process.env.PASEO_BUILD_SHA) ??
+          normalizeBuildString(process.env.GITHUB_SHA),
+        branch:
+          normalizeBuildString(process.env.PASEO_BUILD_BRANCH) ??
+          normalizeBuildString(process.env.GITHUB_REF_NAME),
+        builtAt: normalizeBuildString(process.env.PASEO_BUILD_TIME),
+      },
       eas: {
         projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",
       },

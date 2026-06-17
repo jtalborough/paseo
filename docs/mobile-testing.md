@@ -1,5 +1,8 @@
 # Mobile Testing
 
+For installing the current checkout onto a physical iPhone and verifying build identity, see
+[mobile-delivery.md](mobile-delivery.md).
+
 ## Maestro
 
 Maestro flows live in `packages/app/maestro/`. Reusable sub-flows live in `packages/app/maestro/flows/`.

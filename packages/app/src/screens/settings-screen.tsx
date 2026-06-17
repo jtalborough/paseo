@@ -87,7 +87,12 @@ import { IntegrationsSection } from "@/desktop/components/integrations-section";
 import { isElectronRuntime } from "@/desktop/host";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
 import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
-import { resolveAppVersion } from "@/utils/app-version";
+import {
+  formatShortSha,
+  resolveAppBuildInfo,
+  resolveAppVersion,
+  type AppBuildInfo,
+} from "@/utils/app-version";
 import { settingsStyles } from "@/styles/settings";
 import { THINKING_TONE_NATIVE_PCM_BASE64 } from "@/utils/thinking-tone.native-pcm";
 import { useVoiceAudioEngineOptional } from "@/contexts/voice-context";
@@ -370,10 +375,29 @@ function DiagnosticsSection({
 interface AboutSectionProps {
   appVersion: string | null;
   appVersionText: string;
+  appBuildInfo: AppBuildInfo;
   isDesktopApp: boolean;
 }
 
-function AboutSection({ appVersion, appVersionText, isDesktopApp }: AboutSectionProps) {
+function formatBuildLabel(input: { version?: string | null; variant?: string | null }): string {
+  const parts = [input.variant, input.version ? `build ${input.version}` : null].filter(
+    (part): part is string => Boolean(part),
+  );
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
+function formatCommitLabel(input: { sha?: string | null; branch?: string | null }): string {
+  const shortSha = formatShortSha(input.sha);
+  const parts = [shortSha, input.branch].filter((part): part is string => Boolean(part));
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
+function AboutSection({
+  appVersion,
+  appVersionText,
+  appBuildInfo,
+  isDesktopApp,
+}: AboutSectionProps) {
   return (
     <>
       <SettingsSection title="About">
@@ -384,6 +408,29 @@ function AboutSection({ appVersion, appVersionText, isDesktopApp }: AboutSection
               <Text style={settingsStyles.rowHint}>This device</Text>
             </View>
             <Text style={styles.aboutValue}>{appVersionText}</Text>
+          </View>
+          <View style={ROW_WITH_BORDER_STYLE}>
+            <View style={settingsStyles.rowContent}>
+              <Text style={settingsStyles.rowTitle}>App build</Text>
+              <Text style={settingsStyles.rowHint}>Variant and Paseo build line</Text>
+            </View>
+            <Text style={styles.aboutValue}>
+              {formatBuildLabel({
+                version: appBuildInfo.version,
+                variant: appBuildInfo.variant,
+              })}
+            </Text>
+          </View>
+          <View style={ROW_WITH_BORDER_STYLE}>
+            <View style={settingsStyles.rowContent}>
+              <Text style={settingsStyles.rowTitle}>App commit</Text>
+              <Text style={settingsStyles.rowHint}>
+                {appBuildInfo.builtAt ?? "Build time unknown"}
+              </Text>
+            </View>
+            <Text style={styles.aboutValue}>
+              {formatCommitLabel({ sha: appBuildInfo.sha, branch: appBuildInfo.branch })}
+            </Text>
           </View>
           {isDesktopApp ? <DesktopAppUpdateRow /> : null}
         </View>
@@ -436,6 +483,9 @@ function HostVersionRow({
   const daemonVersion = useSessionStore(
     (state) => state.sessions[host.serverId]?.serverInfo?.version ?? null,
   );
+  const daemonBuild = useSessionStore(
+    (state) => state.sessions[host.serverId]?.serverInfo?.build ?? null,
+  );
 
   const rowStyle = useMemo(
     () => [settingsStyles.row, showBorder && settingsStyles.rowBorder],
@@ -469,7 +519,13 @@ function HostVersionRow({
         </Text>
         {isMismatch ? (
           <Text style={settingsStyles.rowHint}>Version differs from this device</Text>
-        ) : null}
+        ) : (
+          <Text style={settingsStyles.rowHint}>
+            {isConnected
+              ? formatCommitLabel({ sha: daemonBuild?.sha, branch: daemonBuild?.branch })
+              : "Not connected"}
+          </Text>
+        )}
       </View>
       <Text style={valueStyle}>{valueText}</Text>
     </View>
@@ -1083,6 +1139,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
   const [playbackTestResult, setPlaybackTestResult] = useState<string | null>(null);
   const isDesktopApp = isElectronRuntime();
   const appVersion = resolveAppVersion();
+  const appBuildInfo = resolveAppBuildInfo();
   const appVersionText = formatVersionWithPrefix(appVersion);
   const isCompactLayout = useIsCompactFormFactor();
   const insets = useSafeAreaInsets();
@@ -1378,6 +1435,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
             <AboutSection
               appVersion={appVersion}
               appVersionText={appVersionText}
+              appBuildInfo={appBuildInfo}
               isDesktopApp={isDesktopApp}
             />
           );
