@@ -81,6 +81,7 @@
     "android:clear": "npm run android:clear --workspace=@getpaseo/app",
     "android:clean": "npm run android:clean --workspace=@getpaseo/app",
     "ios": "npm run ios --workspace=@getpaseo/app",
+    "ios:credentials": "npm run ios:credentials --workspace=@getpaseo/app",
     "ios:development": "npm run ios:development --workspace=@getpaseo/app",
     "ios:doctor": "npm run ios:doctor --workspace=@getpaseo/app",
     "ios:device": "npm run ios:device --workspace=@getpaseo/app",

@@ -68,7 +68,7 @@ export default {
       policy: "appVersion",
     },
     updates: {
-      url: "https://u.expo.dev/0e7f65ce-0367-46c8-a238-2b65963d235a",
+      url: "https://u.expo.dev/96b21aad-28a0-49e7-9b1d-db4f53e8f1b8",
     },
     ios: {
       supportsTablet: true,
@@ -168,9 +168,9 @@ export default {
         builtAt: normalizeBuildString(process.env.PASEO_BUILD_TIME),
       },
       eas: {
-        projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",
+        projectId: "96b21aad-28a0-49e7-9b1d-db4f53e8f1b8",
       },
     },
-    owner: "getpaseo",
+    owner: "jtalborough",
   },
 };

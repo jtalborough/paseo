@@ -65,3 +65,23 @@ if (!commandSucceeded(projectInfo)) {
 }
 
 printPass("EAS project access", "current project is readable");
+
+const devices = run("npx", ["eas", "device:list", "--json", "--non-interactive", "--limit", "1"]);
+if (!commandSucceeded(devices)) {
+  const details = `${devices.stdout}\n${devices.stderr}`;
+  const teamHint =
+    details.includes("Couldn't find any teams") ||
+    details.includes("Unable to select an Apple team")
+      ? "No Apple Developer team is configured for this Expo account."
+      : firstLine(devices.stderr) || firstLine(devices.stdout) || "Apple device access failed";
+
+  printFail("Apple Developer team", teamHint);
+  console.error("\nInternal iOS install links require Apple signing credentials.");
+  console.error("Fix one of these before registering an iPhone or building an iOS OTA install:");
+  console.error("- Enroll the Apple ID in the Apple Developer Program.");
+  console.error("- Add the Apple ID to an existing Apple Developer team.");
+  console.error("- Run `npm run ios:credentials` and let EAS configure iOS signing.");
+  process.exit(1);
+}
+
+printPass("Apple Developer team", "device registry is reachable");
