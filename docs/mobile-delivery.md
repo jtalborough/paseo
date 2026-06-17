@@ -37,17 +37,23 @@ Prerequisites:
 From the repo root:
 
 ```bash
+npm run ios:doctor
 npm run ios:device
 ```
 
-This runs `build:client`, prebuilds/runs the Expo iOS app with `APP_VARIANT=development`, and asks
-Expo/Xcode to install `Paseo Debug` on a selected device.
+The doctor checks Xcode selection, `xcodebuild`, CocoaPods, and whether Xcode CoreDevice can see a
+physical iPhone. The device script runs the same doctor before it runs `build:client`,
+prebuilds/runs the Expo iOS app with `APP_VARIANT=development`, and asks Expo/Xcode to install
+`Paseo Debug` on a selected device.
 
 If device selection is ambiguous, run from `packages/app` with Expo's interactive selector:
 
 ```bash
 npm run ios:device -- --device
 ```
+
+If the doctor reports no physical iPhone, unlock the phone, trust the Mac, and confirm it appears in
+Xcode > Window > Devices and Simulators before rerunning the install.
 
 ## iPhone release-style local install
 
