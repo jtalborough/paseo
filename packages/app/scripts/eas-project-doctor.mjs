@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 
 const TIMEOUT_MS = 30_000;
+const requireAppleTeam = process.argv.includes("--require-apple-team");
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -65,6 +66,10 @@ if (!commandSucceeded(projectInfo)) {
 }
 
 printPass("EAS project access", "current project is readable");
+
+if (!requireAppleTeam) {
+  process.exit(0);
+}
 
 const devices = run("npx", ["eas", "device:list", "--json", "--non-interactive", "--limit", "1"]);
 if (!commandSucceeded(devices)) {
