@@ -83,6 +83,9 @@ If the doctor reports `Apple Developer team` failure, Expo is configured but iOS
 Enroll the Apple ID in the Apple Developer Program or add it to an existing Apple Developer team,
 then run `npm run ios:credentials`.
 
+The default Apple Developer team for Paseo's jtalborough-owned EAS project is `YYQHJ5E4H8`. Override
+it for a one-off command with `PASEO_APPLE_TEAM_ID=<team-id>` if the Apple team changes.
+
 Registration intentionally runs the project-access doctor only. The EAS registration flow is
 interactive and may be the first place Apple login/team selection happens. Build/update/TestFlight
 commands run the stricter signing doctor before they start.

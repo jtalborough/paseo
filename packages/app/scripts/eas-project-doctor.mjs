@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 
 const TIMEOUT_MS = 30_000;
 const requireAppleTeam = process.argv.includes("--require-apple-team");
+const DEFAULT_APPLE_TEAM_ID = "YYQHJ5E4H8";
+const appleTeamId = process.env.PASEO_APPLE_TEAM_ID?.trim() || DEFAULT_APPLE_TEAM_ID;
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -71,7 +73,16 @@ if (!requireAppleTeam) {
   process.exit(0);
 }
 
-const devices = run("npx", ["eas", "device:list", "--json", "--non-interactive", "--limit", "1"]);
+const devices = run("npx", [
+  "eas",
+  "device:list",
+  "--apple-team-id",
+  appleTeamId,
+  "--json",
+  "--non-interactive",
+  "--limit",
+  "1",
+]);
 if (!commandSucceeded(devices)) {
   const details = `${devices.stdout}\n${devices.stderr}`;
   const teamHint =
@@ -89,4 +100,4 @@ if (!commandSucceeded(devices)) {
   process.exit(1);
 }
 
-printPass("Apple Developer team", "device registry is reachable");
+printPass("Apple Developer team", `device registry is reachable for ${appleTeamId}`);
