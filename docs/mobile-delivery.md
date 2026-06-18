@@ -100,6 +100,9 @@ This builds the `preview` EAS profile: production app variant, `preview` update 
 distribution, and Paseo build line `2.0`. When the build finishes, EAS prints an install URL or QR
 code that can be opened on the registered iPhone.
 
+The first internal-distribution build may prompt to create or repair iOS credentials. After EAS has
+valid credentials, `npm run ios:ota:ci` runs the same build non-interactively.
+
 ## iPhone over-the-air update
 
 Use this only after a compatible `preview` native build is already installed on the iPhone:
@@ -125,6 +128,9 @@ npm run ios:testflight
 This builds the production EAS profile and submits the result to App Store Connect. TestFlight does
 not require a cable or device UDID for testers, but it depends on App Store Connect access and
 Apple's TestFlight processing/review rules.
+
+After production credentials and App Store Connect submission are configured, `npm run
+ios:testflight:ci` runs the same path non-interactively.
 
 ## iPhone release-style local install
 

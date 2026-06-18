@@ -11,6 +11,19 @@ function normalizeBuildString(value) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function toAppleMarketingVersion(value) {
+  const normalized = normalizeBuildString(value);
+  if (!normalized) {
+    return "1.0.0";
+  }
+  const releaseVersion = normalized.split("-", 1)[0] ?? normalized;
+  const parts = releaseVersion.split(".").filter((part) => /^\d+$/.test(part));
+  if (parts.length === 0) {
+    return "1.0.0";
+  }
+  return parts.slice(0, 3).join(".");
+}
+
 function resolveSecretFile(params) {
   const fromEnv = process.env[params.envKey];
   if (typeof fromEnv === "string" && fromEnv.trim().length > 0) {
@@ -58,7 +71,7 @@ export default {
   expo: {
     name: variant.name,
     slug: "voice-mobile",
-    version: pkg.version,
+    version: toAppleMarketingVersion(pkg.version),
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "paseo",
