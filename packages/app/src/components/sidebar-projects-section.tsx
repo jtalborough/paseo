@@ -327,7 +327,6 @@ export function SidebarProjectsSection(props: SidebarWorkspaceListProps) {
           testID="sidebar-projects-section-scroll"
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}
-          nestable={isNative}
         />
         <AdaptiveRenameModal
           visible={Boolean(renamingGroup)}

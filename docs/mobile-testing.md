@@ -156,6 +156,12 @@ On iOS, when a dropdown menu (`DropdownMenu` / RN `Modal`) item needs to launch 
 
 When building a new component that composes a dropdown with a native presenter, reuse this dropdown — do not invent a new timing shim.
 
+### Native draggable lists
+
+`DraggableList` uses `NestableDraggableFlatList` on native only when its `nestable` prop is set. That variant must render inside `NestableScrollContainer`; otherwise iOS crashes at launch with `useSafeNestableScrollContainerContext must be called within a NestableScrollContainerContext.Provider`.
+
+Use `nestable` only for child draggable lists that live inside `SidebarWorkspaceList`'s native `NestableScrollContainer`. A standalone/outer native draggable list should omit `nestable` and use the regular native draggable list.
+
 ## Self-verification loops
 
 Maestro can only interact with the app UI — it can't toggle iOS appearance, change locale, or simulate network conditions. For bugs that depend on system-level state, wrap Maestro in a bash script that handles the system changes between Maestro runs.
