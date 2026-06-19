@@ -39,7 +39,8 @@ function commandSucceeded(result) {
 }
 
 function parseJsonPayload(output) {
-  const start = output.indexOf("{");
+  const lineStart = output.lastIndexOf("\n{");
+  const start = lineStart >= 0 ? lineStart + 1 : output.indexOf("{");
   if (start < 0) {
     return null;
   }
@@ -76,6 +77,25 @@ function collectDeviceNames(value, names = []) {
   return names;
 }
 
+function collectCoreDeviceNames(payload) {
+  const devices = payload?.result?.devices;
+  if (!Array.isArray(devices)) {
+    return [];
+  }
+
+  return devices
+    .filter((device) => {
+      const hardware = device?.hardwareProperties;
+      return (
+        hardware?.reality === "physical" &&
+        hardware?.platform === "iOS" &&
+        hardware?.deviceType === "iPhone"
+      );
+    })
+    .map((device) => device?.deviceProperties?.name)
+    .filter((name) => typeof name === "string" && name.length > 0);
+}
+
 function checkXcodeSelect() {
   const result = run("xcode-select", ["-p"]);
   return {
@@ -110,8 +130,9 @@ function checkPhysicalDevices() {
   const result = run("xcrun", ["devicectl", "list", "devices", "--json-output", "-"], {
     timeoutMs: 30_000,
   });
-  const payload = parseJsonPayload(`${result.stdout}\n${result.stderr}`);
-  const names = [...new Set(collectDeviceNames(payload))];
+  const payload =
+    parseJsonPayload(result.stdout) ?? parseJsonPayload(`${result.stdout}\n${result.stderr}`);
+  const names = [...new Set([...collectCoreDeviceNames(payload), ...collectDeviceNames(payload)])];
 
   if (commandSucceeded(result) && names.length > 0) {
     return {
