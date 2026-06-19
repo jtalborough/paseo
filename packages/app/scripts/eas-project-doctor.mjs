@@ -1,34 +1,66 @@
 import { spawnSync } from "node:child_process";
 
 const TIMEOUT_MS = 30_000;
+const EAS_PROBE_ATTEMPTS = 3;
 const requireAppleTeam = process.argv.includes("--require-apple-team");
 const DEFAULT_APPLE_TEAM_ID = "YYQHJ5E4H8";
 const appleTeamId = process.env.PASEO_APPLE_TEAM_ID?.trim() || DEFAULT_APPLE_TEAM_ID;
 
 function run(command, args) {
-  const result = spawnSync(command, args, {
-    encoding: "utf8",
-    timeout: TIMEOUT_MS,
-  });
-  return {
-    status: result.status,
-    signal: result.signal,
-    stdout: result.stdout?.trim() ?? "",
-    stderr: result.stderr?.trim() ?? "",
-    error: result.error,
-  };
+  let lastResult = null;
+  for (let attempt = 1; attempt <= EAS_PROBE_ATTEMPTS; attempt += 1) {
+    const result = spawnSync(command, args, {
+      encoding: "utf8",
+      timeout: TIMEOUT_MS,
+    });
+    lastResult = {
+      status: result.status,
+      signal: result.signal,
+      stdout: result.stdout?.trim() ?? "",
+      stderr: result.stderr?.trim() ?? "",
+      error: result.error,
+    };
+
+    if (commandSucceeded(lastResult) || !isTransientEasFailure(lastResult)) {
+      return lastResult;
+    }
+
+    if (attempt < EAS_PROBE_ATTEMPTS) {
+      spawnSync("sleep", ["2"]);
+    }
+  }
+  return lastResult;
 }
 
 function commandSucceeded(result) {
   return result.status === 0 && !result.signal && !result.error;
 }
 
+function isTransientEasFailure(result) {
+  const details = `${result.stdout}\n${result.stderr}\n${result.error?.message ?? ""}`;
+  return (
+    details.includes("GraphQL request failed") ||
+    details.includes("request to https://api.expo.dev/graphql failed") ||
+    details.includes("Check your network connection")
+  );
+}
+
 function firstLine(value) {
   return (
     value
       .split("\n")
-      .find((line) => line.trim().length > 0)
+      .find((line) => line.trim().length > 0 && !isEasCliNoticeLine(line))
       ?.trim() ?? ""
+  );
+}
+
+function isEasCliNoticeLine(line) {
+  const trimmed = line.trim();
+  return (
+    trimmed.startsWith("★ eas-cli@") ||
+    trimmed === "To upgrade, run:" ||
+    trimmed.startsWith("npm install ") ||
+    trimmed === "Proceeding with outdated version."
   );
 }
 
@@ -47,8 +79,11 @@ if (!commandSucceeded(whoami)) {
   process.exit(1);
 }
 
-const whoamiLines = whoami.stdout.split("\n").map((line) => line.trim());
-const username = whoamiLines.find((line) => line.length > 0 && !line.startsWith("★")) ?? "unknown";
+const whoamiLines = whoami.stdout
+  .split("\n")
+  .map((line) => line.trim())
+  .filter((line) => line.length > 0 && !isEasCliNoticeLine(line));
+const username = whoamiLines.find((line) => /^[\w-]+$/.test(line)) ?? "unknown";
 printPass("Expo account", username);
 
 const projectInfo = run("npx", ["eas", "project:info"]);
