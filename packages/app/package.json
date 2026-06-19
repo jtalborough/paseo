@@ -26,7 +26,7 @@
     "ios:ota:doctor:signing": "node ./scripts/eas-project-doctor.mjs --require-apple-team",
     "ios:ota:register": "npm run ios:ota:doctor && eas device:create",
     "ios:ota:devices": "npm run ios:ota:doctor:signing && eas device:list --apple-team-id YYQHJ5E4H8",
-    "ios:update:preview": "npm run ios:ota:doctor:signing && npm --prefix ../.. run build:client && eas update --channel preview --platform ios --non-interactive",
+    "ios:update:preview": "npm run ios:ota:doctor:signing && npm --prefix ../.. run build:client && eas update --channel preview --platform ios --non-interactive --auto",
     "ios:testflight": "npm run ios:ota:doctor:signing && npm --prefix ../.. run build:client && eas build --platform ios --profile production --auto-submit",
     "ios:testflight:ci": "npm run ios:ota:doctor:signing && npm --prefix ../.. run build:client && eas build --platform ios --profile production --auto-submit --non-interactive",
     "web": "npm --prefix ../.. run build:client && concurrently --kill-others --names protocol,client,expo --prefix-colors yellow,blue,magenta \"npm --prefix ../.. run watch:protocol\" \"npm --prefix ../.. run watch:client\" \"npm run web:expo\"",
